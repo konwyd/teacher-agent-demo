@@ -1,0 +1,50 @@
+[
+  {
+    "id": "m_eq_one_side",
+    "concept_id": "c_eq_prop",
+    "description": "只对等式一边做运算，另一边不变，导致等式不再成立。",
+    "example": "由 x+3=7 错误地写成 x=7+3。"
+  },
+  {
+    "id": "m_combine_unlike",
+    "concept_id": "c_combine",
+    "description": "把不是同类项的项合并在一起。",
+    "example": "把 3x+2y 错误合并为 5xy。"
+  },
+  {
+    "id": "m_combine_coeff",
+    "concept_id": "c_combine",
+    "description": "合并同类项时系数计算错误，或把指数也相加。",
+    "example": "把 3a+5a 错写成 8a²。"
+  },
+  {
+    "id": "m_move_sign",
+    "concept_id": "c_move",
+    "description": "移项时忘记变号。",
+    "example": "由 2x+3=7 错误地写成 2x=7+3。"
+  },
+  {
+    "id": "m_bracket_missmul",
+    "concept_id": "c_bracket",
+    "description": "去括号时括号外的数没有乘到括号内的每一项。",
+    "example": "把 3(x-2) 错写成 3x-2。"
+  },
+  {
+    "id": "m_bracket_sign",
+    "concept_id": "c_bracket",
+    "description": "括号前是负号时，去括号后括号内各项没有全部变号。",
+    "example": "把 -(x-2) 错写成 -x-2。"
+  },
+  {
+    "id": "m_solve_order",
+    "concept_id": "c_linear",
+    "description": "解方程步骤顺序混乱，例如没有先移项就直接把系数化为1。",
+    "example": "由 2x+3=7 直接写成 x+3=3.5。"
+  },
+  {
+    "id": "m_frac_missmul",
+    "concept_id": "c_frac",
+    "description": "去分母时漏乘不含分母的项。",
+    "example": "把 x/2-1=x/3 两边乘6后错写成 3x-1=2x。"
+  }
+]
