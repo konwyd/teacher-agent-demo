@@ -251,28 +251,70 @@ def diagnose_node(state: TeacherState) -> dict:
         concept, _conf = _detect_concept(message)
         diagnosis.detected_concept = concept.name
 
-    # 围绕 original_problem 的后续轮次：细分意图 + math_checker 优先判定
+    # 围绕 original_problem 的后续轮次：按学生回答类型分派（why > 最终答案/多步计划/中间式/单步 > 普通诊断）。
+    # 学生可以跳步、合并步骤、一次说完整思路——checker 整体判定，不强制一步一答。
     validity = ""
     student_eq = ""
     step_explanation = ""
+    response_kind = ""
+    plan_steps: list[str] = []
     if conv.original_problem and not first_turn_for_problem:
         followup: StudentIntent | None = None
-        if "为什么" in message:
+        kind = mc.classify_student_math_response(message)
+        step_gate = (
+            any(k in message for k in _ANSWER_CHECK_WORDS)
+            or not any(k in message for k in _HELP_WORDS)
+        )
+        if kind == "why_question":
             followup = StudentIntent.ASKS_WHY
         elif any(k in message for k in _CONFUSED_WORDS):
             followup = StudentIntent.CONFUSED
         elif any(k in message for k in _REQUEST_SOLUTION_WORDS):
             followup = StudentIntent.REQUESTS_SOLUTION
-        elif is_step_message(message):
-            check = mc.check_step(conv.target_equation, message, prev_step=conv.current_step)
-            if check.validity in (StepValidity.CORRECT_STEP, StepValidity.CORRECT_FINAL_ANSWER,
-                                  StepValidity.INCORRECT_STEP):
-                validity = check.validity.value
-                student_eq = check.student_equation
-                step_explanation = check.explanation
+        elif kind in ("multi_step_plan", "single_step", "intermediate_equation", "final_answer") and step_gate:
+            if kind == "multi_step_plan":
+                plan = mc.check_multi_step_plan(
+                    conv.current_step or conv.target_equation, message,
+                    fallback_start=conv.target_equation,
+                )
+                if plan.valid:
+                    validity = (StepValidity.CORRECT_FINAL_ANSWER if plan.reaches_final
+                                else StepValidity.CORRECT_STEP).value
+                    student_eq = plan.end_equation
+                    plan_steps = list(plan.steps)
+                    step_explanation = plan.explanation
+                    response_kind = "multi_step_plan"
+                elif plan.explanation != "不构成多步计划":
+                    validity = StepValidity.INCORRECT_STEP.value
+                    student_eq = plan.end_equation
+                    step_explanation = plan.explanation
+                    response_kind = "multi_step_plan"
+            elif kind == "single_step":
+                res = mc.check_single_operation(conv.current_step or conv.target_equation, message)
+                if res.validity is not StepValidity.NOT_A_STEP:
+                    validity = res.validity.value
+                    student_eq = res.student_equation
+                    step_explanation = res.explanation
+                    response_kind = "single_step"
+            elif kind == "final_answer":
+                res = mc.check_final_answer(conv.target_equation, message)
+                if res.validity is not StepValidity.NOT_A_STEP:
+                    validity = res.validity.value
+                    student_eq = res.student_equation
+                    step_explanation = res.explanation
+                    response_kind = "final_answer"
+            else:  # intermediate_equation
+                res = mc.check_step(conv.target_equation, message, prev_step=conv.current_step)
+                if res.validity in (StepValidity.CORRECT_STEP, StepValidity.CORRECT_FINAL_ANSWER,
+                                    StepValidity.INCORRECT_STEP):
+                    validity = res.validity.value
+                    student_eq = res.student_equation
+                    step_explanation = res.explanation
+                    response_kind = "intermediate_equation"
+            if validity:
                 if any(k in message for k in _ANSWER_CHECK_WORDS):
                     followup = StudentIntent.ANSWER_CHECKING
-                elif check.validity is StepValidity.CORRECT_FINAL_ANSWER:
+                elif validity == StepValidity.CORRECT_FINAL_ANSWER.value:
                     followup = StudentIntent.PROVIDES_FINAL_ANSWER
                 else:
                     followup = StudentIntent.PROVIDES_STEP
@@ -296,6 +338,8 @@ def diagnose_node(state: TeacherState) -> dict:
         "student_step_validity": validity,
         "student_equation": student_eq,
         "step_explanation": step_explanation,
+        "response_kind": response_kind,
+        "plan_steps": plan_steps,
         "consecutive_wrong_steps": conv.consecutive_wrong_steps,
     }
 
@@ -328,6 +372,11 @@ def _choose_action(
     consecutive_wrong: int = 0,
 ) -> TeachingAction:
     """确定性教学策略（可单测）。规则从上到下优先级递减。
+
+    Student Memory（掌握度）只影响教学深浅：解释详略、是否给类比、是否推荐
+    复习、是否出变式题。学生的步骤/计划回答永远先由 math_checker 判定
+    （PROVIDES_STEP/PROVIDES_FINAL_ANSWER 分支在所有 mastery 分支之前），
+    memory 不得拒绝跳步、不得强制一步一答、不得覆盖 checker 的正确判定。
 
     show_worked_example 只在三种情况使用：
     a) 学生明确要例子；b) 同一知识点连续两次答错；c) 学生说完全不懂。
@@ -423,6 +472,9 @@ _TEACH_SYSTEM_PROMPT = (
     "只有学生已经解出、或明确要求直接告诉答案时，才允许说出最终答案\n"
     "11. 回复中出现的任何方程都必须与 original_problem 同解；"
     "严禁无故输出 2x+3=7、3x=9 之类的示例方程（除非本轮是 show_worked_example）\n"
+    "12. 学生不一定会严格按照你预期的一步一步回答：如果学生一次性说出了多个正确步骤，"
+    "你应该认可完整思路，而不是强行拉回上一个小步骤；如果学生提前给出正确最终答案，"
+    "你应该先认可，再用代回原式或简短解释确认；只有当学生步骤错误或缺失关键计算时，才继续追问\n"
     "语气温和友好，回复控制在150字以内。"
 )
 
@@ -461,6 +513,24 @@ def _build_teach_context(state: TeacherState) -> str:
 
 def _deepseek_response(state: TeacherState) -> str:
     return DeepSeekClient().chat(_TEACH_SYSTEM_PROMPT, _build_teach_context(state))
+
+
+_CN_ORDINALS = ("一", "二", "三", "四", "五", "六", "七", "八", "九")
+
+
+def _multi_step_plan_response(state: TeacherState) -> str:
+    """认可学生的完整多步思路：先肯定，展开每一步，再按是否解完收尾。"""
+    lines = [f"对，这个思路是正确的。对于 {state.original_problem}："]
+    for i, step in enumerate(state.plan_steps):
+        idx = _CN_ORDINALS[i] if i < len(_CN_ORDINALS) else str(i + 1)
+        lines.append(f"第{idx}步，{step}。")
+    if state.student_step_validity == StepValidity.CORRECT_FINAL_ANSWER.value:
+        lines.append(
+            f"所以这题已经解出来了。你愿意把 {state.student_equation} 代回原式检查一下吗？"
+        )
+    else:
+        lines.append(f"到这里都对。{mc.next_question(state.student_equation)}")
+    return "\n".join(lines)
 
 
 def _step_feedback_response(state: TeacherState) -> str:
@@ -648,6 +718,13 @@ def teach_node(state: TeacherState) -> dict:
     ):
         # checker 权威判定 => 确定性反馈，绝不让 LLM 重新判断对错
         if (
+            state.response_kind == "multi_step_plan"
+            and validity != StepValidity.INCORRECT_STEP.value
+            and state.plan_steps
+        ):
+            # 学生一次说出完整思路：整体认可，不拆回单步追问
+            response = _multi_step_plan_response(state)
+        elif (
             validity == StepValidity.INCORRECT_STEP.value
             and state.action is TeachingAction.SHOW_WORKED_EXAMPLE
             and retrieval.exercises

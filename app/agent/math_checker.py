@@ -49,7 +49,7 @@ class StepCheckResult:
 
 
 def _normalize(text: str) -> str:
-    return text.translate(_FULLWIDTH)
+    return text.translate(_FULLWIDTH).replace("等于", "=")
 
 
 def fmt_frac(f: Fraction) -> str:
@@ -408,3 +408,268 @@ def mentions_equation(text: str, eq_str: str) -> bool:
     if not eq_str:
         return False
     return eq_str.replace(" ", "") in _normalize(text).replace(" ", "")
+
+
+# ---------------------------------------------------------------- 灵活回答：操作解析与多步计划
+
+_CN_NUM = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+           "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+_NUM_PAT = r"(?:\d+(?:\.\d+)?(?:/\d+)?|[零一二两三四五六七八九十])"
+
+_OP_VERBS = {"sub": "减去", "add": "加上", "div": "除以", "mul": "乘以"}
+
+_OP_PATTERNS: list[tuple[str, "re.Pattern[str]"]] = [
+    ("div", re.compile(rf"除以\s*({_NUM_PAT})")),
+    ("mul", re.compile(rf"乘以?\s*({_NUM_PAT})")),
+    ("sub", re.compile(rf"减去?\s*({_NUM_PAT})")),
+    ("add", re.compile(rf"加上?\s*({_NUM_PAT})")),
+    ("move", re.compile(rf"把?\s*([+-]?{_NUM_PAT})\s*移")),
+]
+
+
+@dataclass
+class MathOperation:
+    kind: str  # sub / add / div / mul / move
+    value: Fraction
+    pos: int
+
+
+@dataclass
+class PlanCheckResult:
+    valid: bool
+    reaches_final: bool = False
+    final_value: Optional[Fraction] = None
+    steps: list[str] = field(default_factory=list)
+    end_equation: str = ""
+    explanation: str = ""
+
+
+def _parse_num_token(tok: str) -> Optional[Fraction]:
+    tok = tok.strip()
+    neg = tok.startswith("-")
+    core = tok.lstrip("+-")
+    if core in _CN_NUM:
+        val = Fraction(_CN_NUM[core])
+    else:
+        try:
+            val = Fraction(core)
+        except (ValueError, ZeroDivisionError):
+            return None
+    return -val if neg else val
+
+
+def extract_operations(text: str) -> list[MathOperation]:
+    """从中文消息中按出现顺序抽取代数操作（减4/都减四/同时除以3/把4移过去…）。"""
+    t = _normalize(text)
+    found: list[MathOperation] = []
+    taken: list[tuple[int, int]] = []
+    for kind, pat in _OP_PATTERNS:
+        for m in pat.finditer(t):
+            span = (m.start(), m.end())
+            if any(s < span[1] and span[0] < e for s, e in taken):
+                continue  # 与已匹配片段重叠（如“乘以”与“除以”不会，防御性处理）
+            value = _parse_num_token(m.group(1))
+            if value is None:
+                continue
+            found.append(MathOperation(kind=kind, value=value, pos=m.start()))
+            taken.append(span)
+    return sorted(found, key=lambda o: o.pos)
+
+
+def apply_operation(eq: Equation, op: MathOperation) -> Optional[Equation]:
+    """对方程两边同时施加操作；不合法（除以0等）返回 None。"""
+    (a1, b1), (a2, b2) = eq
+    n = op.value
+    if op.kind == "sub":
+        return (a1, b1 - n), (a2, b2 - n)
+    if op.kind == "add":
+        return (a1, b1 + n), (a2, b2 + n)
+    if op.kind == "div":
+        if n == 0:
+            return None
+        return (a1 / n, b1 / n), (a2 / n, b2 / n)
+    if op.kind == "mul":
+        if n == 0:
+            return None
+        return (a1 * n, b1 * n), (a2 * n, b2 * n)
+    if op.kind == "move":
+        # “把 n 移过去”：找到方程里等于 ±n 的常数项，等价于两边同减/同加
+        if b1 == n or b2 == -n:
+            return (a1, b1 - n), (a2, b2 - n)
+        if b1 == -n or b2 == n:
+            return (a1, b1 + n), (a2, b2 + n)
+        return None
+    return None
+
+
+def _op_description(op: MathOperation) -> str:
+    if op.kind == "move":
+        return f"把 {fmt_frac(op.value)} 移到另一边（两边同时{'减去' if op.value > 0 else '加上'} {fmt_frac(abs(op.value))}）"
+    return f"两边同时{_OP_VERBS[op.kind]} {fmt_frac(op.value)}"
+
+
+def _find_equations_with_pos(text: str) -> list[tuple[int, str]]:
+    t = _normalize(text)
+    found: list[tuple[int, str]] = []
+    i = 0
+    while i < len(t):
+        if t[i] == "=":
+            l = i
+            while l > 0 and t[l - 1] in _MATH_CHARS and t[l - 1] != "=":
+                l -= 1
+            r = i + 1
+            while r < len(t) and t[r] in _MATH_CHARS and t[r] != "=":
+                r += 1
+            parsed = _parse_candidate(t[l:r].strip())
+            if parsed is not None:
+                found.append((l, format_equation(parsed)))
+            i = r
+        else:
+            i += 1
+    return found
+
+
+def final_value_mention(text: str) -> Optional[Fraction]:
+    """识别“最后等于1”这类直接给出的最终值（左侧不是可解析表达式）。"""
+    t = _normalize(text)
+    for m in re.finditer(r"=\s*(-?\d+(?:\.\d+)?(?:/\d+)?)", t):
+        l = m.start()
+        while l > 0 and t[l - 1] in _MATH_CHARS and t[l - 1] != "=":
+            l -= 1
+        left = t[l:m.start()].strip()
+        if left == "" or _parse_side(left) is None:
+            try:
+                return Fraction(m.group(1))
+            except (ValueError, ZeroDivisionError):
+                continue
+    return None
+
+
+def classify_student_math_response(message: str) -> str:
+    """把学生消息分类为：why_question / multi_step_plan / single_step /
+    intermediate_equation / final_answer / unknown。"""
+    if "为什么" in message:
+        return "why_question"
+    ops = extract_operations(message)
+    eqs = find_equations(message)
+    if len(ops) + len(eqs) >= 2:
+        return "multi_step_plan"
+    if len(ops) == 1 and not eqs:
+        return "single_step"
+    if len(eqs) == 1 and not ops:
+        parsed = parse_equation(eqs[0])
+        if parsed is not None and is_final_form(parsed):
+            return "final_answer"
+        return "intermediate_equation"
+    if bare_number(message) is not None or final_value_mention(message) is not None:
+        return "final_answer"
+    return "unknown"
+
+
+def _simulate_plan(start_eq: str, message: str) -> PlanCheckResult:
+    start = parse_equation(start_eq)
+    if start is None:
+        return PlanCheckResult(valid=False, explanation="当前方程无法解析")
+    target_sol = solve(start)
+    if target_sol is None:
+        return PlanCheckResult(valid=False, explanation="当前方程没有唯一解")
+
+    items: list[tuple[int, str, object]] = []
+    for op in extract_operations(message):
+        items.append((op.pos, "op", op))
+    for pos, eq in _find_equations_with_pos(message):
+        items.append((pos, "eq", eq))
+    fv = None
+    if not any(kind == "eq" for _, kind, _ in items):
+        fv = final_value_mention(message)
+    if fv is not None:
+        items.append((len(message) + 1, "eq", f"x = {fmt_frac(fv)}"))
+    items.sort(key=lambda x: x[0])
+    if len(items) < 2:
+        return PlanCheckResult(valid=False, explanation="不构成多步计划")
+
+    state = start
+    steps: list[str] = []
+    for _, kind, payload in items:
+        if kind == "op":
+            new = apply_operation(state, payload)  # type: ignore[arg-type]
+            if new is None:
+                return PlanCheckResult(
+                    valid=False, steps=steps,
+                    explanation=f"“{_op_description(payload)}”在 {format_equation(state)} 上不可行",  # type: ignore[arg-type]
+                )
+            steps.append(f"{_op_description(payload)}，得到 {format_equation(new)}")  # type: ignore[arg-type]
+            state = new
+        else:
+            eq_str = payload  # type: ignore[assignment]
+            sol = solve_str(eq_str)
+            if sol is None or sol != target_sol:
+                return PlanCheckResult(
+                    valid=False, steps=steps, end_equation=eq_str,
+                    explanation=f"{eq_str} 与原方程 {start_eq} 不同解",
+                )
+            if format_equation(state) != eq_str:
+                steps.append(describe_transformation(format_equation(state), eq_str))
+            parsed = parse_equation(eq_str)
+            assert parsed is not None
+            state = parsed
+
+    reaches_final = is_final_form(state)
+    return PlanCheckResult(
+        valid=True,
+        reaches_final=reaches_final,
+        final_value=solve(state) if reaches_final else None,
+        steps=steps,
+        end_equation=format_equation(state),
+        explanation="整体思路正确",
+    )
+
+
+def check_multi_step_plan(
+    start_eq: str, student_message: str, fallback_start: str | None = None
+) -> PlanCheckResult:
+    """整体检查学生的多步计划。
+
+    先从当前推进到的方程模拟；若备选起点（原题）能把计划走到最终解，
+    则优先采用（学生描述完整思路时通常是从原题出发的）。
+    """
+    primary = _simulate_plan(start_eq, student_message)
+    if fallback_start and fallback_start != start_eq:
+        alt = _simulate_plan(fallback_start, student_message)
+        if alt.valid and alt.reaches_final and not (primary.valid and primary.reaches_final):
+            return alt
+        if alt.valid and not primary.valid:
+            return alt
+    return primary
+
+
+def check_single_operation(current_eq: str, student_message: str) -> StepCheckResult:
+    """检查“先减4”“两边除以3”这类单个操作描述。"""
+    ops = extract_operations(student_message)
+    if not ops:
+        return StepCheckResult(StepValidity.NOT_A_STEP)
+    parsed = parse_equation(current_eq)
+    if parsed is None:
+        return StepCheckResult(StepValidity.NOT_A_STEP, explanation="当前方程无法解析")
+    new = apply_operation(parsed, ops[0])
+    if new is None:
+        return StepCheckResult(
+            StepValidity.INCORRECT_STEP,
+            explanation=f"“{_op_description(ops[0])}”在 {current_eq} 上不可行",
+        )
+    new_str = format_equation(new)
+    validity = StepValidity.CORRECT_FINAL_ANSWER if is_final_form(new) else StepValidity.CORRECT_STEP
+    return StepCheckResult(
+        validity,
+        student_equation=new_str,
+        explanation=f"{_op_description(ops[0])}，得到 {new_str}",
+    )
+
+
+def check_final_answer(original_eq: str, student_message: str) -> StepCheckResult:
+    """检查最终答案：支持 x=1、纯数字 1、“最后等于1”。"""
+    fv = final_value_mention(student_message)
+    if fv is not None and extract_equation(student_message) is None \
+            and bare_number(student_message) is None:
+        return check_step(original_eq, f"x = {fmt_frac(fv)}")
+    return check_step(original_eq, student_message)

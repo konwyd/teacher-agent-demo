@@ -180,6 +180,24 @@ def evaluate_response(
             name="tracks_repeated_misconception", passed=ok,
             detail=f"重复错误应识别为同一误因，known={state.known_misconceptions}" if not ok else ""))
 
+    if is_final_turn and "must_accept_multi_step_plan" in behaviors:
+        ok = (state.student_step_validity in ("correct_step", "correct_final_answer")
+              and ("思路" in response or "正确" in response))
+        checks.append(CheckResult(
+            name="accepts_multi_step_plan", passed=ok,
+            detail=f"多步计划未被整体认可：validity={state.student_step_validity!r}" if not ok else ""))
+    if is_final_turn and "must_not_force_single_step" in behaviors:
+        ok = "除以" in response  # 第二步被展开确认，而不是拉回第一步
+        checks.append(CheckResult(
+            name="not_forcing_single_step", passed=ok,
+            detail="回复没有认可计划中的后续步骤" if not ok else ""))
+    if is_final_turn and "must_not_repeat_already_answered_step" in behaviors:
+        ok = ("减去几" not in response and "减几" not in response
+              and "第一步应该做什么" not in response)
+        checks.append(CheckResult(
+            name="not_repeating_answered_step", passed=ok,
+            detail="回复重复追问了学生已经回答过的步骤" if not ok else ""))
+
     # 9) 是否 hallucinate 不存在的方程（非例题动作下，回复中的方程必须与原题同解或来自学生）
     if action not in _EXAMPLE_ALLOWED_ACTIONS:
         halluc = [e for e in _equations_excluding_student(response, student_msg)

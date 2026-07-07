@@ -136,6 +136,8 @@ class TeacherState(BaseModel):
     student_step_validity: str = ""
     student_equation: str = ""
     step_explanation: str = ""
+    response_kind: str = ""
+    plan_steps: list[str] = Field(default_factory=list)
     consecutive_wrong_steps: int = 0
 
     # policy + teach
