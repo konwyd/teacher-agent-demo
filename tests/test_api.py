@@ -16,6 +16,11 @@ REQUIRED_FIELDS = [
     "response",
     "updated_student_state",
     "log_id",
+    "student_mastery_before",
+    "student_mastery_after",
+    "mastery_delta",
+    "known_misconceptions",
+    "recommended_next_action",
 ]
 
 
@@ -41,3 +46,6 @@ def test_turn_returns_all_fields() -> None:
     assert data["response"] != ""
     assert "c_linear" in data["updated_student_state"]
     assert data["log_id"]
+    assert data["student_mastery_before"] == 0.5  # 新学生中性初始
+    assert data["mastery_delta"] == -0.05         # 求助视为轻微未掌握信号
+    assert data["recommended_next_action"] != ""

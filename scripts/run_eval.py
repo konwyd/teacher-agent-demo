@@ -32,6 +32,12 @@ if not USE_REAL:
     os.environ.pop("DEEPSEEK_API_KEY", None)
     os.environ["TEACHER_FORCE_MOCK"] = "1"  # 双保险：is_configured() 直接短路
 
+# 评测使用独立的学生档案文件，避免污染真实学生记忆
+os.environ.setdefault(
+    "TEACHER_PROFILE_PATH",
+    str(Path(os.getenv("TEACHER_LOG_DIR", "logs")) / "eval_student_profiles.json"),
+)
+
 
 def main() -> int:
     print(f"评测模式：{'真实 DeepSeek' if USE_REAL else 'mock LLM（离线）'}")

@@ -59,12 +59,12 @@ def test_with_key_calls_deepseek_without_network(monkeypatch: pytest.MonkeyPatch
 
     def fake_deepseek_response(state: TeacherState) -> str:
         calls.append(state.message)
-        return "canned-llm-reply"
+        return "canned-llm-reply，你觉得呢？"  # 自带一个问句，postprocess 不会改动
 
     monkeypatch.setattr(wf, "_deepseek_response", fake_deepseek_response)
     result = wf.teach_node(_make_state())
     assert calls == ["我不会解 2x+3=7"]
-    assert result["response"] == "canned-llm-reply"
+    assert result["response"] == "canned-llm-reply，你觉得呢？"
 
 
 def test_api_failure_returns_clear_error_not_mock(monkeypatch: pytest.MonkeyPatch) -> None:

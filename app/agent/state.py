@@ -145,6 +145,9 @@ class TeacherState(BaseModel):
     # memory
     mastery_update: Optional[StudentMasteryUpdate] = None
     updated_student_state: dict[str, float] = Field(default_factory=dict)
+    mastery_delta: float = 0.0
+    known_misconceptions: list[str] = Field(default_factory=list)
+    recommended_next_action: str = ""
 
     # log
     log_id: Optional[str] = None

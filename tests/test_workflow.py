@@ -47,7 +47,7 @@ def test_turn_updates_student_state_with_before_after() -> None:
     state = run_turn("demo_student_2", "去括号的题怎么做")
     assert state.detected_concept_id == "c_bracket"
     assert state.mastery_update is not None
-    assert state.mastery_update.mastery_before == 0.0
+    assert state.mastery_update.mastery_before == 0.5  # 新学生中性初始
     assert "c_bracket" in state.updated_student_state
     assert state.log_id
 

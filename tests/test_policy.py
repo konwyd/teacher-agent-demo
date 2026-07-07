@@ -13,11 +13,11 @@ from app.agent.state import (
     TurnLog,
 )
 from app.agent.workflow import _choose_action, diagnose_node, run_turn
-from app.memory.student_state import MasteryRecord
+from app.memory.student_state import ConceptMastery
 
 
-def _record(mastery: float = 0.0, attempts: int = 0) -> MasteryRecord:
-    return MasteryRecord(student_id="s", concept_id="c", mastery=mastery, attempts=attempts)
+def _record(mastery: float = 0.5, attempts: int = 0) -> ConceptMastery:
+    return ConceptMastery(student_id="s", concept_id="c", mastery_score=mastery, attempts=attempts)
 
 
 # ---------------- diagnose_node ----------------

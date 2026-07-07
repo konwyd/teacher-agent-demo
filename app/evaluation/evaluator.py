@@ -95,6 +95,7 @@ def evaluate_response(
     student_msg: str,
     state: TeacherState,
     final_answer_already_given: bool = False,
+    is_final_turn: bool = False,
 ) -> list[CheckResult]:
     """对一轮教师回复做行为检查（全部确定性，不依赖 LLM）。"""
     checks: list[CheckResult] = []
@@ -160,6 +161,25 @@ def evaluate_response(
             name="no_premature_final_answer", passed=not leaked,
             detail=f"学生尚未解出，回复提前出现 {case.expected_final_answer}" if leaked else ""))
 
+    # mastery 相关行为（只在最后一轮判定，此时学生历史已经累积完成）
+    if is_final_turn and "must_adapt_low_mastery" in behaviors:
+        from app.agent.workflow import BASIC_LANGUAGE_MARKERS
+        ok = (state.action is TeachingAction.ASK_DIAGNOSTIC_QUESTION
+              and any(m in response for m in BASIC_LANGUAGE_MARKERS))
+        checks.append(CheckResult(
+            name="adapts_low_mastery", passed=ok,
+            detail=f"低掌握度学生期望诊断式提问+基础语言，实际 action={action!r}" if not ok else ""))
+    if is_final_turn and "must_not_overexplain_high_mastery" in behaviors:
+        ok = state.action is TeachingAction.GIVE_PRACTICE_QUESTION
+        checks.append(CheckResult(
+            name="no_overexplain_high_mastery", passed=ok,
+            detail=f"高掌握度学生期望变式练习，实际 action={action!r}" if not ok else ""))
+    if is_final_turn and "must_track_repeated_misconception" in behaviors:
+        ok = any("变号" in m for m in state.known_misconceptions)
+        checks.append(CheckResult(
+            name="tracks_repeated_misconception", passed=ok,
+            detail=f"重复错误应识别为同一误因，known={state.known_misconceptions}" if not ok else ""))
+
     # 9) 是否 hallucinate 不存在的方程（非例题动作下，回复中的方程必须与原题同解或来自学生）
     if action not in _EXAMPLE_ALLOWED_ACTIONS:
         halluc = [e for e in _equations_excluding_student(response, student_msg)
@@ -184,7 +204,11 @@ def run_golden_conversation(case: GoldenCase, student_id: str | None = None) -> 
         state = run_turn(sid, turn.content)
         if first_state is None:
             first_state = state
-        for check in evaluate_response(case, turn.content, state, final_answer_already_given=final_given):
+        is_final_turn = (i == len(case.turns) - 1)
+        for check in evaluate_response(
+            case, turn.content, state,
+            final_answer_already_given=final_given, is_final_turn=is_final_turn,
+        ):
             if not check.passed:
                 failures.append(f"turn{i + 1}[{turn.content}] {check.name}: {check.detail}")
         if state.student_step_validity == StepValidity.CORRECT_FINAL_ANSWER.value:
@@ -210,11 +234,11 @@ def run_single_case(case: SingleTurnCase) -> CaseResult:
         failures.append(f"concept: 期望 {case.expected_concept}，实际 {state.detected_concept_name}")
     if case.expected_intent:
         actual = state.diagnosis.intent.value if state.diagnosis else ""
-        if actual != case.expected_intent:
+        if actual not in case.expected_intent.split("|"):
             failures.append(f"intent: 期望 {case.expected_intent}，实际 {actual}")
     if case.expected_action:
         actual = state.action.value if state.action else ""
-        if actual != case.expected_action:
+        if actual not in case.expected_action.split("|"):
             failures.append(f"action: 期望 {case.expected_action}，实际 {actual}")
     bad = [p for p in case.forbidden_patterns if _norm(p) in _norm(state.response)]
     if bad:

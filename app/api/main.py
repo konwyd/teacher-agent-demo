@@ -30,6 +30,11 @@ class TurnResponse(BaseModel):
     log_id: str | None = None
     original_problem: str = ""
     student_step_validity: str = ""
+    student_mastery_before: float = 0.0
+    student_mastery_after: float = 0.0
+    mastery_delta: float = 0.0
+    known_misconceptions: list[str] = Field(default_factory=list)
+    recommended_next_action: str = ""
 
 
 @app.get("/health")
@@ -54,4 +59,9 @@ def turn(req: TurnRequest) -> TurnResponse:
         log_id=state.log_id,
         original_problem=state.original_problem,
         student_step_validity=state.student_step_validity,
+        student_mastery_before=state.mastery_update.mastery_before if state.mastery_update else 0.0,
+        student_mastery_after=state.mastery_update.mastery_after if state.mastery_update else 0.0,
+        mastery_delta=state.mastery_delta,
+        known_misconceptions=state.known_misconceptions,
+        recommended_next_action=state.recommended_next_action,
     )

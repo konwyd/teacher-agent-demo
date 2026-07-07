@@ -9,15 +9,15 @@ from app.agent.workflow import (
     postprocess_teacher_response,
     run_turn,
 )
-from app.memory.student_state import MasteryRecord
+from app.memory.student_state import ConceptMastery
 
 
 def _norm(s: str) -> str:
     return s.replace(" ", "")
 
 
-def _record(mastery: float = 0.0, attempts: int = 0) -> MasteryRecord:
-    return MasteryRecord(student_id="s", concept_id="c", mastery=mastery, attempts=attempts)
+def _record(mastery: float = 0.5, attempts: int = 0) -> ConceptMastery:
+    return ConceptMastery(student_id="s", concept_id="c", mastery_score=mastery, attempts=attempts)
 
 
 # ---------------- 例题污染 / 过早给答案 ----------------
@@ -125,3 +125,66 @@ def test_second_consecutive_wrong_step_gets_worked_example() -> None:
     assert s2.action is TeachingAction.SHOW_WORKED_EXAMPLE
     assert "类比" in s2.response
     assert "3x + 6 = 10" in s2.response  # 回到原题
+
+
+# ---------------- 真实 LLM 路径加固（gap 锚定 / 收尾问题） ----------------
+
+
+def test_anchor_gap_downgrades_speculative_llm_gap() -> None:
+    from app.agent.state import StudentGap
+    from app.agent.workflow import _anchor_gap
+    from app.retrieval.graph_retriever import get_retriever
+
+    concept = get_retriever().get_concept("c_linear")
+    diag = DiagnosisResult(
+        intent=StudentIntent.PROBLEM_SOLVING,
+        student_gap=StudentGap.PROCEDURE_ERROR,  # LLM 无证据的猜测
+        confidence=0.9,
+    )
+    _anchor_gap(diag, "anchor_s1", concept, "我不会解 2x+3=7")
+    assert diag.student_gap is StudentGap.UNKNOWN  # 回退，policy 走 hint1
+
+
+def test_anchor_gap_keeps_evidenced_gap() -> None:
+    from app.agent.state import StudentGap
+    from app.agent.workflow import _anchor_gap
+    from app.retrieval.graph_retriever import get_retriever
+
+    concept = get_retriever().get_concept("c_bracket")
+    diag = DiagnosisResult(
+        intent=StudentIntent.UNKNOWN,
+        student_gap=StudentGap.CALCULATION_ERROR,
+        confidence=0.9,
+    )
+    _anchor_gap(diag, "anchor_s2", concept, "去括号的时候总是错")  # 有关键词证据
+    assert diag.student_gap is StudentGap.CALCULATION_ERROR
+
+
+def test_postprocess_appends_closing_question_when_missing() -> None:
+    state = _llm_state()
+    state.action = TeachingAction.GIVE_PRACTICE_QUESTION
+    out = postprocess_teacher_response("很好，你已经掌握了。这道题留给你练习。", state)
+    assert out.count("？") + out.count("?") == 1
+    assert out.rstrip().endswith("？")
+
+
+def test_postprocess_keeps_existing_single_question() -> None:
+    out = postprocess_teacher_response("先想想第一步。你觉得两边同时减几？", _llm_state())
+    assert out == "先想想第一步。你觉得两边同时减几？"
+
+
+def test_postprocess_low_mastery_diagnostic_falls_back_to_basic_language() -> None:
+    """低掌握度学生的诊断问题若缺基础语言，降级为含“两边同时”的模板。"""
+    from app.memory.student_state import get_store
+
+    sid = "tf_lowmastery_pp"
+    store = get_store()
+    for _ in range(3):  # 0.5 -> 0.2
+        store.update_mastery_after_turn(sid, "c_linear", "incorrect_step")
+    state = _llm_state()
+    state.student_id = sid
+    state.detected_concept_id = "c_linear"
+    state.action = TeachingAction.ASK_DIAGNOSTIC_QUESTION
+    out = postprocess_teacher_response("你具体是哪里不明白？", state)
+    assert "两边同时" in out
+    assert "3x+6=10" in _norm(out)  # 模板围绕原题

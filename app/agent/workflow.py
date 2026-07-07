@@ -34,7 +34,7 @@ from app.agent.state import (
 )
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 from app.memory.conversation_state import ConversationState, get_conversation_store
-from app.memory.student_state import MasteryRecord, get_store
+from app.memory.student_state import ConceptMastery, get_store
 from app.retrieval.graph_retriever import ConceptNode, get_retriever
 
 DEFAULT_CONCEPT_ID = "c_linear"
@@ -67,6 +67,7 @@ _REQUEST_SOLUTION_WORDS = ("直接告诉我", "告诉我答案", "直接给答�
 _ANSWER_CHECK_WORDS = ("对不对", "对吗", "检查", "算得对", "做得对")
 _EXAMPLE_REQUEST_WORDS = ("举个例子", "举例", "给个例子", "来个例子", "看个例子")
 _TOTALLY_LOST_WORDS = ("完全不懂", "完全听不懂", "一点都不懂", "一点也不懂")
+_PRACTICE_REQUEST_WORDS = ("再来一题", "再出一道", "再来一道", "再练一题", "出个题")
 _HELP_WORDS = ("怎么", "不会", "为什么", "什么", "吗", "帮", "?", "？", "呢", "教")
 
 
@@ -90,7 +91,8 @@ def _classify_equation_structure(message: str, formatted_eq: str) -> str:
     if parsed is None:
         return DEFAULT_CONCEPT_ID
     (a1, b1), (a2, b2) = parsed
-    if any(f.denominator != 1 for f in (a1, b1, a2, b2)):
+    # 分数系数只看 x 的系数：x=4/3 这类“答案是分数”的式子不属于分数系数方程
+    if any(f.denominator != 1 for f in (a1, a2)):
         return "c_frac"
     if a1 != 0 and a2 != 0:
         return "c_move"
@@ -132,8 +134,8 @@ def _rule_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, Con
     if gap is StudentGap.UNKNOWN:
         store = get_store()
         for prereq in get_retriever().get_prerequisites(concept.id):
-            rec = store.get_mastery(student_id, prereq.id)
-            if rec.attempts > 0 and rec.mastery < 0.3:
+            rec = store.get_concept_mastery(student_id, prereq.id)
+            if rec.attempts > 0 and rec.mastery_score < 0.3:
                 gap = StudentGap.PREREQUISITE_MISSING
                 break
     if gap is StudentGap.UNKNOWN and intent is StudentIntent.CONCEPT_QUESTION:
@@ -165,6 +167,39 @@ def _llm_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, Conc
         concept, _ = _detect_concept(message)
         diagnosis.detected_concept = concept.name
     return diagnosis, concept
+
+
+def _anchor_gap(
+    diagnosis: DiagnosisResult, student_id: str, concept: ConceptNode, message: str
+) -> None:
+    """LLM 猜测的卡点必须有证据支撑，否则回退到规则判定。
+
+    防止“我不会解 2x+3=7”这种普通求助被 LLM 过度诊断为 procedure_error /
+    calculation_error / prerequisite_missing，导致教学动作过于激进（跳过一级提示）。
+    """
+    if diagnosis.student_gap not in (
+        StudentGap.CALCULATION_ERROR,
+        StudentGap.PROCEDURE_ERROR,
+        StudentGap.PREREQUISITE_MISSING,
+    ):
+        return
+    evidence_gap = StudentGap.UNKNOWN
+    for keywords, value in _GAP_RULES:
+        if any(k in message for k in keywords):
+            evidence_gap = value
+            break
+    if evidence_gap is StudentGap.UNKNOWN:
+        store = get_store()
+        for prereq in get_retriever().get_prerequisites(concept.id):
+            rec = store.get_concept_mastery(student_id, prereq.id)
+            if rec.attempts > 0 and rec.mastery_score < 0.3:
+                evidence_gap = StudentGap.PREREQUISITE_MISSING
+                break
+    if diagnosis.student_gap is not evidence_gap:
+        if evidence_gap is StudentGap.UNKNOWN and diagnosis.intent is StudentIntent.CONCEPT_QUESTION:
+            evidence_gap = StudentGap.CONCEPT_MISSING
+        diagnosis.student_gap = evidence_gap
+        diagnosis.reason += "（LLM 卡点判断缺乏证据，已回退规则判定）"
 
 
 # ---------------------------------------------------------------- diagnose
@@ -204,6 +239,7 @@ def diagnose_node(state: TeacherState) -> dict:
     if is_configured():
         try:
             diagnosis, concept = _llm_diagnosis(state.student_id, message)
+            _anchor_gap(diagnosis, state.student_id, concept, message)
         except DeepSeekError:
             diagnosis, concept = _rule_diagnosis(state.student_id, message)
             diagnosis.reason += "（LLM 诊断失败，已用规则 fallback）"
@@ -286,7 +322,7 @@ def retrieve_node(state: TeacherState) -> dict:
 
 def _choose_action(
     diagnosis: DiagnosisResult,
-    record: MasteryRecord,
+    record: ConceptMastery,
     message: str = "",
     validity: str = "",
     consecutive_wrong: int = 0,
@@ -297,6 +333,10 @@ def _choose_action(
     a) 学生明确要例子；b) 同一知识点连续两次答错；c) 学生说完全不懂。
     （“直接告诉我答案”视作索要完整示范，也走 worked example。）
     """
+    if any(k in message for k in _PRACTICE_REQUEST_WORDS):
+        # 学生主动要题：掌握尚可给变式练习，否则先回到提示
+        return (TeachingAction.GIVE_PRACTICE_QUESTION
+                if record.mastery_score >= 0.5 else TeachingAction.GIVE_HINT_LEVEL_2)
     if any(k in message for k in _EXAMPLE_REQUEST_WORDS):
         return TeachingAction.SHOW_WORKED_EXAMPLE  # (a) 明确要例子
     if diagnosis.intent in (StudentIntent.PROVIDES_STEP, StudentIntent.PROVIDES_FINAL_ANSWER):
@@ -326,7 +366,10 @@ def _choose_action(
         return TeachingAction.EXPLAIN_CONCEPT
     if diagnosis.confidence < 0.4:
         return TeachingAction.ASK_DIAGNOSTIC_QUESTION
-    if record.mastery >= 0.7:
+    # 按掌握度分层（<0.3 多诊断少抽象；0.3-0.7 一级提示；>=0.7 独立做题）
+    if record.mastery_score < 0.3:
+        return TeachingAction.ASK_DIAGNOSTIC_QUESTION
+    if record.mastery_score >= 0.7:
         return TeachingAction.GIVE_PRACTICE_QUESTION
     if record.attempts >= 1:
         return TeachingAction.GIVE_HINT_LEVEL_2
@@ -335,7 +378,7 @@ def _choose_action(
 
 def teaching_policy_node(state: TeacherState) -> dict:
     diagnosis = state.diagnosis or DiagnosisResult()
-    record = get_store().get_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
+    record = get_store().get_concept_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
     action = _choose_action(
         diagnosis,
         record,
@@ -372,7 +415,7 @@ _TEACH_SYSTEM_PROMPT = (
     "4. 除非本轮 teaching_action 是 show_worked_example，否则不要引入任何新题目\n"
     "5. 如果学生给出了正确步骤，先明确肯定，再继续原题的下一步\n"
     "6. 如果学生问“为什么”，先解释这个为什么，不要跳到新题\n"
-    "7. 每轮最多问一个问题：整条回复只允许出现一个问号，结尾只能给学生一个任务，"
+    "7. 每轮必须且只能问一个问题：整条回复恰好一个问号、放在结尾作为学生的下一个任务，"
     "严禁连续追问（如“你知道吗？该怎么做？能算出来吗？”）\n"
     "8. 不要在学生已经给出正确步骤时重新讲无关例子\n"
     "9. 如果使用了例子，必须先说明“这是类比”，并在结尾回到 original_problem\n"
@@ -387,8 +430,14 @@ _TEACH_SYSTEM_PROMPT = (
 def _build_teach_context(state: TeacherState) -> str:
     diagnosis = state.diagnosis or DiagnosisResult()
     retrieval = state.retrieval or RetrievalResult()
-    record = get_store().get_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
+    record = get_store().get_concept_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
     action = state.action or TeachingAction.GIVE_HINT_LEVEL_1
+    if record.mastery_score < 0.3:
+        mastery_note = "（掌握度较低：多问小的诊断问题，避免抽象术语，回复中必须使用“等式两边同时…”这样的基础语言）"
+    elif record.mastery_score >= 0.7:
+        mastery_note = "（掌握度较高：减少提示，让学生独立完成，可推荐变式题）"
+    else:
+        mastery_note = "（掌握度中等：给一级提示，让学生自己完成下一步）"
     return (
         f"学生当前这句话：{state.message}\n"
         f"original_problem（必须围绕它教学）：{state.original_problem or '（暂无，学生还没给出具体题目）'}\n"
@@ -400,7 +449,8 @@ def _build_teach_context(state: TeacherState) -> str:
         f"{state.student_step_validity or '本轮不是步骤回答'}"
         f"{('，' + state.step_explanation) if state.step_explanation else ''}\n"
         f"诊断：知识点={state.detected_concept_name}，意图={diagnosis.intent.value}，"
-        f"卡点={diagnosis.student_gap.value}，掌握度={record.mastery:.2f}\n"
+        f"卡点={diagnosis.student_gap.value}，掌握度={record.mastery_score:.2f}{mastery_note}\n"
+        f"学生已知易错点：{'、'.join(record.common_misconceptions) or '无'}\n"
         f"retrieved_examples："
         f"{('；'.join(retrieval.exercises) or '无') if state.allowed_to_use_new_example else '（本轮禁止使用例题，不要引入任何新题目）'}\n"
         f"常见误解：{'；'.join(retrieval.misconceptions) or '无'}\n"
@@ -534,6 +584,9 @@ def postprocess_teacher_response(response: str, state: TeacherState) -> str:
     1. 非 worked_example 时出现与原题不同解的新方程 => 降级为确定性模板
     2. 学生未解出却出现最终答案（除非明确索要答案）=> 降级为确定性模板
     3. 多个问句 => 只保留最后一个
+    4. 没有问句 => 按教学动作补一个收尾小问题（每轮结尾必须给学生一个任务）
+    5. 低掌握度学生的诊断式提问必须使用基础语言（等式两边同时…），
+       否则降级为确定性模板
     """
     target = state.target_equation
     if target:
@@ -554,7 +607,35 @@ def postprocess_teacher_response(response: str, state: TeacherState) -> str:
             flat = response.replace(" ", "")
             if f"x={mc.fmt_frac(sol)}" in flat or f"{mc.fmt_frac(sol)}=x" in flat:
                 return _mock_response(state)
-    return _keep_single_question(response)
+    if (
+        state.action is TeachingAction.ASK_DIAGNOSTIC_QUESTION
+        and state.original_problem
+        and not any(m in response for m in BASIC_LANGUAGE_MARKERS)
+    ):
+        record = get_store().get_concept_mastery(
+            state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID
+        )
+        if record.mastery_score < 0.3:
+            return _mock_response(state)  # 模板必然使用“两边同时…”的基础语言
+    response = _keep_single_question(response)
+    if response.count("？") + response.count("?") == 0:
+        closing = _CLOSING_QUESTIONS.get(
+            state.action or TeachingAction.GIVE_HINT_LEVEL_1,
+            "你先试试这一步，写出来给我看看？",
+        )
+        response = response.rstrip("。！!.\n ") + "。" + closing
+    return response
+
+
+# 低掌握度学生要求的“基础语言”标记（等式两边同时操作类表述）
+BASIC_LANGUAGE_MARKERS = ("两边同时", "等式两边", "两边都")
+
+_CLOSING_QUESTIONS: dict[TeachingAction, str] = {
+    TeachingAction.GIVE_PRACTICE_QUESTION: "做完把你的答案告诉我？",
+    TeachingAction.GRADE_AND_FEEDBACK: "你觉得哪一步最没把握？",
+    TeachingAction.SCHEDULE_REVIEW: "我们从哪个知识点开始复习好？",
+    TeachingAction.ASK_DIAGNOSTIC_QUESTION: "你现在卡在哪一小步？",
+}
 
 
 def teach_node(state: TeacherState) -> dict:
@@ -593,27 +674,48 @@ def teach_node(state: TeacherState) -> dict:
 # ---------------------------------------------------------------- memory
 
 
+def _recommend_next_action(record: ConceptMastery) -> str:
+    if record.mastery_score < 0.3:
+        return "ask_diagnostic_question：先补基础，用“等式两边同时…”的语言做小步诊断"
+    if record.mastery_score < 0.7:
+        return "give_hint_level_1：给一级提示，让学生自己完成下一步"
+    return "give_practice_question：掌握较好，推荐变式练习巩固"
+
+
 def memory_update_node(state: TeacherState) -> dict:
     store = get_store()
     cid = state.detected_concept_id or DEFAULT_CONCEPT_ID
-    before = store.get_mastery(state.student_id, cid)
+    before = store.get_concept_mastery(state.student_id, cid)
     validity = state.student_step_validity
-    if validity in (StepValidity.CORRECT_STEP.value, StepValidity.CORRECT_FINAL_ANSWER.value):
-        after = store.update_mastery(state.student_id, cid, correct=True, weight=0.2)
-    elif validity == StepValidity.INCORRECT_STEP.value:
-        after = store.update_mastery(state.student_id, cid, correct=False, weight=0.2)
+    if validity in (
+        StepValidity.CORRECT_STEP.value,
+        StepValidity.CORRECT_FINAL_ANSWER.value,
+        StepValidity.INCORRECT_STEP.value,
+    ):
+        step_result = validity
     else:
-        after = store.update_mastery(state.student_id, cid, correct=False, weight=0.1)
+        step_result = "help_requested"
+    after = store.update_mastery_after_turn(
+        state.student_id, cid, step_result, error_detail=state.student_equation
+    )
+    if validity == StepValidity.INCORRECT_STEP.value:
+        misconception = mc.classify_misconception(
+            state.current_step or state.target_equation, state.student_equation
+        ) or f"同解性错误（{state.detected_concept_name or cid}）"
+        after = store.record_misconception(state.student_id, cid, misconception)
     update = StudentMasteryUpdate(
         concept_id=cid,
-        mastery_before=before.mastery,
-        mastery_after=after.mastery,
+        mastery_before=before.mastery_score,
+        mastery_after=after.mastery_score,
         attempts=after.attempts,
     )
     return {
         "trace": state.trace + ["memory_update_node"],
         "mastery_update": update,
-        "updated_student_state": {cid: after.mastery},
+        "updated_student_state": {cid: after.mastery_score},
+        "mastery_delta": round(after.mastery_score - before.mastery_score, 4),
+        "known_misconceptions": list(after.common_misconceptions),
+        "recommended_next_action": _recommend_next_action(after),
     }
 
 

@@ -35,6 +35,14 @@ def render_meta(meta: dict[str, Any]) -> None:
         st.write("**retrieved_exercises**:", meta.get("retrieved_exercises"))
         st.write("**updated_student_state**:", meta.get("updated_student_state"))
         st.write("**original_problem**:", meta.get("original_problem"))
+        before = meta.get("student_mastery_before")
+        after = meta.get("student_mastery_after")
+        delta = meta.get("mastery_delta", 0.0)
+        if after is not None:
+            sign = "+" if (delta or 0) >= 0 else ""
+            st.write("**当前知识点掌握度**:", f"{before} → {after}（本轮 {sign}{delta}）")
+        st.write("**常见错因**:", meta.get("known_misconceptions") or "无")
+        st.write("**推荐下一步**:", meta.get("recommended_next_action") or "-")
         st.write("**student_step_validity**:", meta.get("student_step_validity"))
         st.write("**log_id**:", meta.get("log_id"))
 

@@ -370,6 +370,27 @@ def next_question(eq_str: str) -> str:
     return "你已经得到 x 的值了，把它代回原方程检验一下，两边相等吗？"
 
 
+def classify_misconception(prev_eq: str, student_eq: str) -> Optional[str]:
+    """识别典型误因（当前支持：移项不变号）。识别不出返回 None。"""
+    p, s = parse_equation(prev_eq), parse_equation(student_eq)
+    if p is None or s is None:
+        return None
+    (a1, b1), (a2, b2) = p
+    denom = a1 - a2
+    if denom == 0:
+        return None
+    s_sol = solve(s)
+    if s_sol is None:
+        return None
+    # 常数项移项忘记变号：ax+b=c 被写成 ax=c+b
+    if b1 != 0 and s_sol == (b2 + b1) / denom:
+        return "移项时忘记变号。"
+    # 含 x 项移项忘记变号：a1x+b1=a2x+b2 被按 a1+a2 处理
+    if a2 != 0 and (a1 + a2) != 0 and s_sol == (b2 - b1) / (a1 + a2):
+        return "移项时忘记变号。"
+    return None
+
+
 def uses_new_example(response: str, target_eq: str) -> bool:
     """回复中是否出现了与原题不同解的新方程（新例题）。"""
     sol_t = solve_str(target_eq)
