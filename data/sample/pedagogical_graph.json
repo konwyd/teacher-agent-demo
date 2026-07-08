@@ -1,0 +1,430 @@
+{
+  "schema_version": "0.1.0",
+  "scope": "中文初中数学 Pedagogical Graph RAG mock sample",
+  "notes": [
+    "This file is a pedagogical decision graph sample, not a textbook answer corpus.",
+    "RAG evidence from this file should be treated as soft guidance for teaching decisions.",
+    "Student math correctness must still be judged by app/agent/math_checker.py."
+  ],
+  "concepts": [
+    {
+      "concept_id": "linear_equation",
+      "name": "一元一次方程",
+      "prerequisites": ["equation_properties", "move_terms", "divide_by_coefficient"],
+      "common_misconceptions": [
+        {
+          "misconception_id": "linear_solve_order_confusion",
+          "description": "学生知道要变形，但不清楚先把含 x 的项和常数项分开，再把系数化为 1。",
+          "example_wrong_step": "由 2x+3=7 直接写成 x+3=3.5。",
+          "diagnostic_signal": "学生跳过移项或合并，直接除以某个数。"
+        },
+        {
+          "misconception_id": "linear_answer_without_check",
+          "description": "学生给出答案但不会代回原方程检验。",
+          "example_wrong_step": "写出 x=2 后不能说明为什么对。",
+          "diagnostic_signal": "只报最终答案，没有解释等式两边是否相等。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_linear_next_step",
+          "prompt": "现在这一步最想先把含 x 的项整理到哪里？",
+          "checks": ["能否说出把含 x 的项和常数项分开"],
+          "expected_signal": "学生提到移项、合并或系数化为 1 的合理顺序。"
+        },
+        {
+          "question_id": "dq_linear_check_solution",
+          "prompt": "如果你得到一个 x 的值，可以怎样代回原方程检查？",
+          "checks": ["是否知道把答案代回原式左右两边"],
+          "expected_signal": "学生能比较左右两边是否相等。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "先观察方程里含 x 的项和不含 x 的项分别在哪里。"
+        },
+        {
+          "level": 2,
+          "hint": "可以先用等式性质把常数项移到另一边，再合并同类项。"
+        },
+        {
+          "level": 3,
+          "hint": "整理成 ax=b 后，再两边同时除以 a。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_linear_basic_01",
+          "stem": "解方程：2x + 5 = 11",
+          "difficulty": 1,
+          "teaching_focus": "先移常数项，再系数化为 1。"
+        },
+        {
+          "exercise_id": "ex_linear_two_side_01",
+          "stem": "解方程：4x - 3 = 2x + 5",
+          "difficulty": 2,
+          "teaching_focus": "含 x 的项在两边时，先把含 x 的项移到同一边。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "先用诊断问题确认等式性质和移项含义，提示要具体但不泄最终答案。",
+        "medium": "让学生说出下一步理由，必要时给 level 1 或 level 2 提示。",
+        "high": "认可跳步或直接答案，要求代回检验，并给相邻难度变式题。"
+      }
+    },
+    {
+      "concept_id": "equation_properties",
+      "name": "等式性质",
+      "prerequisites": [],
+      "common_misconceptions": [
+        {
+          "misconception_id": "eq_prop_one_side_only",
+          "description": "只对等式一边做运算，另一边不变。",
+          "example_wrong_step": "由 x+3=7 写成 x=7+3。",
+          "diagnostic_signal": "学生解释中没有出现“两边同时”。"
+        },
+        {
+          "misconception_id": "eq_prop_divide_zero_blindness",
+          "description": "不知道两边同除时除数不能为 0。",
+          "example_wrong_step": "说任意数都可以两边同时除。",
+          "diagnostic_signal": "学生忽略非零条件。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_eq_prop_both_sides",
+          "prompt": "如果等式左边减 4，右边也要做什么，等式才仍然成立？",
+          "checks": ["是否说出右边也减 4"],
+          "expected_signal": "学生能表达两边同时做同一种运算。"
+        },
+        {
+          "question_id": "dq_eq_prop_reason",
+          "prompt": "为什么 x+4=7 两边同时减 4 后，等式关系没有变？",
+          "checks": ["是否理解保持左右相等"],
+          "expected_signal": "学生提到左右两边都做同样变化。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "等式像天平，左边动了，右边也要做同样的动作。"
+        },
+        {
+          "level": 2,
+          "hint": "同加、同减、同乘、同除同一个非零数，都能保持等式成立。"
+        },
+        {
+          "level": 3,
+          "hint": "比如 x+4=7，两边同时减 4，左边剩 x，右边变成 7-4。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_eq_prop_judge_01",
+          "stem": "已知 a=b，判断 a-5=b-5 是否一定成立。",
+          "difficulty": 1,
+          "teaching_focus": "识别两边同时减同一个数。"
+        },
+        {
+          "exercise_id": "ex_eq_prop_transform_01",
+          "stem": "把 x+6=10 变形成 x=10-6，并说明依据。",
+          "difficulty": 1,
+          "teaching_focus": "用等式性质解释移项。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "优先用天平类比和诊断问题，要求学生补出“两边同时”。",
+        "medium": "让学生说明每一步变形依据，减少类比，增加符号表达。",
+        "high": "把等式性质连接到移项和系数化为 1，允许学生直接用于解方程。"
+      }
+    },
+    {
+      "concept_id": "move_terms",
+      "name": "移项",
+      "prerequisites": ["equation_properties"],
+      "common_misconceptions": [
+        {
+          "misconception_id": "move_terms_forget_sign",
+          "description": "项从等号一边移到另一边时忘记变号。",
+          "example_wrong_step": "由 2x+3=7 写成 2x=7+3。",
+          "diagnostic_signal": "移动 +3 后仍写 +3。"
+        },
+        {
+          "misconception_id": "move_terms_mechanical_rule",
+          "description": "只背“移项变号”，不知道本质是两边同时加减同一项。",
+          "example_wrong_step": "能写对符号，但无法解释为什么变号。",
+          "diagnostic_signal": "学生无法说出等式性质依据。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_move_terms_sign",
+          "prompt": "把 +3 从左边处理掉时，两边同时做的是加 3 还是减 3？",
+          "checks": ["是否选择减 3", "是否理解符号变化来源"],
+          "expected_signal": "学生能把移项和两边同时减 3 联系起来。"
+        },
+        {
+          "question_id": "dq_move_terms_target",
+          "prompt": "这一题里，你想把含 x 的项留在哪一边？",
+          "checks": ["是否能规划含 x 项和常数项的位置"],
+          "expected_signal": "学生能说出把含 x 的项放一边，常数放另一边。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "先想办法把不含 x 的项从含 x 的那一边处理掉。"
+        },
+        {
+          "level": 2,
+          "hint": "移项变号其实来自两边同时加或减同一个项。"
+        },
+        {
+          "level": 3,
+          "hint": "如果左边有 +3，要消掉它，就两边同时减 3，所以右边出现 7-3。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_move_basic_01",
+          "stem": "解方程：3x + 2 = 14",
+          "difficulty": 1,
+          "teaching_focus": "正号常数移到右边变成减。"
+        },
+        {
+          "exercise_id": "ex_move_negative_01",
+          "stem": "解方程：5x - 4 = 11",
+          "difficulty": 1,
+          "teaching_focus": "负号常数移到右边变成加。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "不急着使用口号，先用等式性质问清楚两边同时做什么。",
+        "medium": "允许使用“移项变号”，但要求说出变号来自哪一步。",
+        "high": "用更复杂的两边含 x 方程检查是否能稳定移项。"
+      }
+    },
+    {
+      "concept_id": "divide_by_coefficient",
+      "name": "除以系数",
+      "prerequisites": ["equation_properties"],
+      "common_misconceptions": [
+        {
+          "misconception_id": "divide_coeff_only_one_side",
+          "description": "只把含 x 的一边除以系数，另一边不除。",
+          "example_wrong_step": "由 3x=12 写成 x=12。",
+          "diagnostic_signal": "学生没有写出或说出两边同时除以 3。"
+        },
+        {
+          "misconception_id": "divide_coeff_sign_error",
+          "description": "系数为负数时除法符号处理错误。",
+          "example_wrong_step": "由 -2x=6 写成 x=3。",
+          "diagnostic_signal": "负系数方程答案符号错误。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_divide_coeff_both_sides",
+          "prompt": "如果 3x=12，要让 x 单独留下，两边应同时除以几？",
+          "checks": ["是否选择除以 3"],
+          "expected_signal": "学生能说出两边同时除以 x 的系数。"
+        },
+        {
+          "question_id": "dq_divide_coeff_negative",
+          "prompt": "如果是 -2x=6，最后要两边同时除以 2 还是 -2？",
+          "checks": ["是否注意负系数"],
+          "expected_signal": "学生选择 -2，并能得到符号正确的结果。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "目标是让 x 前面的系数变成 1。"
+        },
+        {
+          "level": 2,
+          "hint": "ax=b 时，两边同时除以 a，前提是 a 不等于 0。"
+        },
+        {
+          "level": 3,
+          "hint": "例如 3x=12，两边同时除以 3，左边变成 x，右边变成 4。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_divide_coeff_basic_01",
+          "stem": "解方程：4x = 20",
+          "difficulty": 1,
+          "teaching_focus": "两边同时除以正系数。"
+        },
+        {
+          "exercise_id": "ex_divide_coeff_negative_01",
+          "stem": "解方程：-3x = 12",
+          "difficulty": 2,
+          "teaching_focus": "两边同时除以负系数。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "先确认学生知道目标是把 x 的系数变成 1。",
+        "medium": "让学生自己选择除以哪个数，并说出两边同时。",
+        "high": "加入负系数和分数系数，检查符号与倒数处理。"
+      }
+    },
+    {
+      "concept_id": "remove_parentheses",
+      "name": "去括号",
+      "prerequisites": ["equation_properties"],
+      "common_misconceptions": [
+        {
+          "misconception_id": "parentheses_miss_distribute",
+          "description": "括号外的数没有乘到括号内每一项。",
+          "example_wrong_step": "把 3(x-2) 写成 3x-2。",
+          "diagnostic_signal": "只乘了第一项，漏乘常数项。"
+        },
+        {
+          "misconception_id": "parentheses_negative_sign",
+          "description": "括号前是负号时，括号内各项没有全部变号。",
+          "example_wrong_step": "把 -(x-2) 写成 -x-2。",
+          "diagnostic_signal": "只处理第一项符号或完全没变号。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_parentheses_distribute",
+          "prompt": "3(x-2) 里，括号外的 3 要分别乘到哪几项？",
+          "checks": ["是否说出 x 和 -2 都要乘"],
+          "expected_signal": "学生知道分配律作用于每一项。"
+        },
+        {
+          "question_id": "dq_parentheses_negative",
+          "prompt": "去掉 -(x-2) 的括号时，x 和 -2 的符号分别会怎样？",
+          "checks": ["是否知道括号内每一项都变号"],
+          "expected_signal": "学生能得到 -x+2。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "先不要急着移项，括号里的每一项都要处理。"
+        },
+        {
+          "level": 2,
+          "hint": "括号外的因数要乘到括号内每一项，不能只乘第一项。"
+        },
+        {
+          "level": 3,
+          "hint": "3(x-2) 应写成 3x-6，然后再继续解方程。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_parentheses_basic_01",
+          "stem": "解方程：2(x + 3) = 14",
+          "difficulty": 2,
+          "teaching_focus": "正系数分配到括号内每一项。"
+        },
+        {
+          "exercise_id": "ex_parentheses_negative_01",
+          "stem": "化简：5 - (x - 4)",
+          "difficulty": 2,
+          "teaching_focus": "括号前负号导致每一项变号。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "先诊断分配律，不急着进入完整解方程流程。",
+        "medium": "让学生补出去括号后的式子，再继续移项。",
+        "high": "加入多个括号或负号括号，检查是否能稳定处理符号。"
+      }
+    },
+    {
+      "concept_id": "fractional_coefficient_equation",
+      "name": "分数系数方程",
+      "prerequisites": ["linear_equation", "equation_properties", "divide_by_coefficient"],
+      "common_misconceptions": [
+        {
+          "misconception_id": "fraction_miss_whole_term",
+          "description": "去分母时漏乘不含分母的项。",
+          "example_wrong_step": "把 x/2-1=x/3 两边乘 6 后写成 3x-1=2x。",
+          "diagnostic_signal": "常数项没有乘最小公倍数。"
+        },
+        {
+          "misconception_id": "fraction_choose_wrong_lcm",
+          "description": "不会选择各分母的最小公倍数。",
+          "example_wrong_step": "面对 x/2 和 x/3 时选择乘 5。",
+          "diagnostic_signal": "把分母相加或随意选数。"
+        }
+      ],
+      "diagnostic_questions": [
+        {
+          "question_id": "dq_fraction_lcm",
+          "prompt": "x/2 和 x/3 同时去分母时，两边同乘哪个数最方便？",
+          "checks": ["是否找出 2 和 3 的最小公倍数 6"],
+          "expected_signal": "学生能选择 6。"
+        },
+        {
+          "question_id": "dq_fraction_all_terms",
+          "prompt": "两边同乘 6 时，方程里的 -1 这一项也要乘 6 吗？",
+          "checks": ["是否知道每一项都要乘"],
+          "expected_signal": "学生回答要乘，并能说明这是等式两边整体同乘。"
+        }
+      ],
+      "hint_levels": [
+        {
+          "level": 1,
+          "hint": "先找所有分母的最小公倍数，把分数系数变成整数。"
+        },
+        {
+          "level": 2,
+          "hint": "两边同乘最小公倍数时，方程里的每一项都要乘。"
+        },
+        {
+          "level": 3,
+          "hint": "比如 x/2-1=x/3 两边同乘 6，左边两项都要乘，得到 3x-6。"
+        }
+      ],
+      "recommended_exercises": [
+        {
+          "exercise_id": "ex_fraction_basic_01",
+          "stem": "解方程：x/3 + 2 = 5",
+          "difficulty": 2,
+          "teaching_focus": "简单分母下的去分母和移项。"
+        },
+        {
+          "exercise_id": "ex_fraction_lcm_01",
+          "stem": "解方程：x/2 - 1 = x/3",
+          "difficulty": 3,
+          "teaching_focus": "两边同乘最小公倍数，且每一项都乘。"
+        }
+      ],
+      "mastery_based_strategy": {
+        "low": "先诊断最小公倍数和每一项都乘，不直接进入完整解答。",
+        "medium": "给出 level 1 或 level 2 提示，让学生自己写出去分母后的方程。",
+        "high": "给含多个分母或括号的变式题，要求学生解释每一步依据。"
+      }
+    }
+  ],
+  "teaching_strategies": [
+    {
+      "strategy_id": "diagnose_before_hint",
+      "name": "先诊断后提示",
+      "when_to_use": "学生表达不会、为什么，或 mastery 较低时。",
+      "preferred_actions": ["ask_diagnostic_question", "give_hint_level_1"],
+      "avoid": ["直接给最终答案", "连续追问多个问题"]
+    },
+    {
+      "strategy_id": "checker_first_feedback",
+      "name": "checker 优先反馈",
+      "when_to_use": "学生给出步骤、多步计划或最终答案时。",
+      "preferred_actions": ["grade_and_feedback", "explain_concept"],
+      "avoid": ["让 LLM 自由改判数学步骤"]
+    },
+    {
+      "strategy_id": "return_to_original_problem",
+      "name": "例题后回到原题",
+      "when_to_use": "使用 worked example 或变式练习之后。",
+      "preferred_actions": ["show_worked_example", "ask_diagnostic_question"],
+      "avoid": ["让检索例题替代 original_problem"]
+    }
+  ]
+}

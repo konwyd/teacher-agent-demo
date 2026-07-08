@@ -96,6 +96,8 @@ def test_policy_high_mastery_gives_practice() -> None:
 def test_turn_writes_jsonl_log() -> None:
     state = run_turn("s_log", "我不会解 2x+3=7")
     assert state.log_id
+    assert state.socratic_stage == "concept_probe"
+    assert state.socratic_move == "generate_subquestion"
 
     log_file = Path(os.environ["TEACHER_LOG_DIR"]) / "turn_logs.jsonl"
     assert log_file.exists()
@@ -106,6 +108,8 @@ def test_turn_writes_jsonl_log() -> None:
     assert entry.user_message == "我不会解 2x+3=7"
     assert entry.diagnosis.detected_concept == "一元一次方程"
     assert entry.teaching_action != ""
+    assert entry.socratic_stage == state.socratic_stage
+    assert entry.socratic_move == state.socratic_move
     assert entry.teacher_response != ""
     assert "c_linear" in entry.student_state_after
 

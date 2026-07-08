@@ -11,6 +11,9 @@ REQUIRED_FIELDS = [
     "intent",
     "student_gap",
     "teaching_action",
+    "socratic_stage",
+    "socratic_move",
+    "socratic_reason",
     "retrieved_prerequisites",
     "retrieved_exercises",
     "response",
@@ -42,6 +45,8 @@ def test_turn_returns_all_fields() -> None:
     assert data["detected_concept"] == "一元一次方程"
     assert data["intent"] == "problem_solving"
     assert data["teaching_action"] == "give_hint_level_1"
+    assert data["socratic_stage"] == "concept_probe"
+    assert data["socratic_move"] == "generate_subquestion"
     assert "等式性质" in data["retrieved_prerequisites"]
     assert data["response"] != ""
     assert "c_linear" in data["updated_student_state"]

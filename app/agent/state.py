@@ -63,6 +63,19 @@ class RetrievalResult(BaseModel):
     misconceptions: list[str] = Field(default_factory=list)
 
 
+class PedagogicalContext(BaseModel):
+    """Pedagogical Graph RAG teaching-decision evidence."""
+
+    concept_id: str = ""
+    concept_name: str = ""
+    prerequisites: list[str] = Field(default_factory=list)
+    common_misconceptions: list[str] = Field(default_factory=list)
+    diagnostic_questions: list[str] = Field(default_factory=list)
+    hint_levels: list[str] = Field(default_factory=list)
+    recommended_exercises: list[str] = Field(default_factory=list)
+    mastery_based_strategy: str = ""
+
+
 class TeacherResponse(BaseModel):
     """教学回复（动作 + 文本）。"""
 
@@ -77,6 +90,15 @@ class StudentMasteryUpdate(BaseModel):
     mastery_before: float = Field(ge=0.0, le=1.0)
     mastery_after: float = Field(ge=0.0, le=1.0)
     attempts: int = 0
+
+
+class SocraticDecision(BaseModel):
+    """KELE-inspired consultant decision used as an advisory teaching signal."""
+
+    stage: str = ""
+    move: str = ""
+    reason: str = ""
+    must_not_override_checker: bool = True
 
 
 class GradeResult(BaseModel):
@@ -106,6 +128,16 @@ class TurnLog(BaseModel):
     student_step_validity: str = ""
     whether_response_used_new_example: bool = False
     whether_response_returned_to_original_problem: bool = False
+    # consultant/teacher 分工相关：仅作为教学顾问信号，不裁决数学对错
+    socratic_stage: str = ""
+    socratic_move: str = ""
+    socratic_reason: str = ""
+    # Pedagogical RAG 使用痕迹：仅作为教学决策辅助，不裁决数学对错
+    pedagogical_context_used: bool = False
+    selected_hint_level: int = 0
+    matched_misconception: str = ""
+    diagnostic_question_used: str = ""
+    recommended_exercise: str = ""
 
 
 class TeacherState(BaseModel):
@@ -122,6 +154,8 @@ class TeacherState(BaseModel):
 
     # retrieve
     retrieval: Optional[RetrievalResult] = None
+    pedagogical_context: PedagogicalContext = Field(default_factory=PedagogicalContext)
+    pedagogical_context_used: bool = False
 
     # grounding：围绕学生原题的跨轮状态（由 conversation store 载入/回写）
     original_problem: str = ""
@@ -139,10 +173,19 @@ class TeacherState(BaseModel):
     response_kind: str = ""
     plan_steps: list[str] = Field(default_factory=list)
     consecutive_wrong_steps: int = 0
+    problem_solved: bool = False
 
     # policy + teach
     action: Optional[TeachingAction] = None
     response: str = ""
+    socratic_decision: Optional[SocraticDecision] = None
+    socratic_stage: str = ""
+    socratic_move: str = ""
+    socratic_reason: str = ""
+    selected_hint_level: int = 0
+    matched_misconception: str = ""
+    diagnostic_question_used: str = ""
+    recommended_exercise: str = ""
 
     # memory
     mastery_update: Optional[StudentMasteryUpdate] = None

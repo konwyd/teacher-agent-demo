@@ -1,12 +1,18 @@
-# Teacher Agent — 中文初中数学辅导 Agent（Research Demo）
+# Teacher Agent — 中文初中数学 Pedagogical Agent（Research Demo）
 
-Graph-grounded Adaptive Tutor Agent 研究原型：诊断学生卡点 → 检索知识（mock Graph RAG）→
-确定性教学策略选动作 → DeepSeek 生成引导（带合规后处理）→ 更新学生掌握度 → 研究日志。
+中文初中数学 Teacher Agent research demo。项目重点不是用 RAG 提高 DeepSeek 的基础解题正确率，而是研究怎样通过 Agent workflow、student memory、math_checker、evaluation，以及后续 Pedagogical Graph RAG，让 LLM 更像一个循序渐进的好老师。
+
+当前 baseline：诊断学生卡点 → 参考 mock Graph RAG 的教学证据 → 确定性教学策略选动作 → DeepSeek 生成引导（带合规后处理）→ 更新学生掌握度 → 写入研究日志。
 
 - Runtime LLM：**DeepSeek API**（OpenAI-compatible；无 key 时全链路 mock 可离线跑通）
 - MVP 范围：一元一次方程（等式性质/移项/合并同类项/去括号/分数系数）
-- 核心特性：原题主线锚定、math_checker 精确步骤判定（支持跳步/多步计划/直接答案）、
-  掌握度自适应教学深浅、golden cases 回归评测
+- 研究重点：**teacher quality > answer accuracy**，包括原题主线锚定、math_checker 精确步骤判定（支持跳步/多步计划/直接答案）、掌握度自适应教学深浅、golden cases 回归评测
+
+## 项目定位
+
+DeepSeek 本身已经掌握大部分 K9 数学知识，所以本项目的核心不是“让模型会做题”。RAG 也不是用来把教材答案塞给模型，而是为教学决策提供结构化信息：前置知识、常见误区、诊断问题、分层提示、变式题、难度递进路径、掌握度阈值和教学策略建议。
+
+当前阶段的 baseline 是 **Agent workflow + math_checker + student memory + evaluation**。下一步才是小型 **Pedagogical Graph RAG**：先用 mock graph 固化 schema 和教学策略，再考虑 Neo4j / Qdrant 的只读迁移。详细设计见 [`docs/pedagogical_rag_design.md`](docs/pedagogical_rag_design.md)。
 
 ## 快速开始
 
@@ -35,7 +41,7 @@ streamlit run app/ui/streamlit_app.py     # http://localhost:8501
   `data/sample` 知识数据 · `data/eval` golden cases · `tests` 全离线测试。
 - **铁律**：任何改动后 `python -m pytest` 和 `python scripts/run_eval.py` 必须全绿；
   学生步骤对错由 math_checker 裁决而非 LLM；每轮一个问题；不提前泄答案；不无故引入新题；
-  `.env` 永不入库。
+  `.env` 永不入库。普通教材 RAG 不是核心创新；retrieved examples 不得污染原题主线；memory 和 RAG 都只能作为软约束。
 - **真实 LLM 评测**：`USE_REAL_LLM_FOR_EVAL=true python scripts/run_eval.py`
   （PowerShell：`$env:USE_REAL_LLM_FOR_EVAL="true"`），结果在 `logs/eval_results.jsonl`。
 - **清空学生记忆**：删除 `data/runtime/student_profiles.json`；对话状态在进程内存，重启后端即重置。

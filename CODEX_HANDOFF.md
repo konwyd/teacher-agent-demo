@@ -7,7 +7,10 @@
 - 本项目是**中文初中数学 Teacher Agent 的 research demo**（MVP 范围：一元一次方程相关知识点）。
 - **runtime LLM 是 DeepSeek API（OpenAI-compatible），不是 Claude/Codex**。Claude/Codex 只是开发助手，任何代码里不应出现对开发助手模型的依赖。
 - 目标是 **Graph-grounded Adaptive Tutor Agent**：诊断学生卡点 → 检索知识图谱 → 选择教学动作 → 分层引导 → 更新学生掌握度，**不是普通聊天机器人**。
-- 核心研究命题：确定性规则（math checker、教学策略）+ LLM 生成 的混合架构，能否比纯 LLM 更稳定地"像老师一样教"。
+- 核心研究命题：确定性规则（math_checker、教学策略）+ student memory + evaluation + LLM 生成的混合架构，能否比纯 LLM 更稳定地"像老师一样教"。
+- 项目重点是 **teacher quality**，不是单纯 answer accuracy。DeepSeek 已经掌握大部分 K9 数学知识，普通教材 RAG 不是核心创新。
+- RAG 的定位是提供教学决策信息：前置知识、常见误区、诊断问题、分层提示、变式题、难度递进路径、掌握度阈值和教学策略建议；不是把教材答案塞给模型。
+- Pedagogical Graph RAG 设计见 `docs/pedagogical_rag_design.md`；当前只保留 mock graph，不接 Neo4j / Qdrant / 真实教材 PDF。
 
 ## 二、已完成的功能
 
@@ -59,11 +62,14 @@ tests/              pytest；conftest.py 全局移除 API key + 隔离日志/档
 
 1. **original_problem 是教学主线**，首轮抽取后跨轮不覆盖；retrieved examples 只能辅助（且仅 show_worked_example / give_practice_question 可引入新题），用完必须回到原题。
 2. **math_checker 的判定优先于 LLM 自由判断**：学生给出步骤/计划/答案时，对错由 checker（Fraction 精确计算）裁决，回复用确定性模板，LLM 无权改判。
-3. **memory 只影响教学深浅**（解释详略、类比、复习推荐、变式题），不得拒绝跳步、不得强制一步一答、不得覆盖 checker 的正确判定。
-4. **学生可以四种方式回答**：单步（"3x=3"/"先减4"）、多步计划（"先都减四，然后同时除以3"）、直接最终答案（"x=1"/"1"/"最后等于1"）、问为什么——都必须被正确理解。
-5. **每轮最多问一个问题**，且结尾必须给学生一个任务（postprocess 兜底）。
-6. **不过早给最终答案**：只有学生已解出、或明确索要时才允许出现。
-7. **不无故引入新题**：非例题动作的回复中，所有方程必须与原题同解（或引自学生消息）。
+3. **Pedagogical RAG 只能辅助教学决策**：它可以提供前置知识、常见误区、诊断问题、分层提示、变式题、掌握度阈值和策略建议，但不能替代 workflow，不能推翻 math_checker。
+4. **不要把普通教材 RAG 当成核心创新**：Textbook RAG 可以后续作为材料来源，但项目价值在“会教学”，不是“会做题”。
+5. **retrieved examples 不得污染 original_problem**：检索例题只能在明确的例题/练习动作中出现，普通提示和纠错必须围绕原题。
+6. **memory 和 RAG 都是软约束**（解释详略、类比、复习推荐、变式题、提示层级），不得拒绝跳步、不得强制一步一答、不得覆盖 checker 的正确判定。
+7. **学生可以四种方式回答**：单步（"3x=3"/"先减4"）、多步计划（"先都减四，然后同时除以3"）、直接最终答案（"x=1"/"1"/"最后等于1"）、问为什么——都必须被正确理解。
+8. **每轮最多问一个问题**，且结尾必须给学生一个任务（postprocess 兜底）。
+9. **不过早给最终答案**：只有学生已解出、或明确索要时才允许出现。
+10. **不无故引入新题**：非例题动作的回复中，所有方程必须与原题同解（或引自学生消息）。
 
 ## 五、已修过的重要 bug（不要复发）
 
@@ -131,12 +137,13 @@ del data\runtime\student_profiles.json         # 清空全部学生记忆
 ## 九、下一步开发计划（按优先级）
 
 1. **继续稳定 student memory**：让掌握度更像软约束（如衰减、置信区间），观察真实对话日志调阈值。
-2. **接入真实小型教材 RAG**：先从 1-2 章人教版初一教材文本开始建 vector 检索，不要一开始全量。
-3. **接入 K12-KGraph 或自建小型知识图谱**：替换 `graph_retriever` 的 JSON mock（接口已稳定，实现 `Neo4jGraphRetriever` 即可）。
-4. **接入 Math23K / Ape210K 小子集**：扩充 exercises，先抽样 100-500 道一元一次方程题。
-5. **加 Neo4j / Qdrant**：配置在 `.env.example` 已预留（NEO4J_URI、QDRANT_URL）。
-6. **baseline 对比实验**：DeepSeek only vs DeepSeek+vector RAG vs DeepSeek+Graph RAG+teaching workflow，用同一套 golden cases + eval harness 打分。
-7. **写技术报告 / 小论文**：`logs/turn_logs.jsonl` 和 `logs/eval_results.jsonl` 就是实验数据来源。
+2. **固化 Pedagogical Graph RAG schema**：先维护 `data/sample/pedagogical_graph.json`，覆盖前置知识、误区、诊断问题、分层提示、变式题、掌握度阈值和策略建议。
+3. **让 graph_retriever 只返回教学决策证据**：保持 mock JSON 和接口稳定，避免 retrieved examples 污染原题主线。
+4. **接入 K12-KGraph 或自建小型 Pedagogical Graph**：等 mock schema 和 evaluation 稳定后，再替换为只读 `Neo4jGraphRetriever`。
+5. **用 Qdrant 补充长文本材料**：只存教材解释、例题讲解、误区描述等长文本；图谱仍负责教学路径和结构关系。
+6. **接入 Math23K / Ape210K 小子集**：扩充 exercises，先抽样 100-500 道一元一次方程题，并标注教学用途。
+7. **baseline 对比实验**：DeepSeek only vs DeepSeek+普通 Textbook RAG vs DeepSeek+Pedagogical Graph RAG+teaching workflow，用同一套 golden cases + eval harness 打分。
+8. **写技术报告 / 小论文**：`logs/turn_logs.jsonl` 和 `logs/eval_results.jsonl` 就是实验数据来源。
 
 ## 十、给 Codex 的工作规则
 

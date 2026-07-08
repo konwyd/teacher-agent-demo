@@ -24,6 +24,7 @@ from app.agent import math_checker as mc
 from app.agent.math_checker import StepValidity
 from app.agent.state import (
     DiagnosisResult,
+    PedagogicalContext,
     RetrievalResult,
     StudentGap,
     StudentIntent,
@@ -32,12 +33,24 @@ from app.agent.state import (
     TeachingAction,
     TurnLog,
 )
+from app.agent.socratic_policy import choose_socratic_decision
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 from app.memory.conversation_state import ConversationState, get_conversation_store
 from app.memory.student_state import ConceptMastery, get_store
 from app.retrieval.graph_retriever import ConceptNode, get_retriever
+from app.retrieval.pedagogical_retriever import get_pedagogical_retriever
 
 DEFAULT_CONCEPT_ID = "c_linear"
+
+
+def _use_pedagogical_rag() -> bool:
+    """Feature flag for ablation: defaults on, false disables pedagogical graph use."""
+    return os.getenv("USE_PEDAGOGICAL_RAG", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
 
 # ---------------------------------------------------------------- 规则表
 
@@ -341,6 +354,7 @@ def diagnose_node(state: TeacherState) -> dict:
         "response_kind": response_kind,
         "plan_steps": plan_steps,
         "consecutive_wrong_steps": conv.consecutive_wrong_steps,
+        "problem_solved": conv.solved,
     }
 
 
@@ -351,6 +365,7 @@ def retrieve_node(state: TeacherState) -> dict:
     retriever = get_retriever()
     cid = state.detected_concept_id or DEFAULT_CONCEPT_ID
     concept = retriever.get_concept(cid)
+    record = get_store().get_concept_mastery(state.student_id, cid)
     retrieval = RetrievalResult(
         concept_id=cid,
         concept_name=concept.name if concept else "",
@@ -358,7 +373,31 @@ def retrieve_node(state: TeacherState) -> dict:
         exercises=[e.stem for e in retriever.get_related_exercises(cid)[:2]],
         misconceptions=[m.description for m in retriever.get_misconceptions(cid)],
     )
-    return {"trace": state.trace + ["retrieve_node"], "retrieval": retrieval}
+    pedagogical_context = PedagogicalContext()
+    pedagogical_context_used = False
+    if _use_pedagogical_rag():
+        p_retriever = get_pedagogical_retriever()
+        p_concept = p_retriever.get_concept_context(cid)
+        if p_concept is not None:
+            pedagogical_context_used = True
+            pedagogical_context = PedagogicalContext(
+                concept_id=p_concept.concept_id,
+                concept_name=p_concept.name,
+                prerequisites=p_retriever.get_prerequisites(cid),
+                common_misconceptions=p_retriever.get_misconceptions(cid),
+                diagnostic_questions=p_retriever.get_diagnostic_questions(cid),
+                hint_levels=p_retriever.get_hint_levels(cid),
+                recommended_exercises=p_retriever.get_recommended_exercises(cid),
+                mastery_based_strategy=p_retriever.get_mastery_based_strategy(
+                    cid, record.mastery_score
+                ),
+            )
+    return {
+        "trace": state.trace + ["retrieve_node"],
+        "retrieval": retrieval,
+        "pedagogical_context": pedagogical_context,
+        "pedagogical_context_used": pedagogical_context_used,
+    }
 
 
 # ---------------------------------------------------------------- policy
@@ -425,6 +464,87 @@ def _choose_action(
     return TeachingAction.GIVE_HINT_LEVEL_1
 
 
+def _match_pedagogical_misconception(state: TeacherState) -> str:
+    context = state.pedagogical_context
+    candidates = context.common_misconceptions
+    if not candidates:
+        return ""
+    evidence = " ".join(
+        [
+            state.message,
+            state.step_explanation,
+            state.student_equation,
+            " ".join(state.known_misconceptions),
+        ]
+    )
+    for item in candidates:
+        if any(token and token in evidence for token in ("变号", "两边", "每一项", "分母", "符号")):
+            if any(token in item for token in ("变号", "两边", "每一项", "分母", "符号")):
+                return item
+    if state.student_step_validity == StepValidity.INCORRECT_STEP.value:
+        return candidates[0]
+    if state.diagnosis and state.diagnosis.intent is StudentIntent.ASKS_WHY:
+        return candidates[0]
+    return ""
+
+
+def _select_pedagogical_usage(
+    state: TeacherState,
+    record: ConceptMastery,
+    action: TeachingAction,
+) -> dict:
+    """Pick the small part of Pedagogical RAG actually used this turn."""
+    context = state.pedagogical_context
+    if not state.pedagogical_context_used or not context.concept_id:
+        return {
+            "selected_hint_level": 0,
+            "matched_misconception": "",
+            "diagnostic_question_used": "",
+            "recommended_exercise": "",
+        }
+
+    # Checker-judged student math always wins. Pedagogical RAG may label the
+    # likely misconception, but it must not redirect correct steps into hints.
+    checker_active = state.student_step_validity in (
+        StepValidity.CORRECT_STEP.value,
+        StepValidity.CORRECT_FINAL_ANSWER.value,
+        StepValidity.INCORRECT_STEP.value,
+    )
+    matched = _match_pedagogical_misconception(state)
+    if checker_active and action is TeachingAction.GRADE_AND_FEEDBACK:
+        return {
+            "selected_hint_level": 0,
+            "matched_misconception": matched,
+            "diagnostic_question_used": "",
+            "recommended_exercise": "",
+        }
+
+    selected_hint_level = 0
+    diagnostic_question = ""
+    recommended_exercise = ""
+
+    if record.mastery_score < 0.3:
+        selected_hint_level = 1 if context.hint_levels else 0
+        if action is TeachingAction.ASK_DIAGNOSTIC_QUESTION and context.diagnostic_questions:
+            diagnostic_question = context.diagnostic_questions[0]
+    elif record.mastery_score < 0.7:
+        if action is TeachingAction.GIVE_HINT_LEVEL_2 and len(context.hint_levels) >= 2:
+            selected_hint_level = 2
+        elif action in (TeachingAction.GIVE_HINT_LEVEL_1, TeachingAction.EXPLAIN_CONCEPT):
+            selected_hint_level = 1 if context.hint_levels else 0
+    else:
+        if action is TeachingAction.GIVE_PRACTICE_QUESTION and context.recommended_exercises:
+            if not state.original_problem or state.problem_solved:
+                recommended_exercise = context.recommended_exercises[0]
+
+    return {
+        "selected_hint_level": selected_hint_level,
+        "matched_misconception": matched,
+        "diagnostic_question_used": diagnostic_question,
+        "recommended_exercise": recommended_exercise,
+    }
+
+
 def teaching_policy_node(state: TeacherState) -> dict:
     diagnosis = state.diagnosis or DiagnosisResult()
     record = get_store().get_concept_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
@@ -435,11 +555,30 @@ def teaching_policy_node(state: TeacherState) -> dict:
         validity=state.student_step_validity,
         consecutive_wrong=state.consecutive_wrong_steps,
     )
-    allowed = action in (TeachingAction.SHOW_WORKED_EXAMPLE, TeachingAction.GIVE_PRACTICE_QUESTION)
+    socratic = choose_socratic_decision(
+        diagnosis=diagnosis,
+        action=action,
+        student_step_validity=state.student_step_validity,
+        response_kind=state.response_kind,
+        consecutive_wrong_steps=state.consecutive_wrong_steps,
+    )
+    pedagogical_usage = _select_pedagogical_usage(state, record, action)
+    allowed = (
+        action is TeachingAction.SHOW_WORKED_EXAMPLE
+        or (
+            action is TeachingAction.GIVE_PRACTICE_QUESTION
+            and (not state.original_problem or state.problem_solved)
+        )
+    )
     return {
         "trace": state.trace + ["teaching_policy_node"],
         "action": action,
+        "socratic_decision": socratic,
+        "socratic_stage": socratic.stage,
+        "socratic_move": socratic.move,
+        "socratic_reason": socratic.reason,
         "allowed_to_use_new_example": allowed,
+        **pedagogical_usage,
     }
 
 
@@ -475,6 +614,9 @@ _TEACH_SYSTEM_PROMPT = (
     "12. 学生不一定会严格按照你预期的一步一步回答：如果学生一次性说出了多个正确步骤，"
     "你应该认可完整思路，而不是强行拉回上一个小步骤；如果学生提前给出正确最终答案，"
     "你应该先认可，再用代回原式或简短解释确认；只有当学生步骤错误或缺失关键计算时，才继续追问\n"
+    "13. pedagogical_context 是教学决策辅助：只使用与 student_message 和 teaching_action 相关的部分，"
+    "不要照抄全部 RAG 内容；如果学生问为什么，优先使用 misconception/prerequisite/hint explanation\n"
+    "14. recommended_exercise 只能在当前题完成后作为下一题推荐，不能污染 original_problem\n"
     "语气温和友好，回复控制在150字以内。"
 )
 
@@ -482,6 +624,7 @@ _TEACH_SYSTEM_PROMPT = (
 def _build_teach_context(state: TeacherState) -> str:
     diagnosis = state.diagnosis or DiagnosisResult()
     retrieval = state.retrieval or RetrievalResult()
+    pedagogical = state.pedagogical_context
     record = get_store().get_concept_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
     action = state.action or TeachingAction.GIVE_HINT_LEVEL_1
     if record.mastery_score < 0.3:
@@ -506,7 +649,18 @@ def _build_teach_context(state: TeacherState) -> str:
         f"retrieved_examples："
         f"{('；'.join(retrieval.exercises) or '无') if state.allowed_to_use_new_example else '（本轮禁止使用例题，不要引入任何新题目）'}\n"
         f"常见误解：{'；'.join(retrieval.misconceptions) or '无'}\n"
+        f"pedagogical_context_used：{state.pedagogical_context_used}\n"
+        f"pedagogical_prerequisites：{'；'.join(pedagogical.prerequisites[:3]) or '无'}\n"
+        f"pedagogical_misconceptions：{'；'.join(pedagogical.common_misconceptions[:2]) or '无'}\n"
+        f"pedagogical_hint_levels：{'；'.join(pedagogical.hint_levels[:2]) or '无'}\n"
+        f"pedagogical_strategy：{pedagogical.mastery_based_strategy or '无'}\n"
+        f"本轮实际选用：hint_level={state.selected_hint_level or '无'}；"
+        f"diagnostic_question={state.diagnostic_question_used or '无'}；"
+        f"matched_misconception={state.matched_misconception or '无'}；"
+        f"recommended_exercise={state.recommended_exercise or '无'}\n"
         f"本轮 teaching_action：{action.value} —— {_ACTION_INSTRUCTIONS[action]}\n"
+        f"本轮 Socratic 顾问建议：stage={state.socratic_stage or '无'}，"
+        f"move={state.socratic_move or '无'}，reason={state.socratic_reason or '无'}\n"
         f"是否允许引入新例题：{'是' if state.allowed_to_use_new_example else '否'}"
     )
 
@@ -586,6 +740,16 @@ def _why_response(state: TeacherState) -> str:
     return f"好问题！{desc}\n{back}你能说说现在卡在哪一小步吗？"
 
 
+def _selected_hint_text(state: TeacherState) -> str:
+    if state.selected_hint_level <= 0:
+        return ""
+    hints = state.pedagogical_context.hint_levels
+    idx = state.selected_hint_level - 1
+    if 0 <= idx < len(hints):
+        return hints[idx]
+    return ""
+
+
 def _mock_response(state: TeacherState) -> str:
     """未配置 API key 时的确定性教学回复（严格围绕 original_problem）。"""
     diagnosis = state.diagnosis or DiagnosisResult()
@@ -597,6 +761,12 @@ def _mock_response(state: TeacherState) -> str:
     if diagnosis.intent is StudentIntent.ASKS_WHY:
         return _why_response(state)
 
+    if action is TeachingAction.ASK_DIAGNOSTIC_QUESTION and state.diagnostic_question_used:
+        return (
+            "先用“等式两边同时做同样变化”这个想法检查一下："
+            f"{state.diagnostic_question_used}"
+        )
+
     if action is TeachingAction.SHOW_WORKED_EXAMPLE:
         example = retrieval.exercises[0] if retrieval.exercises else ""
         back = f"现在回到你的原题 {original}，仿照这个思路，" if original else ""
@@ -606,22 +776,27 @@ def _mock_response(state: TeacherState) -> str:
             f"{back}你能写出第一步吗？"
         )
 
-    if action is TeachingAction.GIVE_PRACTICE_QUESTION and retrieval.exercises:
-        return f"你对「{concept_name}」掌握得不错。来做这道练习：{retrieval.exercises[0]}\n做完告诉我你的答案？"
+    if action is TeachingAction.GIVE_PRACTICE_QUESTION:
+        exercise = state.recommended_exercise or (retrieval.exercises[0] if retrieval.exercises else "")
+        if exercise and state.allowed_to_use_new_example:
+            return f"你对「{concept_name}」掌握得不错。来做这道练习：{exercise}\n做完告诉我你的答案？"
+        if original:
+            return f"你对「{concept_name}」基础不错，这题先尽量自己推进一步。{mc.next_question(state.current_step or original)}"
 
     if original:
         # 围绕原题的分层提示（不引入检索例题）
         target = state.current_step or original
         nxt = mc.suggest_next_step(target)
+        hint_text = _selected_hint_text(state)
         if action is TeachingAction.GIVE_HINT_LEVEL_2 and nxt:
             return (
                 f"没关系，我们放慢一点。这是一道「{concept_name}」题，原题是 {original}，"
-                f"现在做到 {target}。\n下一步：{nxt[0]}。你试着写出结果？"
+                f"现在做到 {target}。\n提示：{hint_text or nxt[0]}。你试着写出结果？"
             )
         question = mc.next_question(target)
         return (
             f"这是一道「{concept_name}」题。我们就用你的原题来做：{original}。\n"
-            f"提示：想把含 x 的项留下来。{question}"
+            f"提示：{hint_text or '想把含 x 的项留下来'}。{question}"
         )
 
     # 没有具体原题：概念层面的引导（不引入新题号）
@@ -835,6 +1010,14 @@ def log_node(state: TeacherState) -> dict:
         student_step_validity=state.student_step_validity,
         whether_response_used_new_example=used_new_example,
         whether_response_returned_to_original_problem=returned_to_original,
+        socratic_stage=state.socratic_stage,
+        socratic_move=state.socratic_move,
+        socratic_reason=state.socratic_reason,
+        pedagogical_context_used=state.pedagogical_context_used,
+        selected_hint_level=state.selected_hint_level,
+        matched_misconception=state.matched_misconception,
+        diagnostic_question_used=state.diagnostic_question_used,
+        recommended_exercise=state.recommended_exercise,
     )
     path = _log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
