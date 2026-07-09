@@ -32,6 +32,13 @@ class TurnResponse(BaseModel):
     socratic_move: str = ""
     socratic_reason: str = ""
     pedagogical_context_used: bool = False
+    retrieval_backend: str = ""
+    retrieval_evidence: list[dict] = Field(default_factory=list)
+    retrieved_concepts: list[str] = Field(default_factory=list)
+    retrieved_misconceptions: list[str] = Field(default_factory=list)
+    retrieved_hints: list[str] = Field(default_factory=list)
+    retrieved_practice_problem_ids: list[str] = Field(default_factory=list)
+    top_evidence_reasons: list[str] = Field(default_factory=list)
     selected_hint_level: int = 0
     matched_misconception: str = ""
     diagnostic_question_used: str = ""
@@ -86,6 +93,15 @@ def turn(req: TurnRequest) -> TurnResponse:
         socratic_move=state.socratic_move,
         socratic_reason=state.socratic_reason,
         pedagogical_context_used=state.pedagogical_context_used,
+        retrieval_backend=state.retrieval_backend,
+        retrieval_evidence=[
+            item.model_dump(mode="json") for item in state.retrieval_evidence
+        ],
+        retrieved_concepts=state.retrieved_concepts,
+        retrieved_misconceptions=state.retrieved_misconceptions,
+        retrieved_hints=state.retrieved_hints,
+        retrieved_practice_problem_ids=state.retrieved_practice_problem_ids,
+        top_evidence_reasons=state.top_evidence_reasons,
         selected_hint_level=state.selected_hint_level,
         matched_misconception=state.matched_misconception,
         diagnostic_question_used=state.diagnostic_question_used,

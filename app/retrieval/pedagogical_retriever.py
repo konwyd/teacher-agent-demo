@@ -66,10 +66,75 @@ class JsonPedagogicalRetriever:
 
     def __init__(self, data_dir: Path = DATA_DIR) -> None:
         raw = json.loads((data_dir / "pedagogical_graph.json").read_text(encoding="utf-8"))
+        concept_records = self._normalized_concept_records(raw)
         self._concepts: dict[str, PedagogicalConceptContext] = {
             c["concept_id"]: PedagogicalConceptContext.model_validate(c)
-            for c in raw.get("concepts", [])
+            for c in concept_records
         }
+
+    @staticmethod
+    def _index(records: list[dict], id_field: str) -> dict[str, dict]:
+        return {str(item[id_field]): item for item in records}
+
+    def _normalized_concept_records(self, raw: dict) -> list[dict]:
+        nodes = raw.get("nodes")
+        if not isinstance(nodes, dict):
+            return list(raw.get("concepts", []))
+
+        misconceptions = self._index(nodes.get("misconceptions", []), "misconception_id")
+        diagnostics = self._index(nodes.get("diagnostic_questions", []), "question_id")
+        hints = self._index(nodes.get("hints", []), "hint_id")
+        practices = self._index(nodes.get("practice_problems", []), "problem_id")
+        thresholds = self._index(nodes.get("mastery_thresholds", []), "threshold_id")
+
+        records: list[dict] = []
+        for concept in nodes.get("concepts", []):
+            strategy_by_band: dict[str, str] = {}
+            for threshold_id in concept.get("mastery_thresholds", []):
+                threshold = thresholds.get(str(threshold_id), {})
+                for band in threshold.get("bands", []):
+                    key = str(band.get("band", ""))
+                    text = str(band.get("strategy_text", ""))
+                    if key and text:
+                        strategy_by_band[key] = text
+
+            records.append(
+                {
+                    "concept_id": concept["concept_id"],
+                    "name": concept["name"],
+                    "prerequisites": list(concept.get("prerequisites", [])),
+                    "common_misconceptions": [
+                        misconceptions[item_id]
+                        for item_id in concept.get("misconceptions", [])
+                        if item_id in misconceptions
+                    ],
+                    "diagnostic_questions": [
+                        diagnostics[item_id]
+                        for item_id in concept.get("diagnostic_questions", [])
+                        if item_id in diagnostics
+                    ],
+                    "hint_levels": [
+                        {
+                            "level": hints[item_id]["level"],
+                            "hint": hints[item_id]["text"],
+                        }
+                        for item_id in concept.get("leveled_hints", [])
+                        if item_id in hints
+                    ],
+                    "recommended_exercises": [
+                        {
+                            "exercise_id": practices[item_id]["problem_id"],
+                            "stem": practices[item_id]["stem"],
+                            "difficulty": practices[item_id].get("difficulty", 1),
+                            "teaching_focus": practices[item_id].get("teaching_focus", ""),
+                        }
+                        for item_id in concept.get("practice_problems", [])
+                        if item_id in practices
+                    ],
+                    "mastery_based_strategy": strategy_by_band,
+                }
+            )
+        return records
 
     def _normalize_id(self, concept_id_or_name: str) -> str:
         value = concept_id_or_name.strip()

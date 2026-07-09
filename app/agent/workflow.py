@@ -42,8 +42,12 @@ from app.memory.learning_history import append_learning_event
 from app.memory.profile_updater import get_profile_store, summarize_profile, update_profile_from_event
 from app.memory.schemas import EpisodeState, LearningEvent, now_iso
 from app.memory.student_state import ConceptMastery, get_store
-from app.retrieval.graph_retriever import ConceptNode, get_retriever
-from app.retrieval.pedagogical_retriever import get_pedagogical_retriever
+from app.retrieval.graph_retriever import (
+    ConceptNode,
+    RetrievalEvidence,
+    get_local_pedagogical_graph_retriever,
+    get_retriever,
+)
 
 DEFAULT_CONCEPT_ID = "c_linear"
 
@@ -534,6 +538,13 @@ def retrieve_node(state: TeacherState) -> dict:
             "retrieval": retrieval,
             "pedagogical_context": PedagogicalContext(),
             "pedagogical_context_used": False,
+            "retrieval_backend": "local_json_graph",
+            "retrieval_evidence": [],
+            "retrieved_concepts": [],
+            "retrieved_misconceptions": [],
+            "retrieved_hints": [],
+            "retrieved_practice_problem_ids": [],
+            "top_evidence_reasons": [],
         }
     record = get_store().get_concept_mastery(state.student_id, cid)
     retrieval = RetrievalResult(
@@ -545,28 +556,102 @@ def retrieve_node(state: TeacherState) -> dict:
     )
     pedagogical_context = PedagogicalContext()
     pedagogical_context_used = False
+    evidence: list[RetrievalEvidence] = []
+    retrieval_backend = ""
+    retrieved_concepts: list[str] = []
+    retrieved_misconceptions: list[str] = []
+    retrieved_hints: list[str] = []
+    retrieved_practice_problem_ids: list[str] = []
+    top_evidence_reasons: list[str] = []
     if _use_pedagogical_rag():
-        p_retriever = get_pedagogical_retriever()
-        p_concept = p_retriever.get_concept_context(cid)
-        if p_concept is not None:
-            pedagogical_context_used = True
-            pedagogical_context = PedagogicalContext(
-                concept_id=p_concept.concept_id,
-                concept_name=p_concept.name,
-                prerequisites=p_retriever.get_prerequisites(cid),
-                common_misconceptions=p_retriever.get_misconceptions(cid),
-                diagnostic_questions=p_retriever.get_diagnostic_questions(cid),
-                hint_levels=p_retriever.get_hint_levels(cid),
-                recommended_exercises=p_retriever.get_recommended_exercises(cid),
-                mastery_based_strategy=p_retriever.get_mastery_based_strategy(
-                    cid, record.mastery_score
-                ),
-            )
+        graph = get_local_pedagogical_graph_retriever()
+        graph_result = graph.retrieve_evidence(
+            cid,
+            misconception=" ".join(
+                filter(
+                    None,
+                    [
+                        state.message,
+                        state.step_explanation,
+                        " ".join(state.known_misconceptions),
+                    ],
+                )
+            ),
+            mastery_score=record.mastery_score,
+            request_type=state.context_resolution.student_request_type,
+        )
+        retrieval_backend = graph_result.retrieval_backend
+        evidence = graph_result.evidence
+        pedagogical_context_used = bool(graph_result.concept_id and evidence)
+
+        concept_evidence = [item for item in evidence if item.node_type == "Concept"]
+        misconception_evidence = [
+            item for item in evidence if item.node_type == "Misconception"
+        ]
+        diagnostic_evidence = [
+            item for item in evidence if item.node_type == "DiagnosticQuestion"
+        ]
+        hint_evidence = [item for item in evidence if item.node_type == "Hint"]
+        practice_evidence = [
+            item for item in evidence if item.node_type == "PracticeProblem"
+        ]
+        root_concept = next(
+            (item for item in concept_evidence if item.node_id == graph_result.concept_id),
+            None,
+        )
+        prerequisite_evidence = [
+            item for item in concept_evidence if "REQUIRES" in item.relation_path
+        ]
+        hint_ladder = sorted(
+            hint_evidence,
+            key=lambda item: (int(item.content.get("level", 1)), -item.score),
+        )
+        retrieved_concepts = [item.node_id for item in concept_evidence]
+        retrieved_misconceptions = [item.node_id for item in misconception_evidence]
+        retrieved_hints = [item.node_id for item in hint_evidence]
+        retrieved_practice_problem_ids = [item.node_id for item in practice_evidence]
+        top_evidence_reasons = list(dict.fromkeys(item.reason for item in evidence[:5]))
+        pedagogical_context = PedagogicalContext(
+            concept_id=graph_result.concept_id,
+            concept_name=str(root_concept.content.get("name", "")) if root_concept else "",
+            prerequisites=[
+                str(item.content.get("name") or item.node_id)
+                for item in prerequisite_evidence
+            ],
+            common_misconceptions=[
+                str(item.content.get("description", ""))
+                for item in misconception_evidence
+                if item.content.get("description")
+            ],
+            diagnostic_questions=[
+                str(item.content.get("prompt", ""))
+                for item in diagnostic_evidence
+                if item.content.get("prompt")
+            ],
+            hint_levels=[
+                str(item.content.get("text", ""))
+                for item in hint_ladder
+                if item.content.get("text")
+            ],
+            recommended_exercises=[
+                str(item.content.get("stem", ""))
+                for item in practice_evidence
+                if item.content.get("stem")
+            ],
+            mastery_based_strategy=graph_result.mastery_strategy,
+        )
     return {
         "trace": state.trace + ["retrieve_node"],
         "retrieval": retrieval,
         "pedagogical_context": pedagogical_context,
         "pedagogical_context_used": pedagogical_context_used,
+        "retrieval_backend": retrieval_backend,
+        "retrieval_evidence": evidence,
+        "retrieved_concepts": retrieved_concepts,
+        "retrieved_misconceptions": retrieved_misconceptions,
+        "retrieved_hints": retrieved_hints,
+        "retrieved_practice_problem_ids": retrieved_practice_problem_ids,
+        "top_evidence_reasons": top_evidence_reasons,
     }
 
 
@@ -1490,6 +1575,13 @@ def log_node(state: TeacherState) -> dict:
         socratic_move=state.socratic_move,
         socratic_reason=state.socratic_reason,
         pedagogical_context_used=state.pedagogical_context_used,
+        retrieval_backend=state.retrieval_backend,
+        retrieval_evidence=state.retrieval_evidence,
+        retrieved_concepts=state.retrieved_concepts,
+        retrieved_misconceptions=state.retrieved_misconceptions,
+        retrieved_hints=state.retrieved_hints,
+        retrieved_practice_problem_ids=state.retrieved_practice_problem_ids,
+        top_evidence_reasons=state.top_evidence_reasons,
         selected_hint_level=state.selected_hint_level,
         matched_misconception=state.matched_misconception,
         diagnostic_question_used=state.diagnostic_question_used,

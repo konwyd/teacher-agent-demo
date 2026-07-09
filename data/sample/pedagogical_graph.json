@@ -1,16 +1,2219 @@
 {
-  "schema_version": "0.1.0",
-  "scope": "中文初中数学 Pedagogical Graph RAG mock sample",
+  "schema_version": "1.0.0",
+  "graph_id": "pedagogical_graph_linear_equation_mvp",
+  "scope": "Chinese junior high mathematics Pedagogical Graph RAG local sample",
   "notes": [
-    "This file is a pedagogical decision graph sample, not a textbook answer corpus.",
-    "RAG evidence from this file should be treated as soft guidance for teaching decisions.",
-    "Student math correctness must still be judged by app/agent/math_checker.py."
+    "This graph stores teaching-decision evidence, not textbook answers.",
+    "Pedagogical evidence is a soft constraint; math_checker remains authoritative.",
+    "Worked examples and practice problems must not overwrite an unfinished original_problem.",
+    "The top-level concepts collection is a temporary legacy projection for backward compatibility."
+  ],
+  "nodes": {
+    "concepts": [
+      {
+        "concept_id": "linear_equation",
+        "name": "一元一次方程",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [
+          "equation_properties",
+          "move_terms",
+          "divide_by_coefficient"
+        ],
+        "skills": [
+          "skill_solve_linear_equation",
+          "skill_verify_solution"
+        ],
+        "misconceptions": [
+          "linear_solve_order_confusion",
+          "linear_answer_without_check"
+        ],
+        "diagnostic_questions": [
+          "dq_linear_next_step",
+          "dq_linear_check_solution"
+        ],
+        "leveled_hints": [
+          "hint_linear_equation_level_1",
+          "hint_linear_equation_level_2",
+          "hint_linear_equation_level_3"
+        ],
+        "practice_problems": [
+          "ex_linear_basic_01",
+          "ex_linear_two_side_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_linear_equation"
+        ]
+      },
+      {
+        "concept_id": "equation_properties",
+        "name": "等式性质",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [],
+        "skills": [
+          "skill_preserve_equality"
+        ],
+        "misconceptions": [
+          "eq_prop_one_side_only",
+          "eq_prop_divide_zero_blindness"
+        ],
+        "diagnostic_questions": [
+          "dq_eq_prop_both_sides",
+          "dq_eq_prop_reason"
+        ],
+        "leveled_hints": [
+          "hint_equation_properties_level_1",
+          "hint_equation_properties_level_2",
+          "hint_equation_properties_level_3"
+        ],
+        "practice_problems": [
+          "ex_eq_prop_judge_01",
+          "ex_eq_prop_transform_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_equation_properties"
+        ]
+      },
+      {
+        "concept_id": "move_terms",
+        "name": "移项",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [
+          "equation_properties"
+        ],
+        "skills": [
+          "skill_move_terms",
+          "skill_preserve_equality"
+        ],
+        "misconceptions": [
+          "move_terms_forget_sign",
+          "move_terms_mechanical_rule"
+        ],
+        "diagnostic_questions": [
+          "dq_move_terms_sign",
+          "dq_move_terms_target"
+        ],
+        "leveled_hints": [
+          "hint_move_terms_level_1",
+          "hint_move_terms_level_2",
+          "hint_move_terms_level_3"
+        ],
+        "practice_problems": [
+          "ex_move_basic_01",
+          "ex_move_negative_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_move_terms"
+        ]
+      },
+      {
+        "concept_id": "divide_by_coefficient",
+        "name": "除以系数",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [
+          "equation_properties"
+        ],
+        "skills": [
+          "skill_normalize_coefficient",
+          "skill_preserve_equality"
+        ],
+        "misconceptions": [
+          "divide_coeff_only_one_side",
+          "divide_coeff_sign_error"
+        ],
+        "diagnostic_questions": [
+          "dq_divide_coeff_both_sides",
+          "dq_divide_coeff_negative"
+        ],
+        "leveled_hints": [
+          "hint_divide_by_coefficient_level_1",
+          "hint_divide_by_coefficient_level_2",
+          "hint_divide_by_coefficient_level_3"
+        ],
+        "practice_problems": [
+          "ex_divide_coeff_basic_01",
+          "ex_divide_coeff_negative_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_divide_by_coefficient"
+        ]
+      },
+      {
+        "concept_id": "remove_parentheses",
+        "name": "去括号",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [
+          "equation_properties"
+        ],
+        "skills": [
+          "skill_distribute_parentheses"
+        ],
+        "misconceptions": [
+          "parentheses_miss_distribute",
+          "parentheses_negative_sign"
+        ],
+        "diagnostic_questions": [
+          "dq_parentheses_distribute",
+          "dq_parentheses_negative"
+        ],
+        "leveled_hints": [
+          "hint_remove_parentheses_level_1",
+          "hint_remove_parentheses_level_2",
+          "hint_remove_parentheses_level_3"
+        ],
+        "practice_problems": [
+          "ex_parentheses_basic_01",
+          "ex_parentheses_negative_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_remove_parentheses"
+        ]
+      },
+      {
+        "concept_id": "fractional_coefficient_equation",
+        "name": "分数系数方程",
+        "grade": "grade_7",
+        "domain": "linear_equation_mvp",
+        "prerequisites": [
+          "linear_equation",
+          "equation_properties",
+          "divide_by_coefficient"
+        ],
+        "skills": [
+          "skill_clear_denominators",
+          "skill_normalize_coefficient"
+        ],
+        "misconceptions": [
+          "fraction_miss_whole_term",
+          "fraction_choose_wrong_lcm"
+        ],
+        "diagnostic_questions": [
+          "dq_fraction_lcm",
+          "dq_fraction_all_terms"
+        ],
+        "leveled_hints": [
+          "hint_fractional_coefficient_equation_level_1",
+          "hint_fractional_coefficient_equation_level_2",
+          "hint_fractional_coefficient_equation_level_3"
+        ],
+        "practice_problems": [
+          "ex_fraction_basic_01",
+          "ex_fraction_lcm_01"
+        ],
+        "teaching_strategies": [
+          "strategy_diagnose_foundation",
+          "strategy_guided_progression",
+          "strategy_independent_variation"
+        ],
+        "mastery_thresholds": [
+          "threshold_fractional_coefficient_equation"
+        ]
+      }
+    ],
+    "skills": [
+      {
+        "skill_id": "skill_preserve_equality",
+        "name": "Preserve equality",
+        "observable_behaviors": [
+          "Apply the same operation to both sides"
+        ],
+        "related_concepts": [
+          "equation_properties",
+          "move_terms",
+          "divide_by_coefficient"
+        ]
+      },
+      {
+        "skill_id": "skill_move_terms",
+        "name": "Move terms with correct signs",
+        "observable_behaviors": [
+          "Separate variable and constant terms",
+          "Explain sign changes through equality properties"
+        ],
+        "related_concepts": [
+          "move_terms",
+          "linear_equation"
+        ]
+      },
+      {
+        "skill_id": "skill_normalize_coefficient",
+        "name": "Normalize the variable coefficient",
+        "observable_behaviors": [
+          "Divide both sides by the same nonzero coefficient",
+          "Handle negative coefficients"
+        ],
+        "related_concepts": [
+          "divide_by_coefficient",
+          "linear_equation"
+        ]
+      },
+      {
+        "skill_id": "skill_distribute_parentheses",
+        "name": "Distribute across parentheses",
+        "observable_behaviors": [
+          "Apply the outside factor to every term",
+          "Handle a leading negative sign"
+        ],
+        "related_concepts": [
+          "remove_parentheses"
+        ]
+      },
+      {
+        "skill_id": "skill_clear_denominators",
+        "name": "Clear denominators",
+        "observable_behaviors": [
+          "Choose a least common multiple",
+          "Multiply every term"
+        ],
+        "related_concepts": [
+          "fractional_coefficient_equation"
+        ]
+      },
+      {
+        "skill_id": "skill_solve_linear_equation",
+        "name": "Solve a linear equation",
+        "observable_behaviors": [
+          "Plan a valid transformation sequence",
+          "Verify the final solution"
+        ],
+        "related_concepts": [
+          "linear_equation"
+        ]
+      },
+      {
+        "skill_id": "skill_verify_solution",
+        "name": "Verify a solution",
+        "observable_behaviors": [
+          "Substitute into the original equation and compare both sides"
+        ],
+        "related_concepts": [
+          "linear_equation"
+        ]
+      }
+    ],
+    "misconceptions": [
+      {
+        "misconception_id": "linear_solve_order_confusion",
+        "concept_id": "linear_equation",
+        "description": "学生知道要变形，但不清楚先把含 x 的项和常数项分开，再把系数化为 1。",
+        "example_wrong_step": "由 2x+3=7 直接写成 x+3=3.5。",
+        "diagnostic_signal": "学生跳过移项或合并，直接除以某个数。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "linear_answer_without_check",
+        "concept_id": "linear_equation",
+        "description": "学生给出答案但不会代回原方程检验。",
+        "example_wrong_step": "写出 x=2 后不能说明为什么对。",
+        "diagnostic_signal": "只报最终答案，没有解释等式两边是否相等。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "eq_prop_one_side_only",
+        "concept_id": "equation_properties",
+        "description": "只对等式一边做运算，另一边不变。",
+        "example_wrong_step": "由 x+3=7 写成 x=7+3。",
+        "diagnostic_signal": "学生解释中没有出现“两边同时”。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "eq_prop_divide_zero_blindness",
+        "concept_id": "equation_properties",
+        "description": "不知道两边同除时除数不能为 0。",
+        "example_wrong_step": "说任意数都可以两边同时除。",
+        "diagnostic_signal": "学生忽略非零条件。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "move_terms_forget_sign",
+        "concept_id": "move_terms",
+        "description": "项从等号一边移到另一边时忘记变号。",
+        "example_wrong_step": "由 2x+3=7 写成 2x=7+3。",
+        "diagnostic_signal": "移动 +3 后仍写 +3。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "move_terms_mechanical_rule",
+        "concept_id": "move_terms",
+        "description": "只背“移项变号”，不知道本质是两边同时加减同一项。",
+        "example_wrong_step": "能写对符号，但无法解释为什么变号。",
+        "diagnostic_signal": "学生无法说出等式性质依据。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "divide_coeff_only_one_side",
+        "concept_id": "divide_by_coefficient",
+        "description": "只把含 x 的一边除以系数，另一边不除。",
+        "example_wrong_step": "由 3x=12 写成 x=12。",
+        "diagnostic_signal": "学生没有写出或说出两边同时除以 3。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "divide_coeff_sign_error",
+        "concept_id": "divide_by_coefficient",
+        "description": "系数为负数时除法符号处理错误。",
+        "example_wrong_step": "由 -2x=6 写成 x=3。",
+        "diagnostic_signal": "负系数方程答案符号错误。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "parentheses_miss_distribute",
+        "concept_id": "remove_parentheses",
+        "description": "括号外的数没有乘到括号内每一项。",
+        "example_wrong_step": "把 3(x-2) 写成 3x-2。",
+        "diagnostic_signal": "只乘了第一项，漏乘常数项。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "parentheses_negative_sign",
+        "concept_id": "remove_parentheses",
+        "description": "括号前是负号时，括号内各项没有全部变号。",
+        "example_wrong_step": "把 -(x-2) 写成 -x-2。",
+        "diagnostic_signal": "只处理第一项符号或完全没变号。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "fraction_miss_whole_term",
+        "concept_id": "fractional_coefficient_equation",
+        "description": "去分母时漏乘不含分母的项。",
+        "example_wrong_step": "把 x/2-1=x/3 两边乘 6 后写成 3x-1=2x。",
+        "diagnostic_signal": "常数项没有乘最小公倍数。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      },
+      {
+        "misconception_id": "fraction_choose_wrong_lcm",
+        "concept_id": "fractional_coefficient_equation",
+        "description": "不会选择各分母的最小公倍数。",
+        "example_wrong_step": "面对 x/2 和 x/3 时选择乘 5。",
+        "diagnostic_signal": "把分母相加或随意选数。",
+        "repair_goal": "Address this misconception with diagnostic evidence and a minimal hint."
+      }
+    ],
+    "diagnostic_questions": [
+      {
+        "question_id": "dq_linear_next_step",
+        "concept_id": "linear_equation",
+        "prompt": "现在这一步最想先把含 x 的项整理到哪里？",
+        "checks": [
+          "能否说出把含 x 的项和常数项分开"
+        ],
+        "expected_signal": "学生提到移项、合并或系数化为 1 的合理顺序。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_linear_check_solution",
+        "concept_id": "linear_equation",
+        "prompt": "如果你得到一个 x 的值，可以怎样代回原方程检查？",
+        "checks": [
+          "是否知道把答案代回原式左右两边"
+        ],
+        "expected_signal": "学生能比较左右两边是否相等。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_eq_prop_both_sides",
+        "concept_id": "equation_properties",
+        "prompt": "如果等式左边减 4，右边也要做什么，等式才仍然成立？",
+        "checks": [
+          "是否说出右边也减 4"
+        ],
+        "expected_signal": "学生能表达两边同时做同一种运算。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_eq_prop_reason",
+        "concept_id": "equation_properties",
+        "prompt": "为什么 x+4=7 两边同时减 4 后，等式关系没有变？",
+        "checks": [
+          "是否理解保持左右相等"
+        ],
+        "expected_signal": "学生提到左右两边都做同样变化。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_move_terms_sign",
+        "concept_id": "move_terms",
+        "prompt": "把 +3 从左边处理掉时，两边同时做的是加 3 还是减 3？",
+        "checks": [
+          "是否选择减 3",
+          "是否理解符号变化来源"
+        ],
+        "expected_signal": "学生能把移项和两边同时减 3 联系起来。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_move_terms_target",
+        "concept_id": "move_terms",
+        "prompt": "这一题里，你想把含 x 的项留在哪一边？",
+        "checks": [
+          "是否能规划含 x 项和常数项的位置"
+        ],
+        "expected_signal": "学生能说出把含 x 的项放一边，常数放另一边。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_divide_coeff_both_sides",
+        "concept_id": "divide_by_coefficient",
+        "prompt": "如果 3x=12，要让 x 单独留下，两边应同时除以几？",
+        "checks": [
+          "是否选择除以 3"
+        ],
+        "expected_signal": "学生能说出两边同时除以 x 的系数。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_divide_coeff_negative",
+        "concept_id": "divide_by_coefficient",
+        "prompt": "如果是 -2x=6，最后要两边同时除以 2 还是 -2？",
+        "checks": [
+          "是否注意负系数"
+        ],
+        "expected_signal": "学生选择 -2，并能得到符号正确的结果。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_parentheses_distribute",
+        "concept_id": "remove_parentheses",
+        "prompt": "3(x-2) 里，括号外的 3 要分别乘到哪几项？",
+        "checks": [
+          "是否说出 x 和 -2 都要乘"
+        ],
+        "expected_signal": "学生知道分配律作用于每一项。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_parentheses_negative",
+        "concept_id": "remove_parentheses",
+        "prompt": "去掉 -(x-2) 的括号时，x 和 -2 的符号分别会怎样？",
+        "checks": [
+          "是否知道括号内每一项都变号"
+        ],
+        "expected_signal": "学生能得到 -x+2。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_fraction_lcm",
+        "concept_id": "fractional_coefficient_equation",
+        "prompt": "x/2 和 x/3 同时去分母时，两边同乘哪个数最方便？",
+        "checks": [
+          "是否找出 2 和 3 的最小公倍数 6"
+        ],
+        "expected_signal": "学生能选择 6。",
+        "avoid_revealing_answer": true
+      },
+      {
+        "question_id": "dq_fraction_all_terms",
+        "concept_id": "fractional_coefficient_equation",
+        "prompt": "两边同乘 6 时，方程里的 -1 这一项也要乘 6 吗？",
+        "checks": [
+          "是否知道每一项都要乘"
+        ],
+        "expected_signal": "学生回答要乘，并能说明这是等式两边整体同乘。",
+        "avoid_revealing_answer": true
+      }
+    ],
+    "hints": [
+      {
+        "hint_id": "hint_linear_equation_level_1",
+        "concept_id": "linear_equation",
+        "level": 1,
+        "text": "先观察方程里含 x 的项和不含 x 的项分别在哪里。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_linear_equation_level_2"
+      },
+      {
+        "hint_id": "hint_linear_equation_level_2",
+        "concept_id": "linear_equation",
+        "level": 2,
+        "text": "可以先用等式性质把常数项移到另一边，再合并同类项。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_linear_equation_level_3"
+      },
+      {
+        "hint_id": "hint_linear_equation_level_3",
+        "concept_id": "linear_equation",
+        "level": 3,
+        "text": "整理成 ax=b 后，再两边同时除以 a。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      },
+      {
+        "hint_id": "hint_equation_properties_level_1",
+        "concept_id": "equation_properties",
+        "level": 1,
+        "text": "等式像天平，左边动了，右边也要做同样的动作。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_equation_properties_level_2"
+      },
+      {
+        "hint_id": "hint_equation_properties_level_2",
+        "concept_id": "equation_properties",
+        "level": 2,
+        "text": "同加、同减、同乘、同除同一个非零数，都能保持等式成立。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_equation_properties_level_3"
+      },
+      {
+        "hint_id": "hint_equation_properties_level_3",
+        "concept_id": "equation_properties",
+        "level": 3,
+        "text": "比如 x+4=7，两边同时减 4，左边剩 x，右边变成 7-4。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      },
+      {
+        "hint_id": "hint_move_terms_level_1",
+        "concept_id": "move_terms",
+        "level": 1,
+        "text": "先想办法把不含 x 的项从含 x 的那一边处理掉。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_move_terms_level_2"
+      },
+      {
+        "hint_id": "hint_move_terms_level_2",
+        "concept_id": "move_terms",
+        "level": 2,
+        "text": "移项变号其实来自两边同时加或减同一个项。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_move_terms_level_3"
+      },
+      {
+        "hint_id": "hint_move_terms_level_3",
+        "concept_id": "move_terms",
+        "level": 3,
+        "text": "如果左边有 +3，要消掉它，就两边同时减 3，所以右边出现 7-3。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      },
+      {
+        "hint_id": "hint_divide_by_coefficient_level_1",
+        "concept_id": "divide_by_coefficient",
+        "level": 1,
+        "text": "目标是让 x 前面的系数变成 1。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_divide_by_coefficient_level_2"
+      },
+      {
+        "hint_id": "hint_divide_by_coefficient_level_2",
+        "concept_id": "divide_by_coefficient",
+        "level": 2,
+        "text": "ax=b 时，两边同时除以 a，前提是 a 不等于 0。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_divide_by_coefficient_level_3"
+      },
+      {
+        "hint_id": "hint_divide_by_coefficient_level_3",
+        "concept_id": "divide_by_coefficient",
+        "level": 3,
+        "text": "例如 3x=12，两边同时除以 3，左边变成 x，右边变成 4。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      },
+      {
+        "hint_id": "hint_remove_parentheses_level_1",
+        "concept_id": "remove_parentheses",
+        "level": 1,
+        "text": "先不要急着移项，括号里的每一项都要处理。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_remove_parentheses_level_2"
+      },
+      {
+        "hint_id": "hint_remove_parentheses_level_2",
+        "concept_id": "remove_parentheses",
+        "level": 2,
+        "text": "括号外的因数要乘到括号内每一项，不能只乘第一项。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_remove_parentheses_level_3"
+      },
+      {
+        "hint_id": "hint_remove_parentheses_level_3",
+        "concept_id": "remove_parentheses",
+        "level": 3,
+        "text": "3(x-2) 应写成 3x-6，然后再继续解方程。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      },
+      {
+        "hint_id": "hint_fractional_coefficient_equation_level_1",
+        "concept_id": "fractional_coefficient_equation",
+        "level": 1,
+        "text": "先找所有分母的最小公倍数，把分数系数变成整数。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_fractional_coefficient_equation_level_2"
+      },
+      {
+        "hint_id": "hint_fractional_coefficient_equation_level_2",
+        "concept_id": "fractional_coefficient_equation",
+        "level": 2,
+        "text": "两边同乘最小公倍数时，方程里的每一项都要乘。",
+        "reveals_final_answer": false,
+        "next_hint_id": "hint_fractional_coefficient_equation_level_3"
+      },
+      {
+        "hint_id": "hint_fractional_coefficient_equation_level_3",
+        "concept_id": "fractional_coefficient_equation",
+        "level": 3,
+        "text": "比如 x/2-1=x/3 两边同乘 6，左边两项都要乘，得到 3x-6。",
+        "reveals_final_answer": false,
+        "next_hint_id": null
+      }
+    ],
+    "worked_examples": [
+      {
+        "example_id": "worked_linear_equation",
+        "concept_id": "linear_equation",
+        "title": "一元一次方程 worked example",
+        "stem": "解方程：2x + 5 = 11",
+        "teaching_focus": "先移常数项，再系数化为 1。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      },
+      {
+        "example_id": "worked_equation_properties",
+        "concept_id": "equation_properties",
+        "title": "等式性质 worked example",
+        "stem": "已知 a=b，判断 a-5=b-5 是否一定成立。",
+        "teaching_focus": "识别两边同时减同一个数。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      },
+      {
+        "example_id": "worked_move_terms",
+        "concept_id": "move_terms",
+        "title": "移项 worked example",
+        "stem": "解方程：3x + 2 = 14",
+        "teaching_focus": "正号常数移到右边变成减。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      },
+      {
+        "example_id": "worked_divide_by_coefficient",
+        "concept_id": "divide_by_coefficient",
+        "title": "除以系数 worked example",
+        "stem": "解方程：4x = 20",
+        "teaching_focus": "两边同时除以正系数。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      },
+      {
+        "example_id": "worked_remove_parentheses",
+        "concept_id": "remove_parentheses",
+        "title": "去括号 worked example",
+        "stem": "解方程：2(x + 3) = 14",
+        "teaching_focus": "正系数分配到括号内每一项。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      },
+      {
+        "example_id": "worked_fractional_coefficient_equation",
+        "concept_id": "fractional_coefficient_equation",
+        "title": "分数系数方程 worked example",
+        "stem": "解方程：x/3 + 2 = 5",
+        "teaching_focus": "简单分母下的去分母和移项。",
+        "solution_outline": [
+          "Identify the relevant structure.",
+          "Explain the rule behind each step.",
+          "Return to the student original problem after the example."
+        ],
+        "use_only_when_action": "show_worked_example"
+      }
+    ],
+    "practice_problems": [
+      {
+        "problem_id": "ex_linear_basic_01",
+        "concept_id": "linear_equation",
+        "stem": "解方程：2x + 5 = 11",
+        "difficulty": 1,
+        "teaching_focus": "先移常数项，再系数化为 1。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_linear_two_side_01",
+        "concept_id": "linear_equation",
+        "stem": "解方程：4x - 3 = 2x + 5",
+        "difficulty": 2,
+        "teaching_focus": "含 x 的项在两边时，先把含 x 的项移到同一边。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_eq_prop_judge_01",
+        "concept_id": "equation_properties",
+        "stem": "已知 a=b，判断 a-5=b-5 是否一定成立。",
+        "difficulty": 1,
+        "teaching_focus": "识别两边同时减同一个数。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_eq_prop_transform_01",
+        "concept_id": "equation_properties",
+        "stem": "把 x+6=10 变形成 x=10-6，并说明依据。",
+        "difficulty": 1,
+        "teaching_focus": "用等式性质解释移项。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_move_basic_01",
+        "concept_id": "move_terms",
+        "stem": "解方程：3x + 2 = 14",
+        "difficulty": 1,
+        "teaching_focus": "正号常数移到右边变成减。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_move_negative_01",
+        "concept_id": "move_terms",
+        "stem": "解方程：5x - 4 = 11",
+        "difficulty": 1,
+        "teaching_focus": "负号常数移到右边变成加。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_divide_coeff_basic_01",
+        "concept_id": "divide_by_coefficient",
+        "stem": "解方程：4x = 20",
+        "difficulty": 1,
+        "teaching_focus": "两边同时除以正系数。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_divide_coeff_negative_01",
+        "concept_id": "divide_by_coefficient",
+        "stem": "解方程：-3x = 12",
+        "difficulty": 2,
+        "teaching_focus": "两边同时除以负系数。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_parentheses_basic_01",
+        "concept_id": "remove_parentheses",
+        "stem": "解方程：2(x + 3) = 14",
+        "difficulty": 2,
+        "teaching_focus": "正系数分配到括号内每一项。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_parentheses_negative_01",
+        "concept_id": "remove_parentheses",
+        "stem": "化简：5 - (x - 4)",
+        "difficulty": 2,
+        "teaching_focus": "括号前负号导致每一项变号。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_fraction_basic_01",
+        "concept_id": "fractional_coefficient_equation",
+        "stem": "解方程：x/3 + 2 = 5",
+        "difficulty": 2,
+        "teaching_focus": "简单分母下的去分母和移项。",
+        "use_only_after_current_problem": true
+      },
+      {
+        "problem_id": "ex_fraction_lcm_01",
+        "concept_id": "fractional_coefficient_equation",
+        "stem": "解方程：x/2 - 1 = x/3",
+        "difficulty": 3,
+        "teaching_focus": "两边同乘最小公倍数，且每一项都乘。",
+        "use_only_after_current_problem": true
+      }
+    ],
+    "teaching_strategies": [
+      {
+        "strategy_id": "strategy_diagnose_foundation",
+        "name": "Foundation diagnosis first",
+        "when_to_use": "Use when mastery is below 0.3 or prerequisite evidence is weak",
+        "preferred_actions": [
+          "ask_diagnostic_question",
+          "give_hint_level_1"
+        ],
+        "avoid": [
+          "Do not reveal the final answer or ask multiple questions"
+        ],
+        "teacher_tone": "concrete and patient"
+      },
+      {
+        "strategy_id": "strategy_guided_progression",
+        "name": "Leveled hint progression",
+        "when_to_use": "Use when mastery is between 0.3 and 0.7",
+        "preferred_actions": [
+          "give_hint_level_1",
+          "give_hint_level_2"
+        ],
+        "avoid": [
+          "Do not provide the full solution at once"
+        ],
+        "teacher_tone": "concise and Socratic"
+      },
+      {
+        "strategy_id": "strategy_independent_variation",
+        "name": "Independent solution and variation",
+        "when_to_use": "Use when mastery is at least 0.7",
+        "preferred_actions": [
+          "grade_and_feedback",
+          "give_practice_question"
+        ],
+        "avoid": [
+          "Do not repeat explanations for mastered steps"
+        ],
+        "teacher_tone": "brief and evidence-based"
+      },
+      {
+        "strategy_id": "strategy_checker_first",
+        "name": "Math checker first",
+        "when_to_use": "Use when the student provides a step, plan, or final answer",
+        "preferred_actions": [
+          "grade_and_feedback"
+        ],
+        "avoid": [
+          "Do not let RAG or the LLM override math_checker"
+        ],
+        "teacher_tone": "clear and evidence-based"
+      }
+    ],
+    "mastery_thresholds": [
+      {
+        "threshold_id": "threshold_linear_equation",
+        "concept_id": "linear_equation",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "先用诊断问题确认等式性质和移项含义，提示要具体但不泄最终答案。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "让学生说出下一步理由，必要时给 level 1 或 level 2 提示。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "认可跳步或直接答案，要求代回检验，并给相邻难度变式题。"
+          }
+        ]
+      },
+      {
+        "threshold_id": "threshold_equation_properties",
+        "concept_id": "equation_properties",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "优先用天平类比和诊断问题，要求学生补出“两边同时”。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "让学生说明每一步变形依据，减少类比，增加符号表达。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "把等式性质连接到移项和系数化为 1，允许学生直接用于解方程。"
+          }
+        ]
+      },
+      {
+        "threshold_id": "threshold_move_terms",
+        "concept_id": "move_terms",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "不急着使用口号，先用等式性质问清楚两边同时做什么。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "允许使用“移项变号”，但要求说出变号来自哪一步。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "用更复杂的两边含 x 方程检查是否能稳定移项。"
+          }
+        ]
+      },
+      {
+        "threshold_id": "threshold_divide_by_coefficient",
+        "concept_id": "divide_by_coefficient",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "先确认学生知道目标是把 x 的系数变成 1。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "让学生自己选择除以哪个数，并说出两边同时。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "加入负系数和分数系数，检查符号与倒数处理。"
+          }
+        ]
+      },
+      {
+        "threshold_id": "threshold_remove_parentheses",
+        "concept_id": "remove_parentheses",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "先诊断分配律，不急着进入完整解方程流程。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "让学生补出去括号后的式子，再继续移项。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "加入多个括号或负号括号，检查是否能稳定处理符号。"
+          }
+        ]
+      },
+      {
+        "threshold_id": "threshold_fractional_coefficient_equation",
+        "concept_id": "fractional_coefficient_equation",
+        "bands": [
+          {
+            "band": "low",
+            "min_inclusive": 0,
+            "max_exclusive": 0.3,
+            "strategy_id": "strategy_diagnose_foundation",
+            "strategy_text": "先诊断最小公倍数和每一项都乘，不直接进入完整解答。"
+          },
+          {
+            "band": "medium",
+            "min_inclusive": 0.3,
+            "max_exclusive": 0.7,
+            "strategy_id": "strategy_guided_progression",
+            "strategy_text": "给出 level 1 或 level 2 提示，让学生自己写出去分母后的方程。"
+          },
+          {
+            "band": "high",
+            "min_inclusive": 0.7,
+            "max_inclusive": 1,
+            "strategy_id": "strategy_independent_variation",
+            "strategy_text": "给含多个分母或括号的变式题，要求学生解释每一步依据。"
+          }
+        ]
+      }
+    ]
+  },
+  "edges": [
+    {
+      "edge_id": "edge_0001",
+      "type": "HAS_SKILL",
+      "from": "linear_equation",
+      "to": "skill_solve_linear_equation",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0002",
+      "type": "HAS_SKILL",
+      "from": "linear_equation",
+      "to": "skill_verify_solution",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0003",
+      "type": "HAS_MISCONCEPTION",
+      "from": "linear_equation",
+      "to": "linear_solve_order_confusion",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0004",
+      "type": "HAS_MISCONCEPTION",
+      "from": "linear_equation",
+      "to": "linear_answer_without_check",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0005",
+      "type": "DIAGNOSE_WITH",
+      "from": "linear_solve_order_confusion",
+      "to": "dq_linear_next_step",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0006",
+      "type": "DIAGNOSE_WITH",
+      "from": "linear_answer_without_check",
+      "to": "dq_linear_check_solution",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0007",
+      "type": "HINT_FOR",
+      "from": "hint_linear_equation_level_1",
+      "to": "linear_equation",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0008",
+      "type": "REMEDIATES",
+      "from": "hint_linear_equation_level_1",
+      "to": "linear_solve_order_confusion",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0009",
+      "type": "HINT_FOR",
+      "from": "hint_linear_equation_level_2",
+      "to": "linear_equation",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0010",
+      "type": "REMEDIATES",
+      "from": "hint_linear_equation_level_2",
+      "to": "linear_answer_without_check",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0011",
+      "type": "HINT_FOR",
+      "from": "hint_linear_equation_level_3",
+      "to": "linear_equation",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0012",
+      "type": "REMEDIATES",
+      "from": "hint_linear_equation_level_3",
+      "to": "linear_solve_order_confusion",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0013",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_linear_equation",
+      "to": "linear_equation",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0014",
+      "type": "PRACTICE_FOR",
+      "from": "ex_linear_basic_01",
+      "to": "linear_equation",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0015",
+      "type": "PRACTICE_FOR",
+      "from": "ex_linear_two_side_01",
+      "to": "linear_equation",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0016",
+      "type": "EASIER_THAN",
+      "from": "ex_linear_basic_01",
+      "to": "ex_linear_two_side_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0017",
+      "type": "HARDER_THAN",
+      "from": "ex_linear_two_side_01",
+      "to": "ex_linear_basic_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0018",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_linear_equation",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0019",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_linear_equation",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0020",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_linear_equation",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0021",
+      "type": "HAS_SKILL",
+      "from": "equation_properties",
+      "to": "skill_preserve_equality",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0022",
+      "type": "HAS_MISCONCEPTION",
+      "from": "equation_properties",
+      "to": "eq_prop_one_side_only",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0023",
+      "type": "HAS_MISCONCEPTION",
+      "from": "equation_properties",
+      "to": "eq_prop_divide_zero_blindness",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0024",
+      "type": "DIAGNOSE_WITH",
+      "from": "eq_prop_one_side_only",
+      "to": "dq_eq_prop_both_sides",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0025",
+      "type": "DIAGNOSE_WITH",
+      "from": "eq_prop_divide_zero_blindness",
+      "to": "dq_eq_prop_reason",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0026",
+      "type": "HINT_FOR",
+      "from": "hint_equation_properties_level_1",
+      "to": "equation_properties",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0027",
+      "type": "REMEDIATES",
+      "from": "hint_equation_properties_level_1",
+      "to": "eq_prop_one_side_only",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0028",
+      "type": "HINT_FOR",
+      "from": "hint_equation_properties_level_2",
+      "to": "equation_properties",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0029",
+      "type": "REMEDIATES",
+      "from": "hint_equation_properties_level_2",
+      "to": "eq_prop_divide_zero_blindness",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0030",
+      "type": "HINT_FOR",
+      "from": "hint_equation_properties_level_3",
+      "to": "equation_properties",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0031",
+      "type": "REMEDIATES",
+      "from": "hint_equation_properties_level_3",
+      "to": "eq_prop_one_side_only",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0032",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_equation_properties",
+      "to": "equation_properties",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0033",
+      "type": "PRACTICE_FOR",
+      "from": "ex_eq_prop_judge_01",
+      "to": "equation_properties",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0034",
+      "type": "PRACTICE_FOR",
+      "from": "ex_eq_prop_transform_01",
+      "to": "equation_properties",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0035",
+      "type": "EASIER_THAN",
+      "from": "ex_eq_prop_judge_01",
+      "to": "ex_eq_prop_transform_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0036",
+      "type": "HARDER_THAN",
+      "from": "ex_eq_prop_transform_01",
+      "to": "ex_eq_prop_judge_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0037",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_equation_properties",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0038",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_equation_properties",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0039",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_equation_properties",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0040",
+      "type": "HAS_SKILL",
+      "from": "move_terms",
+      "to": "skill_move_terms",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0041",
+      "type": "HAS_SKILL",
+      "from": "move_terms",
+      "to": "skill_preserve_equality",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0042",
+      "type": "HAS_MISCONCEPTION",
+      "from": "move_terms",
+      "to": "move_terms_forget_sign",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0043",
+      "type": "HAS_MISCONCEPTION",
+      "from": "move_terms",
+      "to": "move_terms_mechanical_rule",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0044",
+      "type": "DIAGNOSE_WITH",
+      "from": "move_terms_forget_sign",
+      "to": "dq_move_terms_sign",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0045",
+      "type": "DIAGNOSE_WITH",
+      "from": "move_terms_mechanical_rule",
+      "to": "dq_move_terms_target",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0046",
+      "type": "HINT_FOR",
+      "from": "hint_move_terms_level_1",
+      "to": "move_terms",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0047",
+      "type": "REMEDIATES",
+      "from": "hint_move_terms_level_1",
+      "to": "move_terms_forget_sign",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0048",
+      "type": "HINT_FOR",
+      "from": "hint_move_terms_level_2",
+      "to": "move_terms",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0049",
+      "type": "REMEDIATES",
+      "from": "hint_move_terms_level_2",
+      "to": "move_terms_mechanical_rule",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0050",
+      "type": "HINT_FOR",
+      "from": "hint_move_terms_level_3",
+      "to": "move_terms",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0051",
+      "type": "REMEDIATES",
+      "from": "hint_move_terms_level_3",
+      "to": "move_terms_forget_sign",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0052",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_move_terms",
+      "to": "move_terms",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0053",
+      "type": "PRACTICE_FOR",
+      "from": "ex_move_basic_01",
+      "to": "move_terms",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0054",
+      "type": "PRACTICE_FOR",
+      "from": "ex_move_negative_01",
+      "to": "move_terms",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0055",
+      "type": "EASIER_THAN",
+      "from": "ex_move_basic_01",
+      "to": "ex_move_negative_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0056",
+      "type": "HARDER_THAN",
+      "from": "ex_move_negative_01",
+      "to": "ex_move_basic_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0057",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_move_terms",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0058",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_move_terms",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0059",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_move_terms",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0060",
+      "type": "HAS_SKILL",
+      "from": "divide_by_coefficient",
+      "to": "skill_normalize_coefficient",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0061",
+      "type": "HAS_SKILL",
+      "from": "divide_by_coefficient",
+      "to": "skill_preserve_equality",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0062",
+      "type": "HAS_MISCONCEPTION",
+      "from": "divide_by_coefficient",
+      "to": "divide_coeff_only_one_side",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0063",
+      "type": "HAS_MISCONCEPTION",
+      "from": "divide_by_coefficient",
+      "to": "divide_coeff_sign_error",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0064",
+      "type": "DIAGNOSE_WITH",
+      "from": "divide_coeff_only_one_side",
+      "to": "dq_divide_coeff_both_sides",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0065",
+      "type": "DIAGNOSE_WITH",
+      "from": "divide_coeff_sign_error",
+      "to": "dq_divide_coeff_negative",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0066",
+      "type": "HINT_FOR",
+      "from": "hint_divide_by_coefficient_level_1",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0067",
+      "type": "REMEDIATES",
+      "from": "hint_divide_by_coefficient_level_1",
+      "to": "divide_coeff_only_one_side",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0068",
+      "type": "HINT_FOR",
+      "from": "hint_divide_by_coefficient_level_2",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0069",
+      "type": "REMEDIATES",
+      "from": "hint_divide_by_coefficient_level_2",
+      "to": "divide_coeff_sign_error",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0070",
+      "type": "HINT_FOR",
+      "from": "hint_divide_by_coefficient_level_3",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0071",
+      "type": "REMEDIATES",
+      "from": "hint_divide_by_coefficient_level_3",
+      "to": "divide_coeff_only_one_side",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0072",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_divide_by_coefficient",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0073",
+      "type": "PRACTICE_FOR",
+      "from": "ex_divide_coeff_basic_01",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0074",
+      "type": "PRACTICE_FOR",
+      "from": "ex_divide_coeff_negative_01",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0075",
+      "type": "EASIER_THAN",
+      "from": "ex_divide_coeff_basic_01",
+      "to": "ex_divide_coeff_negative_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0076",
+      "type": "HARDER_THAN",
+      "from": "ex_divide_coeff_negative_01",
+      "to": "ex_divide_coeff_basic_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0077",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_divide_by_coefficient",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0078",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_divide_by_coefficient",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0079",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_divide_by_coefficient",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0080",
+      "type": "HAS_SKILL",
+      "from": "remove_parentheses",
+      "to": "skill_distribute_parentheses",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0081",
+      "type": "HAS_MISCONCEPTION",
+      "from": "remove_parentheses",
+      "to": "parentheses_miss_distribute",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0082",
+      "type": "HAS_MISCONCEPTION",
+      "from": "remove_parentheses",
+      "to": "parentheses_negative_sign",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0083",
+      "type": "DIAGNOSE_WITH",
+      "from": "parentheses_miss_distribute",
+      "to": "dq_parentheses_distribute",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0084",
+      "type": "DIAGNOSE_WITH",
+      "from": "parentheses_negative_sign",
+      "to": "dq_parentheses_negative",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0085",
+      "type": "HINT_FOR",
+      "from": "hint_remove_parentheses_level_1",
+      "to": "remove_parentheses",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0086",
+      "type": "REMEDIATES",
+      "from": "hint_remove_parentheses_level_1",
+      "to": "parentheses_miss_distribute",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0087",
+      "type": "HINT_FOR",
+      "from": "hint_remove_parentheses_level_2",
+      "to": "remove_parentheses",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0088",
+      "type": "REMEDIATES",
+      "from": "hint_remove_parentheses_level_2",
+      "to": "parentheses_negative_sign",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0089",
+      "type": "HINT_FOR",
+      "from": "hint_remove_parentheses_level_3",
+      "to": "remove_parentheses",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0090",
+      "type": "REMEDIATES",
+      "from": "hint_remove_parentheses_level_3",
+      "to": "parentheses_miss_distribute",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0091",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_remove_parentheses",
+      "to": "remove_parentheses",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0092",
+      "type": "PRACTICE_FOR",
+      "from": "ex_parentheses_basic_01",
+      "to": "remove_parentheses",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0093",
+      "type": "PRACTICE_FOR",
+      "from": "ex_parentheses_negative_01",
+      "to": "remove_parentheses",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0094",
+      "type": "EASIER_THAN",
+      "from": "ex_parentheses_basic_01",
+      "to": "ex_parentheses_negative_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0095",
+      "type": "HARDER_THAN",
+      "from": "ex_parentheses_negative_01",
+      "to": "ex_parentheses_basic_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0096",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_remove_parentheses",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0097",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_remove_parentheses",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0098",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_remove_parentheses",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0099",
+      "type": "HAS_SKILL",
+      "from": "fractional_coefficient_equation",
+      "to": "skill_clear_denominators",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0100",
+      "type": "HAS_SKILL",
+      "from": "fractional_coefficient_equation",
+      "to": "skill_normalize_coefficient",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0101",
+      "type": "HAS_MISCONCEPTION",
+      "from": "fractional_coefficient_equation",
+      "to": "fraction_miss_whole_term",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0102",
+      "type": "HAS_MISCONCEPTION",
+      "from": "fractional_coefficient_equation",
+      "to": "fraction_choose_wrong_lcm",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0103",
+      "type": "DIAGNOSE_WITH",
+      "from": "fraction_miss_whole_term",
+      "to": "dq_fraction_lcm",
+      "properties": {
+        "priority": 1
+      }
+    },
+    {
+      "edge_id": "edge_0104",
+      "type": "DIAGNOSE_WITH",
+      "from": "fraction_choose_wrong_lcm",
+      "to": "dq_fraction_all_terms",
+      "properties": {
+        "priority": 2
+      }
+    },
+    {
+      "edge_id": "edge_0105",
+      "type": "HINT_FOR",
+      "from": "hint_fractional_coefficient_equation_level_1",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "level": 1
+      }
+    },
+    {
+      "edge_id": "edge_0106",
+      "type": "REMEDIATES",
+      "from": "hint_fractional_coefficient_equation_level_1",
+      "to": "fraction_miss_whole_term",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0107",
+      "type": "HINT_FOR",
+      "from": "hint_fractional_coefficient_equation_level_2",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "level": 2
+      }
+    },
+    {
+      "edge_id": "edge_0108",
+      "type": "REMEDIATES",
+      "from": "hint_fractional_coefficient_equation_level_2",
+      "to": "fraction_choose_wrong_lcm",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0109",
+      "type": "HINT_FOR",
+      "from": "hint_fractional_coefficient_equation_level_3",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "level": 3
+      }
+    },
+    {
+      "edge_id": "edge_0110",
+      "type": "REMEDIATES",
+      "from": "hint_fractional_coefficient_equation_level_3",
+      "to": "fraction_miss_whole_term",
+      "properties": {
+        "strength": "suggested"
+      }
+    },
+    {
+      "edge_id": "edge_0111",
+      "type": "EXAMPLE_FOR",
+      "from": "worked_fractional_coefficient_equation",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "guarded_action": "show_worked_example"
+      }
+    },
+    {
+      "edge_id": "edge_0112",
+      "type": "PRACTICE_FOR",
+      "from": "ex_fraction_basic_01",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0113",
+      "type": "PRACTICE_FOR",
+      "from": "ex_fraction_lcm_01",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "after_current_problem": true
+      }
+    },
+    {
+      "edge_id": "edge_0114",
+      "type": "EASIER_THAN",
+      "from": "ex_fraction_basic_01",
+      "to": "ex_fraction_lcm_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0115",
+      "type": "HARDER_THAN",
+      "from": "ex_fraction_lcm_01",
+      "to": "ex_fraction_basic_01",
+      "properties": {}
+    },
+    {
+      "edge_id": "edge_0116",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_fractional_coefficient_equation",
+      "to": "strategy_diagnose_foundation",
+      "properties": {
+        "mastery_band": "low"
+      }
+    },
+    {
+      "edge_id": "edge_0117",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_fractional_coefficient_equation",
+      "to": "strategy_guided_progression",
+      "properties": {
+        "mastery_band": "medium"
+      }
+    },
+    {
+      "edge_id": "edge_0118",
+      "type": "USE_STRATEGY_WHEN",
+      "from": "threshold_fractional_coefficient_equation",
+      "to": "strategy_independent_variation",
+      "properties": {
+        "mastery_band": "high"
+      }
+    },
+    {
+      "edge_id": "edge_0119",
+      "type": "NEXT_CONCEPT",
+      "from": "equation_properties",
+      "to": "move_terms",
+      "properties": {
+        "path": "linear_equation_mvp"
+      }
+    },
+    {
+      "edge_id": "edge_0120",
+      "type": "NEXT_CONCEPT",
+      "from": "move_terms",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "path": "linear_equation_mvp"
+      }
+    },
+    {
+      "edge_id": "edge_0121",
+      "type": "NEXT_CONCEPT",
+      "from": "divide_by_coefficient",
+      "to": "linear_equation",
+      "properties": {
+        "path": "linear_equation_mvp"
+      }
+    },
+    {
+      "edge_id": "edge_0122",
+      "type": "NEXT_CONCEPT",
+      "from": "linear_equation",
+      "to": "remove_parentheses",
+      "properties": {
+        "path": "linear_equation_mvp"
+      }
+    },
+    {
+      "edge_id": "edge_0123",
+      "type": "NEXT_CONCEPT",
+      "from": "remove_parentheses",
+      "to": "fractional_coefficient_equation",
+      "properties": {
+        "path": "linear_equation_mvp"
+      }
+    },
+    {
+      "edge_id": "edge_0124",
+      "type": "REQUIRES",
+      "from": "linear_equation",
+      "to": "equation_properties",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0125",
+      "type": "REQUIRES",
+      "from": "linear_equation",
+      "to": "move_terms",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0126",
+      "type": "REQUIRES",
+      "from": "linear_equation",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0127",
+      "type": "REQUIRES",
+      "from": "move_terms",
+      "to": "equation_properties",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0128",
+      "type": "REQUIRES",
+      "from": "divide_by_coefficient",
+      "to": "equation_properties",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0129",
+      "type": "REQUIRES",
+      "from": "remove_parentheses",
+      "to": "equation_properties",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0130",
+      "type": "REQUIRES",
+      "from": "fractional_coefficient_equation",
+      "to": "linear_equation",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0131",
+      "type": "REQUIRES",
+      "from": "fractional_coefficient_equation",
+      "to": "equation_properties",
+      "properties": {
+        "importance": "core"
+      }
+    },
+    {
+      "edge_id": "edge_0132",
+      "type": "REQUIRES",
+      "from": "fractional_coefficient_equation",
+      "to": "divide_by_coefficient",
+      "properties": {
+        "importance": "core"
+      }
+    }
   ],
   "concepts": [
     {
       "concept_id": "linear_equation",
       "name": "一元一次方程",
-      "prerequisites": ["equation_properties", "move_terms", "divide_by_coefficient"],
+      "prerequisites": [
+        "equation_properties",
+        "move_terms",
+        "divide_by_coefficient"
+      ],
       "common_misconceptions": [
         {
           "misconception_id": "linear_solve_order_confusion",
@@ -29,13 +2232,17 @@
         {
           "question_id": "dq_linear_next_step",
           "prompt": "现在这一步最想先把含 x 的项整理到哪里？",
-          "checks": ["能否说出把含 x 的项和常数项分开"],
+          "checks": [
+            "能否说出把含 x 的项和常数项分开"
+          ],
           "expected_signal": "学生提到移项、合并或系数化为 1 的合理顺序。"
         },
         {
           "question_id": "dq_linear_check_solution",
           "prompt": "如果你得到一个 x 的值，可以怎样代回原方程检查？",
-          "checks": ["是否知道把答案代回原式左右两边"],
+          "checks": [
+            "是否知道把答案代回原式左右两边"
+          ],
           "expected_signal": "学生能比较左右两边是否相等。"
         }
       ],
@@ -95,13 +2302,17 @@
         {
           "question_id": "dq_eq_prop_both_sides",
           "prompt": "如果等式左边减 4，右边也要做什么，等式才仍然成立？",
-          "checks": ["是否说出右边也减 4"],
+          "checks": [
+            "是否说出右边也减 4"
+          ],
           "expected_signal": "学生能表达两边同时做同一种运算。"
         },
         {
           "question_id": "dq_eq_prop_reason",
           "prompt": "为什么 x+4=7 两边同时减 4 后，等式关系没有变？",
-          "checks": ["是否理解保持左右相等"],
+          "checks": [
+            "是否理解保持左右相等"
+          ],
           "expected_signal": "学生提到左右两边都做同样变化。"
         }
       ],
@@ -142,7 +2353,9 @@
     {
       "concept_id": "move_terms",
       "name": "移项",
-      "prerequisites": ["equation_properties"],
+      "prerequisites": [
+        "equation_properties"
+      ],
       "common_misconceptions": [
         {
           "misconception_id": "move_terms_forget_sign",
@@ -161,13 +2374,18 @@
         {
           "question_id": "dq_move_terms_sign",
           "prompt": "把 +3 从左边处理掉时，两边同时做的是加 3 还是减 3？",
-          "checks": ["是否选择减 3", "是否理解符号变化来源"],
+          "checks": [
+            "是否选择减 3",
+            "是否理解符号变化来源"
+          ],
           "expected_signal": "学生能把移项和两边同时减 3 联系起来。"
         },
         {
           "question_id": "dq_move_terms_target",
           "prompt": "这一题里，你想把含 x 的项留在哪一边？",
-          "checks": ["是否能规划含 x 项和常数项的位置"],
+          "checks": [
+            "是否能规划含 x 项和常数项的位置"
+          ],
           "expected_signal": "学生能说出把含 x 的项放一边，常数放另一边。"
         }
       ],
@@ -208,7 +2426,9 @@
     {
       "concept_id": "divide_by_coefficient",
       "name": "除以系数",
-      "prerequisites": ["equation_properties"],
+      "prerequisites": [
+        "equation_properties"
+      ],
       "common_misconceptions": [
         {
           "misconception_id": "divide_coeff_only_one_side",
@@ -227,13 +2447,17 @@
         {
           "question_id": "dq_divide_coeff_both_sides",
           "prompt": "如果 3x=12，要让 x 单独留下，两边应同时除以几？",
-          "checks": ["是否选择除以 3"],
+          "checks": [
+            "是否选择除以 3"
+          ],
           "expected_signal": "学生能说出两边同时除以 x 的系数。"
         },
         {
           "question_id": "dq_divide_coeff_negative",
           "prompt": "如果是 -2x=6，最后要两边同时除以 2 还是 -2？",
-          "checks": ["是否注意负系数"],
+          "checks": [
+            "是否注意负系数"
+          ],
           "expected_signal": "学生选择 -2，并能得到符号正确的结果。"
         }
       ],
@@ -274,7 +2498,9 @@
     {
       "concept_id": "remove_parentheses",
       "name": "去括号",
-      "prerequisites": ["equation_properties"],
+      "prerequisites": [
+        "equation_properties"
+      ],
       "common_misconceptions": [
         {
           "misconception_id": "parentheses_miss_distribute",
@@ -293,13 +2519,17 @@
         {
           "question_id": "dq_parentheses_distribute",
           "prompt": "3(x-2) 里，括号外的 3 要分别乘到哪几项？",
-          "checks": ["是否说出 x 和 -2 都要乘"],
+          "checks": [
+            "是否说出 x 和 -2 都要乘"
+          ],
           "expected_signal": "学生知道分配律作用于每一项。"
         },
         {
           "question_id": "dq_parentheses_negative",
           "prompt": "去掉 -(x-2) 的括号时，x 和 -2 的符号分别会怎样？",
-          "checks": ["是否知道括号内每一项都变号"],
+          "checks": [
+            "是否知道括号内每一项都变号"
+          ],
           "expected_signal": "学生能得到 -x+2。"
         }
       ],
@@ -340,7 +2570,11 @@
     {
       "concept_id": "fractional_coefficient_equation",
       "name": "分数系数方程",
-      "prerequisites": ["linear_equation", "equation_properties", "divide_by_coefficient"],
+      "prerequisites": [
+        "linear_equation",
+        "equation_properties",
+        "divide_by_coefficient"
+      ],
       "common_misconceptions": [
         {
           "misconception_id": "fraction_miss_whole_term",
@@ -359,13 +2593,17 @@
         {
           "question_id": "dq_fraction_lcm",
           "prompt": "x/2 和 x/3 同时去分母时，两边同乘哪个数最方便？",
-          "checks": ["是否找出 2 和 3 的最小公倍数 6"],
+          "checks": [
+            "是否找出 2 和 3 的最小公倍数 6"
+          ],
           "expected_signal": "学生能选择 6。"
         },
         {
           "question_id": "dq_fraction_all_terms",
           "prompt": "两边同乘 6 时，方程里的 -1 这一项也要乘 6 吗？",
-          "checks": ["是否知道每一项都要乘"],
+          "checks": [
+            "是否知道每一项都要乘"
+          ],
           "expected_signal": "学生回答要乘，并能说明这是等式两边整体同乘。"
         }
       ],
@@ -409,22 +2647,38 @@
       "strategy_id": "diagnose_before_hint",
       "name": "先诊断后提示",
       "when_to_use": "学生表达不会、为什么，或 mastery 较低时。",
-      "preferred_actions": ["ask_diagnostic_question", "give_hint_level_1"],
-      "avoid": ["直接给最终答案", "连续追问多个问题"]
+      "preferred_actions": [
+        "ask_diagnostic_question",
+        "give_hint_level_1"
+      ],
+      "avoid": [
+        "直接给最终答案",
+        "连续追问多个问题"
+      ]
     },
     {
       "strategy_id": "checker_first_feedback",
       "name": "checker 优先反馈",
       "when_to_use": "学生给出步骤、多步计划或最终答案时。",
-      "preferred_actions": ["grade_and_feedback", "explain_concept"],
-      "avoid": ["让 LLM 自由改判数学步骤"]
+      "preferred_actions": [
+        "grade_and_feedback",
+        "explain_concept"
+      ],
+      "avoid": [
+        "让 LLM 自由改判数学步骤"
+      ]
     },
     {
       "strategy_id": "return_to_original_problem",
       "name": "例题后回到原题",
       "when_to_use": "使用 worked example 或变式练习之后。",
-      "preferred_actions": ["show_worked_example", "ask_diagnostic_question"],
-      "avoid": ["让检索例题替代 original_problem"]
+      "preferred_actions": [
+        "show_worked_example",
+        "ask_diagnostic_question"
+      ],
+      "avoid": [
+        "让检索例题替代 original_problem"
+      ]
     }
   ]
 }

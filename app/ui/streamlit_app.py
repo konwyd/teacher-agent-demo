@@ -74,6 +74,19 @@ def render_meta(meta: dict[str, Any]) -> None:
         st.divider()
         st.write("**retrieved_prerequisites**:", meta.get("retrieved_prerequisites"))
         st.write("**retrieved_exercises**:", meta.get("retrieved_exercises"))
+        st.write("**retrieval_backend**:", meta.get("retrieval_backend") or "无")
+        st.write("**retrieved_concepts**:", meta.get("retrieved_concepts") or [])
+        st.write(
+            "**retrieved_misconceptions**:",
+            meta.get("retrieved_misconceptions") or [],
+        )
+        st.write("**retrieved_hints**:", meta.get("retrieved_hints") or [])
+        st.write(
+            "**retrieved_practice_problem_ids**:",
+            meta.get("retrieved_practice_problem_ids") or [],
+        )
+        st.write("**top_evidence_reasons**:", meta.get("top_evidence_reasons") or [])
+        st.write("**retrieval_evidence**:", meta.get("retrieval_evidence") or [])
         st.write("**Pedagogical RAG used**:", meta.get("pedagogical_context_used"))
         st.write("**Pedagogical 前置知识**:", meta.get("pedagogical_prerequisites") or "无")
         st.write("**Pedagogical 常见误区**:", meta.get("pedagogical_misconceptions") or "无")

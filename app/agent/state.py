@@ -8,6 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.memory.schemas import ContextResolution, EpisodeState, LearningEvent
+from app.retrieval.graph_retriever import RetrievalEvidence
 
 
 class TeachingAction(str, Enum):
@@ -141,6 +142,13 @@ class TurnLog(BaseModel):
     socratic_reason: str = ""
     # Pedagogical RAG 使用痕迹：仅作为教学决策辅助，不裁决数学对错
     pedagogical_context_used: bool = False
+    retrieval_backend: str = ""
+    retrieval_evidence: list[RetrievalEvidence] = Field(default_factory=list)
+    retrieved_concepts: list[str] = Field(default_factory=list)
+    retrieved_misconceptions: list[str] = Field(default_factory=list)
+    retrieved_hints: list[str] = Field(default_factory=list)
+    retrieved_practice_problem_ids: list[str] = Field(default_factory=list)
+    top_evidence_reasons: list[str] = Field(default_factory=list)
     selected_hint_level: int = 0
     matched_misconception: str = ""
     diagnostic_question_used: str = ""
@@ -183,6 +191,13 @@ class TeacherState(BaseModel):
     retrieval: Optional[RetrievalResult] = None
     pedagogical_context: PedagogicalContext = Field(default_factory=PedagogicalContext)
     pedagogical_context_used: bool = False
+    retrieval_backend: str = ""
+    retrieval_evidence: list[RetrievalEvidence] = Field(default_factory=list)
+    retrieved_concepts: list[str] = Field(default_factory=list)
+    retrieved_misconceptions: list[str] = Field(default_factory=list)
+    retrieved_hints: list[str] = Field(default_factory=list)
+    retrieved_practice_problem_ids: list[str] = Field(default_factory=list)
+    top_evidence_reasons: list[str] = Field(default_factory=list)
 
     # grounding：围绕学生原题的跨轮状态（由 conversation store 载入/回写）
     original_problem: str = ""
