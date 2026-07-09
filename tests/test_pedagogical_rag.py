@@ -68,10 +68,10 @@ def test_high_mastery_recommends_exercise() -> None:
     sid = "ped_high"
     _set_mastery(sid, "c_linear", "high")
     state = run_turn(sid, "再来一题一元一次方程")
-    assert state.action is TeachingAction.GIVE_PRACTICE_QUESTION
+    assert state.action is TeachingAction.GENERATE_PRACTICE_QUESTION
     assert state.pedagogical_context_used is True
     assert state.recommended_exercise
-    assert "解方程" in state.recommended_exercise
+    assert state.generated_practice_problem
 
 
 def test_math_checker_priority_over_pedagogical_rag() -> None:

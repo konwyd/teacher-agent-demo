@@ -4,6 +4,7 @@ from app.agent.state import TeacherState, TeachingAction
 from app.agent.workflow import build_workflow, run_turn
 
 EXPECTED_ORDER = [
+    "context_resolver_node",
     "diagnose_node",
     "retrieve_node",
     "teaching_policy_node",

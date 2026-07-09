@@ -21,6 +21,7 @@ from pathlib import Path
 from langgraph.graph import END, START, StateGraph
 
 from app.agent import math_checker as mc
+from app.agent.context_resolver import ContextResolver
 from app.agent.math_checker import StepValidity
 from app.agent.state import (
     DiagnosisResult,
@@ -36,6 +37,10 @@ from app.agent.state import (
 from app.agent.socratic_policy import choose_socratic_decision
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 from app.memory.conversation_state import ConversationState, get_conversation_store
+from app.memory.episode_state import get_episode_store
+from app.memory.learning_history import append_learning_event
+from app.memory.profile_updater import get_profile_store, summarize_profile, update_profile_from_event
+from app.memory.schemas import EpisodeState, LearningEvent, now_iso
 from app.memory.student_state import ConceptMastery, get_store
 from app.retrieval.graph_retriever import ConceptNode, get_retriever
 from app.retrieval.pedagogical_retriever import get_pedagogical_retriever
@@ -218,6 +223,62 @@ def _anchor_gap(
 # ---------------------------------------------------------------- diagnose
 
 
+def _conversation_key(state: TeacherState) -> str:
+    return state.conversation_id or state.student_id
+
+
+def _conversation_store_key(state: TeacherState) -> str:
+    return f"{state.student_id}::{_conversation_key(state)}"
+
+
+_PRACTICE_REQUEST_TYPES = {
+    "generate_practice",
+    "generate_similar_exercise",
+    "generate_harder_exercise",
+    "generate_easier_exercise",
+}
+
+
+_PRACTICE_ACTIONS = {
+    TeachingAction.GENERATE_PRACTICE_QUESTION,
+    TeachingAction.GENERATE_SIMILAR_EXERCISE,
+    TeachingAction.GENERATE_HARDER_EXERCISE,
+    TeachingAction.GENERATE_EASIER_EXERCISE,
+    TeachingAction.SUMMARIZE_THEN_PRACTICE,
+}
+
+
+def _is_student_request(state: TeacherState) -> bool:
+    return bool(state.context_resolution.student_request_type)
+
+
+def context_resolver_node(state: TeacherState) -> dict:
+    conversation_id = _conversation_key(state)
+    episode = get_episode_store().get(state.student_id, conversation_id)
+    profile = get_profile_store().get_profile(state.student_id)
+    resolution = ContextResolver().resolve(
+        state.message,
+        episode_state=episode,
+        recent_turns=episode.recent_turns,
+        student_profile=profile,
+    )
+    pending_handled = (
+        resolution.is_reply_to_previous_teacher
+        and resolution.semantic_meaning == "verification_success"
+    )
+    return {
+        "trace": state.trace + ["context_resolver_node"],
+        "conversation_id": conversation_id,
+        "episode_state": episode,
+        "context_resolution": resolution,
+        "student_request_type": resolution.student_request_type or "",
+        "pending_reply_handled": pending_handled,
+        "current_phase": episode.current_phase,
+        "pending_question_type": episode.pending_question_type or "",
+        "expected_student_response": episode.expected_student_response or "",
+    }
+
+
 def _init_problem(conv: ConversationState, equation: str) -> None:
     conv.original_problem = equation
     conv.target_equation = equation
@@ -231,10 +292,100 @@ def _init_problem(conv: ConversationState, equation: str) -> None:
 
 def diagnose_node(state: TeacherState) -> dict:
     store = get_conversation_store()
-    conv = store.get(state.student_id)
+    conv_key = _conversation_key(state)
+    conv_store_key = _conversation_store_key(state)
+    conv = store.get(conv_store_key)
+    episode = state.episode_state or get_episode_store().get(state.student_id, conv_key)
     message = state.message
     extracted = mc.extract_equation(message)
     first_turn_for_problem = False
+
+    if episode.original_problem and not conv.original_problem:
+        conv.original_problem = episode.original_problem or ""
+        conv.target_equation = episode.target_equation or ""
+        conv.current_step = episode.current_solution_state or episode.target_equation or ""
+        conv.solved_steps = list(episode.solved_steps)
+        conv.solved = episode.is_problem_solved
+        store.save(conv)
+
+    if (
+        state.context_resolution.semantic_meaning == "verification_success"
+        and episode.original_problem
+    ):
+        concept, _confidence = _detect_concept(episode.original_problem)
+        diagnosis = DiagnosisResult(
+            intent=StudentIntent.ANSWER_CHECKING,
+            detected_concept=concept.name,
+            student_gap=StudentGap.UNKNOWN,
+            confidence=0.95,
+            reason="ContextResolver 判定学生在回答上一轮验算问题，跳过普通概念诊断。",
+        )
+        return {
+            "trace": state.trace + ["diagnose_node"],
+            "diagnosis": diagnosis,
+            "detected_concept_id": concept.id,
+            "detected_concept_name": concept.name,
+            "original_problem": episode.original_problem or "",
+            "target_equation": episode.target_equation or "",
+            "lesson_goal": "solve_for_x",
+            "current_step": episode.current_solution_state or "",
+            "expected_next_step": "",
+            "solved_steps": list(episode.solved_steps),
+            "pending_teacher_question": episode.last_teacher_question or "",
+            "last_student_answer": message,
+            "student_step_validity": "verification_success",
+            "student_equation": episode.current_solution_state or "",
+            "step_explanation": "学生完成代回验算，确认左右两边相等",
+            "response_kind": "verification_success",
+            "plan_steps": [],
+            "consecutive_wrong_steps": conv.consecutive_wrong_steps,
+            "problem_solved": True,
+            "pending_reply_handled": True,
+            "current_phase": "verification",
+            "pending_question_type": "verification_question",
+            "expected_student_response": "verification_result",
+        }
+
+    if _is_student_request(state):
+        source_problem = episode.original_problem or conv.original_problem or ""
+        requested_concept, requested_confidence = _detect_concept(message)
+        if requested_confidence >= 0.6:
+            concept, confidence = requested_concept, requested_confidence
+        else:
+            concept, confidence = _detect_concept(source_problem or message)
+        request_type = state.context_resolution.student_request_type or ""
+        intent = StudentIntent.REVIEW if request_type in {
+            "review_concept",
+            "summarize_current_problem",
+            "switch_topic",
+            "end_current_episode",
+        } else StudentIntent.PROBLEM_SOLVING
+        diagnosis = DiagnosisResult(
+            intent=intent,
+            detected_concept=concept.name,
+            student_gap=StudentGap.UNKNOWN,
+            confidence=max(confidence, 0.8),
+            reason=f"ContextResolver 判定这是教学请求：{request_type}，不按新数学题或原题延续处理。",
+        )
+        return {
+            "trace": state.trace + ["diagnose_node"],
+            "diagnosis": diagnosis,
+            "detected_concept_id": concept.id,
+            "detected_concept_name": concept.name,
+            "original_problem": episode.original_problem or conv.original_problem,
+            "target_equation": episode.target_equation or conv.target_equation,
+            "lesson_goal": conv.lesson_goal or "solve_for_x",
+            "current_step": episode.current_solution_state or conv.current_step,
+            "expected_next_step": conv.expected_next_step,
+            "solved_steps": list(episode.solved_steps or conv.solved_steps),
+            "pending_teacher_question": episode.last_teacher_question or conv.pending_teacher_question,
+            "last_student_answer": message,
+            "consecutive_wrong_steps": conv.consecutive_wrong_steps,
+            "problem_solved": episode.is_problem_solved or conv.solved,
+            "current_phase": episode.current_phase,
+            "pending_question_type": episode.pending_question_type or "",
+            "expected_student_response": episode.expected_student_response or "",
+        }
 
     # original_problem：首轮抽取；已存在则绝不覆盖（除非上一题已解完且带来新题）
     if not conv.original_problem:
@@ -242,11 +393,22 @@ def diagnose_node(state: TeacherState) -> dict:
             _init_problem(conv, extracted)
             first_turn_for_problem = True
             store.save(conv)
+            episode.original_problem = conv.original_problem
+            episode.target_equation = conv.target_equation
+            episode.current_phase = "solving"
+            episode.current_solution_state = conv.current_step
+            get_episode_store().save(episode)
     elif conv.solved and extracted and not mc.is_equivalent(extracted, conv.original_problem):
-        conv = store.reset(state.student_id)
+        conv = store.reset(conv_store_key)
         _init_problem(conv, extracted)
         first_turn_for_problem = True
         store.save(conv)
+        episode = get_episode_store().reset(state.student_id, conv_key)
+        episode.original_problem = conv.original_problem
+        episode.target_equation = conv.target_equation
+        episode.current_phase = "solving"
+        episode.current_solution_state = conv.current_step
+        get_episode_store().save(episode)
 
     # 基础诊断（知识点 / 基础意图 / 卡点）
     if is_configured():
@@ -365,6 +527,14 @@ def retrieve_node(state: TeacherState) -> dict:
     retriever = get_retriever()
     cid = state.detected_concept_id or DEFAULT_CONCEPT_ID
     concept = retriever.get_concept(cid)
+    if state.pending_reply_handled:
+        retrieval = RetrievalResult(concept_id=cid, concept_name=concept.name if concept else "")
+        return {
+            "trace": state.trace + ["retrieve_node"],
+            "retrieval": retrieval,
+            "pedagogical_context": PedagogicalContext(),
+            "pedagogical_context_used": False,
+        }
     record = get_store().get_concept_mastery(state.student_id, cid)
     retrieval = RetrievalResult(
         concept_id=cid,
@@ -545,9 +715,132 @@ def _select_pedagogical_usage(
     }
 
 
+def _practice_action_for_request(request_type: str) -> TeachingAction:
+    if request_type == "generate_similar_exercise":
+        return TeachingAction.GENERATE_SIMILAR_EXERCISE
+    if request_type == "generate_harder_exercise":
+        return TeachingAction.GENERATE_HARDER_EXERCISE
+    if request_type == "generate_easier_exercise":
+        return TeachingAction.GENERATE_EASIER_EXERCISE
+    if request_type == "summarize_current_problem":
+        return TeachingAction.SUMMARIZE_THEN_PRACTICE
+    return TeachingAction.GENERATE_PRACTICE_QUESTION
+
+
+def _extract_exercise_equation(text: str) -> str:
+    return mc.extract_equation(text) or ""
+
+
+def _practice_difficulty(record: ConceptMastery, request_type: str) -> str:
+    if request_type == "generate_harder_exercise":
+        return "hard"
+    if request_type == "generate_easier_exercise":
+        return "easy"
+    if record.mastery_score < 0.3:
+        return "easy"
+    if record.mastery_score >= 0.7:
+        return "hard"
+    return "medium"
+
+
+def _choose_practice_problem(state: TeacherState, record: ConceptMastery) -> dict:
+    request_type = state.context_resolution.student_request_type or "generate_practice"
+    difficulty = _practice_difficulty(record, request_type)
+    source = state.detected_concept_id or DEFAULT_CONCEPT_ID
+    original = state.original_problem or state.target_equation
+
+    presets = {
+        "easy": "x + 4 = 9",
+        "medium": "3x + 4 = 13",
+        "hard": "5x - 2 = 3x + 6",
+    }
+    problem = presets[difficulty]
+    generated_id = f"generated_{source}_{difficulty}"
+    reason = f"根据请求 {request_type} 和 mastery={record.mastery_score:.2f} 生成 {difficulty} 练习。"
+
+    if state.pedagogical_context.recommended_exercises and difficulty != "easy":
+        for idx, exercise in enumerate(state.pedagogical_context.recommended_exercises):
+            candidate = _extract_exercise_equation(exercise)
+            if candidate and (not original or not mc.is_equivalent(candidate, original)):
+                problem = candidate
+                generated_id = f"pedagogical_recommended_{idx + 1}"
+                reason += " 优先参考 Pedagogical RAG 的 recommended_exercises。"
+                break
+
+    if original and mc.is_equivalent(problem, original):
+        problem = "3x + 4 = 13" if difficulty != "hard" else "5x - 2 = 3x + 6"
+        generated_id = f"generated_{source}_{difficulty}_fallback"
+        reason += " 避免复用刚完成的原题。"
+
+    return {
+        "generated_practice_problem": problem,
+        "generated_exercise_id": generated_id,
+        "practice_difficulty": difficulty,
+        "source_concept": source,
+        "practice_generation_reason": reason,
+    }
+
+
 def teaching_policy_node(state: TeacherState) -> dict:
     diagnosis = state.diagnosis or DiagnosisResult()
     record = get_store().get_concept_mastery(state.student_id, state.detected_concept_id or DEFAULT_CONCEPT_ID)
+    if state.pending_reply_handled:
+        return {
+            "trace": state.trace + ["teaching_policy_node"],
+            "action": TeachingAction.SCHEDULE_REVIEW,
+            "socratic_stage": "summary",
+            "socratic_move": "confirm_verification",
+            "socratic_reason": "ContextResolver 已确认学生在回答验算问题，直接总结原题。",
+            "allowed_to_use_new_example": False,
+            "selected_hint_level": 0,
+            "matched_misconception": "",
+            "diagnostic_question_used": "",
+            "recommended_exercise": "",
+        }
+    request_type = state.context_resolution.student_request_type or ""
+    if request_type:
+        if request_type in _PRACTICE_REQUEST_TYPES or request_type == "summarize_current_problem":
+            action = _practice_action_for_request(request_type)
+            practice = _choose_practice_problem(state, record)
+            nxt = mc.suggest_next_step(practice["generated_practice_problem"])
+            expected = f"{nxt[0]}，得到 {nxt[1]}" if nxt else ""
+            return {
+                "trace": state.trace + ["teaching_policy_node"],
+                "action": action,
+                "socratic_stage": "rule_building",
+                "socratic_move": "generate_practice",
+                "socratic_reason": "学生请求老师生成练习题，使用画像和 Pedagogical RAG 选择难度。",
+                "allowed_to_use_new_example": True,
+                "original_problem": practice["generated_practice_problem"],
+                "target_equation": practice["generated_practice_problem"],
+                "current_step": practice["generated_practice_problem"],
+                "expected_next_step": expected,
+                "problem_solved": False,
+                "current_phase": "practice_generation",
+                "pending_question_type": "",
+                "expected_student_response": "",
+                "selected_hint_level": 0,
+                "matched_misconception": "",
+                "diagnostic_question_used": "",
+                "recommended_exercise": practice["generated_practice_problem"],
+                "student_request_type": request_type,
+                "whether_new_episode_started": True,
+                **practice,
+            }
+        if request_type == "review_concept":
+            return {
+                "trace": state.trace + ["teaching_policy_node"],
+                "action": TeachingAction.SCHEDULE_REVIEW,
+                "socratic_stage": "summary",
+                "socratic_move": "review_known_concepts",
+                "socratic_reason": "学生请求复习当前知识点。",
+                "allowed_to_use_new_example": False,
+                "selected_hint_level": 0,
+                "matched_misconception": "",
+                "diagnostic_question_used": "",
+                "recommended_exercise": "",
+                "student_request_type": request_type,
+            }
     action = _choose_action(
         diagnosis,
         record,
@@ -591,6 +884,11 @@ _ACTION_INSTRUCTIONS: dict[TeachingAction, str] = {
     TeachingAction.GIVE_HINT_LEVEL_2: "给二级提示：指出原题具体的下一步操作，但不给出最终答案。",
     TeachingAction.SHOW_WORKED_EXAMPLE: "演示一道类似例题的完整步骤，结尾必须回到学生的原题。",
     TeachingAction.GIVE_PRACTICE_QUESTION: "布置一道练习，说明考察点。",
+    TeachingAction.GENERATE_PRACTICE_QUESTION: "按学生请求生成一道新的练习题，并让学生先做第一步。",
+    TeachingAction.GENERATE_SIMILAR_EXERCISE: "生成一道同类型但数字不同的练习题，并让学生先做第一步。",
+    TeachingAction.GENERATE_HARDER_EXERCISE: "生成一道稍微进阶的练习题，并让学生独立尝试第一步。",
+    TeachingAction.GENERATE_EASIER_EXERCISE: "生成一道更基础的练习题，并让学生先完成一个小步骤。",
+    TeachingAction.SUMMARIZE_THEN_PRACTICE: "先简短总结当前题，再给一道新练习题。",
     TeachingAction.GRADE_AND_FEEDBACK: "根据步骤检查结果反馈：先肯定对的部分，指出错在哪一步。",
     TeachingAction.SCHEDULE_REVIEW: "安排复习：总结要点，给出复习建议。",
 }
@@ -711,6 +1009,16 @@ def _step_feedback_response(state: TeacherState) -> str:
     )
 
 
+def _verification_success_response(state: TeacherState) -> str:
+    problem = state.original_problem
+    answer = state.current_step or state.student_equation
+    return (
+        f"对，代回后两边一样，验算也成立。"
+        f"这说明原题 {problem} 已经完成，答案 {answer} 是正确的。"
+        f"我们可以进入下一题或复习易错点。"
+    )
+
+
 def _why_response(state: TeacherState) -> str:
     """解释“为什么移项变号”类问题：等式性质 + 抵消过程，严格围绕原题，不引入新题。"""
     original = state.original_problem
@@ -750,6 +1058,28 @@ def _selected_hint_text(state: TeacherState) -> str:
     return ""
 
 
+def _practice_generation_response(state: TeacherState) -> str:
+    problem = state.generated_practice_problem or state.original_problem
+    concept_name = state.detected_concept_name or "这个知识点"
+    if state.practice_difficulty == "easy":
+        level_note = "更基础的"
+        prompt = "为了把 x 单独留下，应该先处理哪一项？"
+    elif state.practice_difficulty == "hard":
+        level_note = "稍微进阶的"
+        prompt = "你先试着把含 x 的项移到同一边，可以吗？"
+    else:
+        level_note = "同类型但数字不同的"
+        prompt = "你先试试第一步：应该先处理哪一项？"
+    prefix = "可以。"
+    if state.action is TeachingAction.SUMMARIZE_THEN_PRACTICE:
+        prefix = f"小结一下：解{concept_name}时，通常先整理常数项，再把 x 的系数化为 1。"
+    return (
+        f"{prefix}我给你一题{level_note}练习：\n\n"
+        f"{problem}\n\n"
+        f"{prompt}"
+    )
+
+
 def _mock_response(state: TeacherState) -> str:
     """未配置 API key 时的确定性教学回复（严格围绕 original_problem）。"""
     diagnosis = state.diagnosis or DiagnosisResult()
@@ -757,6 +1087,9 @@ def _mock_response(state: TeacherState) -> str:
     action = state.action or TeachingAction.GIVE_HINT_LEVEL_1
     concept_name = state.detected_concept_name or "这个知识点"
     original = state.original_problem
+
+    if action in _PRACTICE_ACTIONS:
+        return _practice_generation_response(state)
 
     if diagnosis.intent is StudentIntent.ASKS_WHY:
         return _why_response(state)
@@ -886,7 +1219,11 @@ _CLOSING_QUESTIONS: dict[TeachingAction, str] = {
 def teach_node(state: TeacherState) -> dict:
     validity = state.student_step_validity
     retrieval = state.retrieval or RetrievalResult()
-    if validity in (
+    if state.context_resolution.semantic_meaning == "verification_success":
+        response = _verification_success_response(state)
+    elif state.action in _PRACTICE_ACTIONS:
+        response = _practice_generation_response(state)
+    elif validity in (
         StepValidity.CORRECT_STEP.value,
         StepValidity.CORRECT_FINAL_ANSWER.value,
         StepValidity.INCORRECT_STEP.value,
@@ -945,6 +1282,10 @@ def memory_update_node(state: TeacherState) -> dict:
         StepValidity.INCORRECT_STEP.value,
     ):
         step_result = validity
+    elif state.context_resolution.semantic_meaning == "verification_success":
+        step_result = "correct_step"
+    elif state.context_resolution.student_request_type:
+        step_result = "practice_requested"
     else:
         step_result = "help_requested"
     after = store.update_mastery_after_turn(
@@ -983,9 +1324,144 @@ def _last_question(response: str) -> str:
     return sentences[-1] if sentences else ""
 
 
+def _infer_skill_id(state: TeacherState, event_type: str) -> str | None:
+    text = " ".join([state.message, state.response, state.step_explanation, state.detected_concept_name or ""])
+    if "除" in text or "系数" in text:
+        return "divide_by_coefficient"
+    if "移项" in text or "变号" in text:
+        return "move_terms"
+    if "括号" in text:
+        return "remove_parentheses"
+    if event_type in ("correct_step", "solved_problem", "verification_success"):
+        return "solve_linear_equation"
+    return None
+
+
+def _generate_learning_events(state: TeacherState) -> list[LearningEvent]:
+    cid = state.detected_concept_id or DEFAULT_CONCEPT_ID
+    base = {
+        "student_id": state.student_id,
+        "conversation_id": _conversation_key(state),
+        "concept_id": cid,
+        "problem": state.original_problem or None,
+    }
+    events: list[LearningEvent] = []
+    validity = state.student_step_validity
+    if validity == StepValidity.CORRECT_STEP.value:
+        events.append(LearningEvent(
+            **base,
+            skill_id=_infer_skill_id(state, "correct_step"),
+            event_type="correct_step",
+            evidence_text=state.student_equation or state.message,
+            confidence=0.95,
+        ))
+    elif validity == StepValidity.CORRECT_FINAL_ANSWER.value:
+        events.append(LearningEvent(
+            **base,
+            skill_id=_infer_skill_id(state, "solved_problem"),
+            event_type="solved_problem",
+            evidence_text=state.student_equation or state.message,
+            confidence=0.98,
+        ))
+    elif validity == StepValidity.INCORRECT_STEP.value:
+        events.append(LearningEvent(
+            **base,
+            skill_id=_infer_skill_id(state, "wrong_step"),
+            event_type="wrong_step",
+            evidence_text=state.student_equation or state.message,
+            confidence=0.9,
+        ))
+        misconception = mc.classify_misconception(
+            state.current_step or state.target_equation, state.student_equation
+        )
+        if misconception:
+            events.append(LearningEvent(
+                **base,
+                skill_id=_infer_skill_id(state, "misconception"),
+                event_type="misconception",
+                evidence_text=state.message,
+                confidence=0.9,
+                metadata={"misconception": misconception},
+            ))
+    elif state.context_resolution.semantic_meaning == "verification_success":
+        events.append(LearningEvent(
+            **base,
+            skill_id="verify_solution",
+            event_type="verification_success",
+            evidence_text=state.message,
+            confidence=0.95,
+        ))
+        events.append(LearningEvent(
+            **base,
+            skill_id="solve_linear_equation",
+            event_type="completed_episode",
+            evidence_text=state.response,
+            confidence=0.95,
+        ))
+    elif state.diagnosis and state.diagnosis.intent is StudentIntent.ASKS_WHY:
+        events.append(LearningEvent(
+            **base,
+            skill_id=None,
+            event_type="asked_why",
+            evidence_text=state.message,
+            confidence=0.8,
+        ))
+    elif state.diagnosis and state.diagnosis.intent is StudentIntent.CONFUSED:
+        events.append(LearningEvent(
+            **base,
+            skill_id=None,
+            event_type="expressed_confusion",
+            evidence_text=state.message,
+            confidence=0.75,
+        ))
+    elif state.context_resolution.dialogue_act == "off_topic":
+        events.append(LearningEvent(
+            **base,
+            skill_id=None,
+            event_type="off_topic",
+            evidence_text=state.message,
+            confidence=0.7,
+        ))
+    elif state.context_resolution.student_request_type:
+        events.append(LearningEvent(
+            **base,
+            skill_id=None,
+            event_type="practice_requested",
+            evidence_text=state.message,
+            confidence=0.85,
+            metadata={
+                "student_request_type": state.context_resolution.student_request_type,
+                "generated_problem": state.generated_practice_problem,
+                "practice_difficulty": state.practice_difficulty,
+            },
+        ))
+    return events
+
+
+def _infer_pending_question(response: str, state: TeacherState) -> tuple[str, str, str]:
+    if state.action in _PRACTICE_ACTIONS:
+        return "practice_solving", "next_step_question", "remove_constant_term"
+    if not _last_question(response):
+        return "completed" if state.problem_solved else state.current_phase or "solving", "", ""
+    if "代回" in response or "两边相等" in response:
+        return "verification", "verification_question", "verification_result"
+    if state.action is TeachingAction.ASK_DIAGNOSTIC_QUESTION:
+        return "checking_step", "diagnostic_question", "diagnostic_answer"
+    if "下一步" in response or "除以" in response or "写出结果" in response:
+        return "solving", "next_step_question", "next_step_or_answer"
+    if state.action is TeachingAction.GIVE_PRACTICE_QUESTION:
+        return "solving", "practice_answer", "practice_solution"
+    return state.current_phase or "solving", "summary_check", "student_ack"
+
+
 def log_node(state: TeacherState) -> dict:
     log_id = uuid.uuid4().hex
     update = state.mastery_update
+    events = _generate_learning_events(state)
+    for event in events:
+        append_learning_event(state.student_id, event)
+        update_profile_from_event(event)
+    profile_summary = summarize_profile(state.student_id)
 
     used_new_example = (
         mc.uses_new_example(state.response, state.target_equation) if state.target_equation else False
@@ -1018,6 +1494,20 @@ def log_node(state: TeacherState) -> dict:
         matched_misconception=state.matched_misconception,
         diagnostic_question_used=state.diagnostic_question_used,
         recommended_exercise=state.recommended_exercise,
+        student_request_type=state.context_resolution.student_request_type or state.student_request_type,
+        generated_practice_problem=state.generated_practice_problem,
+        generated_exercise_id=state.generated_exercise_id,
+        practice_generation_reason=state.practice_generation_reason,
+        practice_difficulty=state.practice_difficulty,
+        source_concept=state.source_concept,
+        whether_new_episode_started=state.whether_new_episode_started,
+        conversation_id=_conversation_key(state),
+        current_phase=state.current_phase,
+        pending_question_type=state.pending_question_type,
+        expected_student_response=state.expected_student_response,
+        context_resolution=state.context_resolution,
+        learning_events_this_turn=events,
+        updated_profile_summary=profile_summary,
     )
     path = _log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1026,7 +1516,11 @@ def log_node(state: TeacherState) -> dict:
 
     # 回写跨轮对话状态
     store = get_conversation_store()
-    conv = store.get(state.student_id)
+    if state.generated_practice_problem:
+        conv = store.reset(_conversation_store_key(state))
+        _init_problem(conv, state.generated_practice_problem)
+    else:
+        conv = store.get(_conversation_store_key(state))
     conv.last_student_answer = state.message
     conv.pending_teacher_question = _last_question(state.response)
     if state.student_step_validity == StepValidity.CORRECT_STEP.value and state.student_equation:
@@ -1047,12 +1541,70 @@ def log_node(state: TeacherState) -> dict:
         conv.consecutive_wrong_steps = 0
     store.save(conv)
 
-    return {"trace": state.trace + ["log_node"], "log_id": log_id}
+    # 回写 Layer 2 episode state
+    episode = state.episode_state or get_episode_store().get(state.student_id, _conversation_key(state))
+    episode.original_problem = state.original_problem or episode.original_problem
+    episode.target_equation = state.target_equation or episode.target_equation
+    episode.current_solution_state = state.student_equation or state.current_step or episode.current_solution_state
+    if state.generated_practice_problem:
+        episode.original_problem = state.generated_practice_problem
+        episode.target_equation = state.generated_practice_problem
+        episode.current_solution_state = state.generated_practice_problem
+        episode.pending_practice_problem = state.generated_practice_problem
+        episode.solved_steps = []
+    if state.student_step_validity in (
+        StepValidity.CORRECT_STEP.value,
+        StepValidity.CORRECT_FINAL_ANSWER.value,
+    ) and state.student_equation:
+        if state.student_equation not in episode.solved_steps:
+            episode.solved_steps.append(state.student_equation)
+    phase, pending_type, expected = _infer_pending_question(state.response, state)
+    if state.context_resolution.semantic_meaning == "verification_success":
+        phase, pending_type, expected = "completed", "", ""
+        episode.is_problem_solved = True
+    elif state.student_step_validity == StepValidity.CORRECT_FINAL_ANSWER.value:
+        episode.is_problem_solved = False
+    else:
+        episode.is_problem_solved = conv.solved and pending_type == ""
+    episode.current_phase = phase
+    episode.last_teacher_question = _last_question(state.response) or None
+    episode.pending_question_type = pending_type or None
+    episode.expected_student_response = expected or None
+    episode.recent_turns = (episode.recent_turns + [{
+        "timestamp": now_iso(),
+        "student_message": state.message,
+        "teacher_response": state.response,
+        "dialogue_act": state.context_resolution.dialogue_act,
+        "student_request_type": state.context_resolution.student_request_type,
+        "generated_practice_problem": state.generated_practice_problem,
+        "practice_difficulty": state.practice_difficulty,
+        "teaching_action": state.action.value if state.action else "",
+    }])[-8:]
+    get_episode_store().save(episode)
+
+    return {
+        "trace": state.trace + ["log_node"],
+        "log_id": log_id,
+        "episode_state": episode,
+        "current_phase": episode.current_phase,
+        "pending_question_type": episode.pending_question_type or "",
+        "expected_student_response": episode.expected_student_response or "",
+        "learning_events_this_turn": events,
+        "updated_profile_summary": profile_summary,
+        "student_request_type": state.context_resolution.student_request_type or state.student_request_type,
+        "generated_practice_problem": state.generated_practice_problem,
+        "generated_exercise_id": state.generated_exercise_id,
+        "practice_generation_reason": state.practice_generation_reason,
+        "practice_difficulty": state.practice_difficulty,
+        "source_concept": state.source_concept,
+        "whether_new_episode_started": state.whether_new_episode_started,
+    }
 
 
 # ---------------------------------------------------------------- graph
 
 _NODE_ORDER = [
+    "context_resolver_node",
     "diagnose_node",
     "retrieve_node",
     "teaching_policy_node",
@@ -1062,6 +1614,7 @@ _NODE_ORDER = [
 ]
 
 _NODE_FUNCS = {
+    "context_resolver_node": context_resolver_node,
     "diagnose_node": diagnose_node,
     "retrieve_node": retrieve_node,
     "teaching_policy_node": teaching_policy_node,
@@ -1083,8 +1636,12 @@ def build_workflow():
     return graph.compile()
 
 
-def run_turn(student_id: str, message: str) -> TeacherState:
+def run_turn(student_id: str, message: str, conversation_id: str | None = None) -> TeacherState:
     """Run one teaching turn and return the final state."""
     app = build_workflow()
-    result = app.invoke(TeacherState(student_id=student_id, message=message))
+    result = app.invoke(TeacherState(
+        student_id=student_id,
+        message=message,
+        conversation_id=conversation_id,
+    ))
     return TeacherState.model_validate(result)

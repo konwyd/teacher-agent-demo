@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.memory.schemas import ContextResolution, EpisodeState, LearningEvent
+
 
 class TeachingAction(str, Enum):
     """Allowed teaching actions (see CLAUDE.md)."""
@@ -17,6 +19,11 @@ class TeachingAction(str, Enum):
     GIVE_HINT_LEVEL_2 = "give_hint_level_2"
     SHOW_WORKED_EXAMPLE = "show_worked_example"
     GIVE_PRACTICE_QUESTION = "give_practice_question"
+    GENERATE_PRACTICE_QUESTION = "generate_practice_question"
+    GENERATE_SIMILAR_EXERCISE = "generate_similar_exercise"
+    GENERATE_HARDER_EXERCISE = "generate_harder_exercise"
+    GENERATE_EASIER_EXERCISE = "generate_easier_exercise"
+    SUMMARIZE_THEN_PRACTICE = "summarize_then_practice"
     GRADE_AND_FEEDBACK = "grade_and_feedback"
     SCHEDULE_REVIEW = "schedule_review"
 
@@ -138,6 +145,20 @@ class TurnLog(BaseModel):
     matched_misconception: str = ""
     diagnostic_question_used: str = ""
     recommended_exercise: str = ""
+    student_request_type: str = ""
+    generated_practice_problem: str = ""
+    generated_exercise_id: str = ""
+    practice_generation_reason: str = ""
+    practice_difficulty: str = ""
+    source_concept: str = ""
+    whether_new_episode_started: bool = False
+    conversation_id: str = ""
+    current_phase: str = ""
+    pending_question_type: str = ""
+    expected_student_response: str = ""
+    context_resolution: ContextResolution = Field(default_factory=ContextResolution)
+    learning_events_this_turn: list[LearningEvent] = Field(default_factory=list)
+    updated_profile_summary: dict = Field(default_factory=dict)
 
 
 class TeacherState(BaseModel):
@@ -146,6 +167,12 @@ class TeacherState(BaseModel):
     # input
     student_id: str
     message: str
+    conversation_id: str | None = None
+
+    # context resolution + episode memory
+    episode_state: EpisodeState | None = None
+    context_resolution: ContextResolution = Field(default_factory=ContextResolution)
+    pending_reply_handled: bool = False
 
     # diagnose
     diagnosis: Optional[DiagnosisResult] = None
@@ -174,6 +201,9 @@ class TeacherState(BaseModel):
     plan_steps: list[str] = Field(default_factory=list)
     consecutive_wrong_steps: int = 0
     problem_solved: bool = False
+    current_phase: str = ""
+    pending_question_type: str = ""
+    expected_student_response: str = ""
 
     # policy + teach
     action: Optional[TeachingAction] = None
@@ -186,6 +216,13 @@ class TeacherState(BaseModel):
     matched_misconception: str = ""
     diagnostic_question_used: str = ""
     recommended_exercise: str = ""
+    student_request_type: str = ""
+    generated_practice_problem: str = ""
+    generated_exercise_id: str = ""
+    practice_generation_reason: str = ""
+    practice_difficulty: str = ""
+    source_concept: str = ""
+    whether_new_episode_started: bool = False
 
     # memory
     mastery_update: Optional[StudentMasteryUpdate] = None
@@ -193,6 +230,8 @@ class TeacherState(BaseModel):
     mastery_delta: float = 0.0
     known_misconceptions: list[str] = Field(default_factory=list)
     recommended_next_action: str = ""
+    learning_events_this_turn: list[LearningEvent] = Field(default_factory=list)
+    updated_profile_summary: dict = Field(default_factory=dict)
 
     # log
     log_id: Optional[str] = None

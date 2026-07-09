@@ -11,3 +11,6 @@ def offline_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setenv("TEACHER_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("TEACHER_PROFILE_PATH", str(tmp_path / "student_profiles.json"))
+    monkeypatch.setenv("TEACHER_EPISODE_PATH", str(tmp_path / "episode_states.json"))
+    monkeypatch.setenv("TEACHER_LEARNING_EVENTS_PATH", str(tmp_path / "learning_events.jsonl"))
+    monkeypatch.setenv("TEACHER_THREE_LAYER_PROFILE_PATH", str(tmp_path / "student_profiles_v2.json"))
