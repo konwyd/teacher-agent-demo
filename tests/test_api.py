@@ -60,3 +60,21 @@ def test_turn_returns_all_fields() -> None:
     assert data["student_mastery_before"] == 0.5  # 新学生中性初始
     assert data["mastery_delta"] == -0.05         # 求助视为轻微未掌握信号
     assert data["recommended_next_action"] != ""
+
+
+def test_turn_projects_an_unsupported_topic_without_a_linear_concept() -> None:
+    resp = client.post(
+        "/turn",
+        json={
+            "student_id": "api_generic_student",
+            "message": "三角形的内角和为什么是180度？",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["detected_concept"] is None
+    assert data["teaching_action_kind"] == "explain_step"
+    assert data["teaching_state"]["graph_context"]["available"] is False
+    assert data["teaching_state"]["verification"]["status"] == "not_applicable"
+    assert data["response"].count("？") == 1

@@ -51,6 +51,12 @@ class JsonEpisodeStateStore:
             self._flush()
         return self._episodes[key]
 
+    def find(self, student_id: str, conversation_id: str | None = None) -> EpisodeState | None:
+        """Return an existing episode without creating or persisting a new one."""
+
+        cid = conversation_id or student_id
+        return self._episodes.get(self._key(student_id, cid))
+
     def save(self, episode: EpisodeState) -> None:
         self._episodes[self._key(episode.student_id, episode.conversation_id)] = episode
         self._flush()

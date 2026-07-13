@@ -57,6 +57,17 @@ class TeachingActionPlan(BaseModel):
     requires_student_response: bool = True
 
 
+class TeachingIntent(str, Enum):
+    """Topic-agnostic interaction intent inferred for one tutoring turn."""
+
+    UNKNOWN = "unknown"
+    ASKS_WHY = "asks_why"
+    REQUESTS_EXAMPLE = "requests_example"
+    REQUESTS_PRACTICE = "requests_practice"
+    REQUESTS_ANSWER = "requests_answer"
+    EXPRESSES_CONFUSION = "expresses_confusion"
+
+
 class MathAnalysis(BaseModel):
     """Advisory mathematical analysis for a tutoring turn.
 
@@ -67,6 +78,7 @@ class MathAnalysis(BaseModel):
     problem_summary: str = ""
     attempt_summary: str = ""
     likely_obstacle: str = ""
+    intent: TeachingIntent = TeachingIntent.UNKNOWN
     evidence: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     needs_clarification: bool = False
@@ -140,6 +152,17 @@ _LEGACY_TO_TEACHING_ACTION: dict[TeachingAction, TeachingActionKind] = {
     TeachingAction.SUMMARIZE_THEN_PRACTICE: TeachingActionKind.OFFER_PRACTICE,
     TeachingAction.GRADE_AND_FEEDBACK: TeachingActionKind.CHECK_UNDERSTANDING,
     TeachingAction.SCHEDULE_REVIEW: TeachingActionKind.FINISH,
+}
+
+_TEACHING_TO_LEGACY_ACTION: dict[TeachingActionKind, TeachingAction] = {
+    TeachingActionKind.ASSESS: TeachingAction.ASK_DIAGNOSTIC_QUESTION,
+    TeachingActionKind.DIAGNOSE: TeachingAction.ASK_DIAGNOSTIC_QUESTION,
+    TeachingActionKind.GIVE_HINT: TeachingAction.GIVE_HINT_LEVEL_1,
+    TeachingActionKind.EXPLAIN_STEP: TeachingAction.EXPLAIN_CONCEPT,
+    TeachingActionKind.CHECK_UNDERSTANDING: TeachingAction.GRADE_AND_FEEDBACK,
+    TeachingActionKind.SHOW_WORKED_EXAMPLE: TeachingAction.SHOW_WORKED_EXAMPLE,
+    TeachingActionKind.OFFER_PRACTICE: TeachingAction.GIVE_PRACTICE_QUESTION,
+    TeachingActionKind.FINISH: TeachingAction.SCHEDULE_REVIEW,
 }
 
 
@@ -479,4 +502,39 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
         graph_context=graph_context,
         response=legacy_state.response,
         trace=list(legacy_state.trace),
+    )
+
+
+def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> TeacherState:
+    """Adapt the generic runtime result for callers of the legacy ``run_turn`` API.
+
+    This projection is an output compatibility boundary only.  The generic
+    harness never reads equation fields or legacy actions to make a decision.
+    """
+
+    action_plan = teaching_state.action_plan
+    action = (
+        _TEACHING_TO_LEGACY_ACTION[action_plan.action]
+        if action_plan is not None
+        else TeachingAction.ASK_DIAGNOSTIC_QUESTION
+    )
+    return TeacherState(
+        student_id=teaching_state.student_id,
+        message=teaching_state.message,
+        conversation_id=teaching_state.conversation_id,
+        diagnosis=DiagnosisResult(
+            confidence=teaching_state.math_analysis.confidence,
+            reason="generic_teaching_harness",
+        ),
+        original_problem=teaching_state.problem_context,
+        lesson_goal=teaching_state.learning_goal,
+        current_step=teaching_state.progress_summary,
+        pending_teacher_question=teaching_state.pending_teacher_question,
+        expected_student_response=teaching_state.expected_student_response,
+        current_phase=teaching_state.current_phase,
+        problem_solved=teaching_state.answer_disclosure_allowed,
+        action=action,
+        selected_hint_level=action_plan.hint_level if action_plan else 0,
+        response=teaching_state.response,
+        trace=list(teaching_state.trace),
     )

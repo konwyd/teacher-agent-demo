@@ -1,0 +1,3 @@
+{"id":"ratio_hint","student_id":"smoke_ratio","message":"男生和女生人数的比是3:2，总数30人，我不知道先想什么。","allowed_actions":["give_hint"],"forbidden_answer_tokens":["18","12"]}
+{"id":"geometry_why","student_id":"smoke_geometry","message":"三角形的内角和为什么是180度？","allowed_actions":["explain_step"],"forbidden_answer_tokens":["180"]}
+{"id":"data_interpretation","student_id":"smoke_data","message":"一组数据的平均数表示什么，我不明白怎么理解。","allowed_actions":["give_hint"],"forbidden_answer_tokens":["8"]}
