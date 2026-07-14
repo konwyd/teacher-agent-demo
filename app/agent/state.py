@@ -53,6 +53,7 @@ class TeachingActionPlan(BaseModel):
     action: TeachingActionKind
     hint_level: int = Field(default=0, ge=0, le=3)
     allow_worked_example: bool = False
+    answer_disclosure_allowed: bool = False
     rationale: str = ""
     requires_student_response: bool = True
 

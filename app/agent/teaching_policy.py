@@ -33,6 +33,24 @@ class TeachingPolicy:
             )
 
         intent = state.math_analysis.intent
+        if (
+            state.math_analysis.needs_clarification
+            or state.math_reasoning.needs_clarification
+        ):
+            return TeachingActionPlan(
+                action=TeachingActionKind.DIAGNOSE,
+                rationale="题意或推理不可靠，先澄清。",
+            )
+        if (
+            intent is TeachingIntent.REQUESTS_ANSWER
+            and state.math_reasoning.confidence >= 0.8
+            and state.math_reasoning.candidate_conclusion
+        ):
+            return TeachingActionPlan(
+                action=TeachingActionKind.EXPLAIN_STEP,
+                answer_disclosure_allowed=True,
+                rationale="学生明确请求答案且推理置信度足够。",
+            )
         if intent is TeachingIntent.REQUESTS_EXAMPLE:
             return TeachingActionPlan(
                 action=TeachingActionKind.SHOW_WORKED_EXAMPLE,
@@ -49,7 +67,13 @@ class TeachingPolicy:
                 action=TeachingActionKind.EXPLAIN_STEP,
                 rationale="学生询问推理依据。",
             )
-        if state.math_analysis.needs_clarification or intent is TeachingIntent.UNKNOWN:
+        if state.math_reasoning.next_step_hint or state.math_reasoning.reasoning_steps:
+            return TeachingActionPlan(
+                action=TeachingActionKind.GIVE_HINT,
+                hint_level=1,
+                rationale="已有可教学的下一步推理，但未获答案披露授权。",
+            )
+        if intent is TeachingIntent.UNKNOWN:
             return TeachingActionPlan(
                 action=TeachingActionKind.DIAGNOSE,
                 rationale="当前意图或问题信息不足，先诊断。",

@@ -3,6 +3,8 @@
 from app.agent.math_analysis import analyze_turn
 from app.agent.response_generation import generate_response
 from app.agent.state import (
+    GenericMathReasoning,
+    MathAnalysis,
     TeachingActionKind,
     TeachingIntent,
     TeachingState,
@@ -58,3 +60,39 @@ def test_example_request_is_an_explicit_action() -> None:
 
     assert action.action is TeachingActionKind.SHOW_WORKED_EXAMPLE
     assert action.allow_worked_example is True
+
+
+def test_explicit_answer_request_allows_high_confidence_candidate_only() -> None:
+    state = TeachingState(
+        student_id="ratio-student",
+        message="直接告诉我完整答案。",
+        problem_context="男生和女生人数的比是3:2，总数30人。",
+        math_analysis=MathAnalysis(intent=TeachingIntent.REQUESTS_ANSWER),
+        math_reasoning=GenericMathReasoning(
+            candidate_conclusion="男生18人，女生12人。",
+            confidence=0.8,
+        ),
+    )
+
+    action = TeachingPolicy().choose(state)
+
+    assert action.action is TeachingActionKind.EXPLAIN_STEP
+    assert action.answer_disclosure_allowed is True
+
+
+def test_hint_request_never_allows_candidate_conclusion() -> None:
+    state = TeachingState(
+        student_id="ratio-student",
+        message="给我一个提示。",
+        problem_context="男生和女生人数的比是3:2，总数30人。",
+        math_reasoning=GenericMathReasoning(
+            next_step_hint="先求总份数。",
+            candidate_conclusion="男生18人，女生12人。",
+            confidence=0.99,
+        ),
+    )
+
+    action = TeachingPolicy().choose(state)
+
+    assert action.action is TeachingActionKind.GIVE_HINT
+    assert action.answer_disclosure_allowed is False
