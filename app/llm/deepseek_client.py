@@ -63,6 +63,7 @@ class DeepSeekClient:
         self,
         settings: DeepSeekSettings | None = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_retries: int = 1,
     ) -> None:
         self.settings = settings or DeepSeekSettings()
         if not self.settings.deepseek_api_key:
@@ -73,7 +74,7 @@ class DeepSeekClient:
             api_key=self.settings.deepseek_api_key,
             base_url=self.settings.deepseek_base_url,
             timeout=timeout,
-            max_retries=1,
+            max_retries=max_retries,
         )
 
     def chat(

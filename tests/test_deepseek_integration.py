@@ -140,3 +140,22 @@ def test_chat_json_forwards_optional_max_tokens() -> None:
 
     assert reply.text == "ok"
     assert completions.calls[-1]["max_tokens"] == 450
+
+
+def test_client_can_disable_transport_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.llm import deepseek_client
+
+    calls: list[dict] = []
+
+    class _RecordingOpenAI:
+        def __init__(self, **kwargs) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(deepseek_client, "OpenAI", _RecordingOpenAI)
+
+    deepseek_client.DeepSeekClient(
+        settings=deepseek_client.DeepSeekSettings(deepseek_api_key="test-key"),
+        max_retries=0,
+    )
+
+    assert calls[-1]["max_retries"] == 0
