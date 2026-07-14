@@ -347,6 +347,7 @@ class TeacherState(BaseModel):
 
     # diagnose
     diagnosis: Optional[DiagnosisResult] = None
+    math_reasoning: GenericMathReasoning = Field(default_factory=GenericMathReasoning)
     detected_concept_id: Optional[str] = None
     detected_concept_name: Optional[str] = None
 
@@ -492,6 +493,7 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
             action=action,
             hint_level=_legacy_hint_level(legacy_state),
             allow_worked_example=legacy_state.allowed_to_use_new_example,
+            answer_disclosure_allowed=legacy_state.problem_solved,
             rationale=legacy_state.socratic_reason,
             requires_student_response=not legacy_state.problem_solved,
         )
@@ -513,6 +515,7 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
         answer_disclosure_allowed=legacy_state.problem_solved,
         action_plan=action_plan,
         math_analysis=math_analysis,
+        math_reasoning=legacy_state.math_reasoning,
         verification=_project_verification_result(legacy_state),
         graph_context=graph_context,
         response=legacy_state.response,
@@ -541,6 +544,7 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
             confidence=teaching_state.math_analysis.confidence,
             reason="generic_teaching_harness",
         ),
+        math_reasoning=teaching_state.math_reasoning,
         original_problem=teaching_state.problem_context,
         lesson_goal=teaching_state.learning_goal,
         current_step=teaching_state.progress_summary,

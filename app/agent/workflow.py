@@ -35,6 +35,9 @@ def run_teaching_turn(
     *,
     verifier=None,
     graph_context_provider=None,
+    reasoner=None,
+    response_client=None,
+    analysis_allow_llm: bool = True,
 ) -> TeachingState:
     """Run the default neutral teaching harness for one tutoring turn."""
 
@@ -47,6 +50,9 @@ def run_teaching_turn(
         conversation_id,
         verifier=verifier,
         graph_context_provider=graph_context_provider,
+        reasoner=reasoner,
+        response_client=response_client,
+        analysis_allow_llm=analysis_allow_llm,
     )
 
 

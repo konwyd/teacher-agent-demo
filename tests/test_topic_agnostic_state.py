@@ -16,6 +16,7 @@ from app.agent.state import (
     VerificationStatus,
     project_teacher_state,
     project_teaching_action,
+    project_teaching_state_to_teacher_state,
 )
 
 
@@ -95,3 +96,22 @@ def test_legacy_teacher_state_projects_without_mutating_equation_state() -> None
     assert projected.math_analysis.confidence == 0.8
     assert legacy.target_equation == "2x + 3 = 7"
     assert "target_equation" not in projected.model_dump()
+
+
+def test_generic_reasoning_survives_legacy_compatibility_projection() -> None:
+    generic = TeachingState(
+        student_id="geometry-student",
+        message="三角形内角和为什么是180度？",
+        problem_context="三角形内角和为什么是180度？",
+        math_reasoning=GenericMathReasoning(
+            reasoning_steps=["把三角形分割后可拼成平角。"],
+            next_step_hint="观察拼接后的角。",
+            confidence=0.9,
+        ),
+    )
+
+    round_tripped = project_teacher_state(
+        project_teaching_state_to_teacher_state(generic)
+    )
+
+    assert round_tripped.math_reasoning.reasoning_steps == ["把三角形分割后可拼成平角。"]

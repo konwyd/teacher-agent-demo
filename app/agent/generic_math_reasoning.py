@@ -41,7 +41,6 @@ class GenericMathReasoner:
             )
         if self._client is None and not is_configured():
             return GenericMathReasoning(
-                needs_clarification=True,
                 uncertainty_note="未配置通用数学推理模型。",
             )
 

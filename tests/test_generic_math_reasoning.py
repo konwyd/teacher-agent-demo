@@ -75,3 +75,15 @@ def test_analysis_can_disable_its_llm_for_budgeted_smoke(
     )
 
     assert result.intent.value == "asks_why"
+
+
+def test_unconfigured_reasoner_leaves_a_safe_generic_hint_available() -> None:
+    result = GenericMathReasoner().analyze(
+        "我不知道先想什么。",
+        "男生和女生人数的比是3:2，总数30人。",
+        MathAnalysis(),
+    )
+
+    assert result.needs_clarification is False
+    assert result.reasoning_steps == []
+    assert result.uncertainty_note
