@@ -15,6 +15,7 @@ from app.agent.state import (
     project_teaching_state_to_teacher_state,
 )
 from app.agent.teaching_harness import run_generic_teaching_turn
+from app.retrieval.graph_retriever import get_retriever as _legacy_graph_retriever
 
 
 def _run_legacy_turn_if_supported(
@@ -31,13 +32,22 @@ def run_teaching_turn(
     student_id: str,
     message: str,
     conversation_id: str | None = None,
+    *,
+    verifier=None,
+    graph_context_provider=None,
 ) -> TeachingState:
     """Run the default neutral teaching harness for one tutoring turn."""
 
     legacy_state = _run_legacy_turn_if_supported(student_id, message, conversation_id)
     if legacy_state is not None:
         return project_teacher_state(legacy_state)
-    return run_generic_teaching_turn(student_id, message, conversation_id)
+    return run_generic_teaching_turn(
+        student_id,
+        message,
+        conversation_id,
+        verifier=verifier,
+        graph_context_provider=graph_context_provider,
+    )
 
 
 def run_turn(
@@ -69,7 +79,9 @@ _choose_action = _legacy._choose_action
 _keep_single_question = _legacy._keep_single_question
 postprocess_teacher_response = _legacy.postprocess_teacher_response
 _anchor_gap = _legacy._anchor_gap
-get_retriever = _legacy.get_retriever
+# This read-only export remains for a pre-existing integration test and legacy
+# inspection callers. Runtime teaching goes through the context provider above.
+get_retriever = _legacy_graph_retriever
 context_resolver_node = _legacy.context_resolver_node
 retrieve_node = _legacy.retrieve_node
 teaching_policy_node = _legacy.teaching_policy_node

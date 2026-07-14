@@ -98,15 +98,21 @@ def get_mode_configuration(mode: EvalMode | str) -> ModeConfiguration:
 
 @contextmanager
 def _graph_setting(enabled: bool) -> Iterator[None]:
-    previous = os.environ.get("USE_PEDAGOGICAL_RAG")
+    previous_pedagogical = os.environ.get("USE_PEDAGOGICAL_RAG")
+    previous_graph = os.environ.get("USE_GRAPH_CONTEXT")
     os.environ["USE_PEDAGOGICAL_RAG"] = "true" if enabled else "false"
+    os.environ["USE_GRAPH_CONTEXT"] = "true" if enabled else "false"
     try:
         yield
     finally:
-        if previous is None:
+        if previous_pedagogical is None:
             os.environ.pop("USE_PEDAGOGICAL_RAG", None)
         else:
-            os.environ["USE_PEDAGOGICAL_RAG"] = previous
+            os.environ["USE_PEDAGOGICAL_RAG"] = previous_pedagogical
+        if previous_graph is None:
+            os.environ.pop("USE_GRAPH_CONTEXT", None)
+        else:
+            os.environ["USE_GRAPH_CONTEXT"] = previous_graph
 
 
 def _metrics(checks: list[tuple[str, CheckResult]]) -> TeacherQualityMetrics:

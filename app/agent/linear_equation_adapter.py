@@ -42,24 +42,51 @@ from app.memory.learning_history import append_learning_event
 from app.memory.profile_updater import get_profile_store, summarize_profile, update_profile_from_event
 from app.memory.schemas import EpisodeState, LearningEvent, now_iso
 from app.memory.student_state import ConceptMastery, get_store
+from app.retrieval.context_provider import (
+    get_graph_context_provider,
+    graph_context_enabled,
+)
 from app.retrieval.graph_retriever import (
     ConceptNode,
     RetrievalEvidence,
-    get_local_pedagogical_graph_retriever,
-    get_retriever,
 )
 
 DEFAULT_CONCEPT_ID = "c_linear"
 
+# These labels are compatibility metadata for the retained equation adapter,
+# not a GraphRAG replacement or a core-harness knowledge package.  They let
+# the adapter keep its stable state/API contract when graph context is off.
+_FALLBACK_CONCEPT_NAMES = {
+    "c_eq_prop": "等式性质",
+    "c_combine": "合并同类项",
+    "c_move": "移项",
+    "c_bracket": "去括号",
+    "c_linear": "一元一次方程",
+    "c_frac": "分数系数方程",
+}
+
 
 def _use_pedagogical_rag() -> bool:
     """Feature flag for ablation: defaults on, false disables pedagogical graph use."""
-    return os.getenv("USE_PEDAGOGICAL_RAG", "true").strip().lower() not in {
+    return graph_context_enabled() and os.getenv(
+        "USE_PEDAGOGICAL_RAG", "true"
+    ).strip().lower() not in {
         "0",
         "false",
         "no",
         "off",
     }
+
+
+def _fallback_concept(concept_id: str) -> ConceptNode:
+    """Return minimal legacy metadata when no graph provider is configured."""
+
+    return ConceptNode(
+        id=concept_id,
+        name=_FALLBACK_CONCEPT_NAMES.get(
+            concept_id, _FALLBACK_CONCEPT_NAMES[DEFAULT_CONCEPT_ID]
+        ),
+    )
 
 # ---------------------------------------------------------------- 规则表
 
@@ -122,23 +149,23 @@ def _classify_equation_structure(message: str, formatted_eq: str) -> str:
 
 
 def _detect_concept(message: str) -> tuple[ConceptNode, float]:
-    retriever = get_retriever()
-    concept = retriever.get_concept(message)
+    provider = get_graph_context_provider()
+    concept = provider.get_concept(message)
     if concept is not None:
         return concept, 0.9
     equation = mc.extract_equation(message)
     if equation is not None:
-        found = retriever.get_concept(_classify_equation_structure(message, equation))
-        if found is not None:
-            return found, 0.85
+        structure = _classify_equation_structure(message, equation)
+        found = provider.get_concept(structure) or _fallback_concept(structure)
+        return found, 0.85
     for keywords, concept_id in _KEYWORD_RULES:
         if any(k in message for k in keywords):
-            found = retriever.get_concept(concept_id)
-            if found is not None:
-                return found, 0.6
-    fallback = retriever.get_concept(DEFAULT_CONCEPT_ID)
-    assert fallback is not None
-    return fallback, 0.3
+            found = provider.get_concept(concept_id) or _fallback_concept(concept_id)
+            return found, 0.6
+    fallback = provider.get_concept(DEFAULT_CONCEPT_ID)
+    if fallback is not None:
+        return fallback, 0.3
+    return _fallback_concept(DEFAULT_CONCEPT_ID), 0.3
 
 
 def _rule_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, ConceptNode]:
@@ -155,7 +182,7 @@ def _rule_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, Con
             break
     if gap is StudentGap.UNKNOWN:
         store = get_store()
-        for prereq in get_retriever().get_prerequisites(concept.id):
+        for prereq in get_graph_context_provider().get_prerequisites(concept.id):
             rec = store.get_concept_mastery(student_id, prereq.id)
             if rec.attempts > 0 and rec.mastery_score < 0.3:
                 gap = StudentGap.PREREQUISITE_MISSING
@@ -173,7 +200,7 @@ def _rule_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, Con
 
 
 def _llm_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, ConceptNode]:
-    concept_names = [c.name for c in [get_retriever().get_concept(cid) for cid in
+    concept_names = [c.name for c in [get_graph_context_provider().get_concept(cid) for cid in
                      ("c_eq_prop", "c_combine", "c_move", "c_bracket", "c_linear", "c_frac")] if c]
     system = (
         "你是初中数学教学诊断器。根据学生消息判断：\n"
@@ -184,7 +211,7 @@ def _llm_diagnosis(student_id: str, message: str) -> tuple[DiagnosisResult, Conc
         "5. reason：简要说明依据"
     )
     diagnosis = DeepSeekClient().chat_json(system, f"学生消息：{message}", schema=DiagnosisResult)
-    concept = get_retriever().get_concept(diagnosis.detected_concept)
+    concept = get_graph_context_provider().get_concept(diagnosis.detected_concept)
     if concept is None:
         concept, _ = _detect_concept(message)
         diagnosis.detected_concept = concept.name
@@ -212,7 +239,7 @@ def _anchor_gap(
             break
     if evidence_gap is StudentGap.UNKNOWN:
         store = get_store()
-        for prereq in get_retriever().get_prerequisites(concept.id):
+        for prereq in get_graph_context_provider().get_prerequisites(concept.id):
             rec = store.get_concept_mastery(student_id, prereq.id)
             if rec.attempts > 0 and rec.mastery_score < 0.3:
                 evidence_gap = StudentGap.PREREQUISITE_MISSING
@@ -528,7 +555,7 @@ def diagnose_node(state: TeacherState) -> dict:
 
 
 def retrieve_node(state: TeacherState) -> dict:
-    retriever = get_retriever()
+    retriever = get_graph_context_provider()
     cid = state.detected_concept_id or DEFAULT_CONCEPT_ID
     concept = retriever.get_concept(cid)
     if state.pending_reply_handled:
@@ -538,7 +565,7 @@ def retrieve_node(state: TeacherState) -> dict:
             "retrieval": retrieval,
             "pedagogical_context": PedagogicalContext(),
             "pedagogical_context_used": False,
-            "retrieval_backend": "local_json_graph",
+            "retrieval_backend": retriever.name,
             "retrieval_evidence": [],
             "retrieved_concepts": [],
             "retrieved_misconceptions": [],
@@ -557,15 +584,14 @@ def retrieve_node(state: TeacherState) -> dict:
     pedagogical_context = PedagogicalContext()
     pedagogical_context_used = False
     evidence: list[RetrievalEvidence] = []
-    retrieval_backend = ""
+    retrieval_backend = retriever.name
     retrieved_concepts: list[str] = []
     retrieved_misconceptions: list[str] = []
     retrieved_hints: list[str] = []
     retrieved_practice_problem_ids: list[str] = []
     top_evidence_reasons: list[str] = []
-    if _use_pedagogical_rag():
-        graph = get_local_pedagogical_graph_retriever()
-        graph_result = graph.retrieve_evidence(
+    if _use_pedagogical_rag() and retriever.available:
+        graph_result = retriever.retrieve_pedagogical_evidence(
             cid,
             misconception=" ".join(
                 filter(
@@ -1127,7 +1153,9 @@ def _why_response(state: TeacherState) -> str:
             f"{cancel}所以得到 {next_eq}。\n"
             f"回到你的原题 {original}：{mc.next_question(next_eq)}"
         )
-    concept = get_retriever().get_concept(state.detected_concept_id or DEFAULT_CONCEPT_ID)
+    concept = get_graph_context_provider().get_concept(
+        state.detected_concept_id or DEFAULT_CONCEPT_ID
+    )
     desc = concept.description if concept else ""
     back = f"回到你的原题 {original}：" if original else ""
     return f"好问题！{desc}\n{back}你能说说现在卡在哪一小步吗？"
@@ -1218,7 +1246,9 @@ def _mock_response(state: TeacherState) -> str:
         )
 
     # 没有具体原题：概念层面的引导（不引入新题号）
-    concept = get_retriever().get_concept(state.detected_concept_id or DEFAULT_CONCEPT_ID)
+    concept = get_graph_context_provider().get_concept(
+        state.detected_concept_id or DEFAULT_CONCEPT_ID
+    )
     parts = [f"我们来看「{concept_name}」。"]
     if concept:
         parts.append(concept.description)
