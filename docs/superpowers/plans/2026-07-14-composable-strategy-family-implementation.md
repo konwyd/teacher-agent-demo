@@ -131,10 +131,12 @@ if episode and episode.target_equation:
     return True
 if episode and episode.problem_context:
     return False
+if any(marker in message for marker in _LEGACY_CONCEPT_REQUEST_MARKERS):
+    return True
 return len(mc.find_equations(message)) == 1
 ```
 
-删除 marker 作为新 episode 的判据；不修改 `math_checker`。已存在通用原题的 episode 即使后续出现 `9x=8` 也保持通用路径。
+删除 `x`、`X`、`=` 和泛化“方程”等宽泛 marker；只保留既有 golden 明确覆盖的 legacy 概念请求兼容项，例如“一元一次方程”“移项”“去括号”“合并同类项”“等式性质”和“分数系数”。不修改 `math_checker`。已存在通用原题的 episode 即使后续出现 `9x=8` 或 legacy 术语也保持通用路径。
 
 - [ ] **Step 2: 运行 tracer bullet**
 

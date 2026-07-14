@@ -78,3 +78,21 @@ def test_turn_projects_an_unsupported_topic_without_a_linear_concept() -> None:
     assert data["teaching_state"]["graph_context"]["available"] is False
     assert data["teaching_state"]["verification"]["status"] == "not_applicable"
     assert data["response"].count("？") == 1
+
+
+def test_turn_keeps_an_equation_system_in_the_generic_conversation() -> None:
+    problem = "老师，3x+2y=5，6x-2y=3怎么解？"
+    response = client.post(
+        "/turn",
+        json={
+            "student_id": "api-equation-system",
+            "conversation_id": "api-equation-system-conversation",
+            "message": problem,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["detected_concept"] is None
+    assert data["original_problem"] == problem
+    assert data["teaching_state"]["problem_context"] == problem

@@ -187,6 +187,7 @@ student message + persisted episode
 
 - `EpisodeState.problem_context` 保存通用会话首轮完整原题，与旧 `original_problem`、`target_equation` 并存但不互相覆盖。
 - 已有 `target_equation` 的 episode 始终优先走旧 checker；已有通用 `problem_context` 且无 `target_equation` 的 episode 始终留在通用路径。
+- 为保持既有 golden 不退化，明确点名现有 legacy 教学概念且没有既存通用 episode 的请求仍可进入旧教学流程；数学题本身只有在 checker 找到恰好一个可解析方程时才进入旧流程。该兼容词表只位于 legacy adapter 边界，不进入核心 `TeachingPolicy`。
 - 阶段 2 起，`TeachingState` 和 trace 记录规范化后的策略选择；阶段 2/3 的选择不影响回复。
 - 阶段 6 才把策略 ID、置信度、降级原因和组合结果加入持久化 `TurnLog` 与评测汇总。
 - 长期 mastery 的跨知识点 taxonomy 仍未定，本设计不在策略 ID 上直接累计掌握度。

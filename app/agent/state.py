@@ -136,6 +136,8 @@ class TeachingState(BaseModel):
     student_id: str
     message: str
     conversation_id: str | None = None
+    episode_state: EpisodeState | None = None
+    context_resolution: ContextResolution = Field(default_factory=ContextResolution)
     problem_context: str = ""
     learning_goal: str = ""
     progress_summary: str = ""
@@ -505,6 +507,8 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
         student_id=legacy_state.student_id,
         message=legacy_state.message,
         conversation_id=legacy_state.conversation_id,
+        episode_state=legacy_state.episode_state,
+        context_resolution=legacy_state.context_resolution,
         problem_context=legacy_state.original_problem,
         learning_goal=legacy_state.lesson_goal,
         progress_summary=legacy_state.current_step,
@@ -540,6 +544,8 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
         student_id=teaching_state.student_id,
         message=teaching_state.message,
         conversation_id=teaching_state.conversation_id,
+        episode_state=teaching_state.episode_state,
+        context_resolution=teaching_state.context_resolution,
         diagnosis=DiagnosisResult(
             confidence=teaching_state.math_analysis.confidence,
             reason="generic_teaching_harness",

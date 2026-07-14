@@ -1746,19 +1746,13 @@ _NODE_FUNCS = {
 }
 
 
-_LEGACY_TURN_MARKERS = (
-    "方程",
+_LEGACY_CONCEPT_REQUEST_MARKERS = (
+    "一元一次方程",
     "移项",
     "去括号",
-    "同类项",
-    "等式",
+    "合并同类项",
+    "等式性质",
     "分数系数",
-    "验算",
-    "代入",
-    "两边",
-    "x",
-    "X",
-    "=",
 )
 
 
@@ -1773,10 +1767,14 @@ def supports_legacy_equation_turn(
     workflow never needs topic keywords, equation parsing, or a checker import.
     """
 
-    if any(marker in message for marker in _LEGACY_TURN_MARKERS):
-        return True
     episode = get_episode_store().find(student_id, conversation_id)
-    return bool(episode and episode.target_equation)
+    if episode and episode.target_equation:
+        return True
+    if episode and episode.problem_context:
+        return False
+    if any(marker in message for marker in _LEGACY_CONCEPT_REQUEST_MARKERS):
+        return True
+    return len(mc.find_equations(message)) == 1
 
 
 def build_legacy_equation_workflow():

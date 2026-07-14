@@ -31,6 +31,7 @@ class EpisodeState(BaseModel):
     conversation_id: str
     student_id: str
     original_problem: str | None = None
+    problem_context: str | None = None
     target_equation: str | None = None
     current_phase: str = "problem_setup"
     current_solution_state: str | None = None
