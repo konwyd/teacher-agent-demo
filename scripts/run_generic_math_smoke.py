@@ -21,8 +21,10 @@ BUDGET_CNY = 2
 
 
 class _CountingReasoner:
-    def __init__(self) -> None:
-        self._reasoner = GenericMathReasoner(client=DeepSeekClient(max_retries=0))
+    def __init__(self, reasoner=None) -> None:
+        self._reasoner = reasoner or GenericMathReasoner(
+            client=DeepSeekClient(max_retries=0)
+        )
         self.model_call_count = 0
         self.error = ""
 
@@ -30,8 +32,7 @@ class _CountingReasoner:
         if problem_context.strip() and not analysis.needs_clarification:
             self.model_call_count += 1
         result = self._reasoner.analyze(message, problem_context, analysis)
-        if result.uncertainty_note:
-            self.error = result.uncertainty_note
+        self.error = getattr(self._reasoner, "last_error", "") or result.uncertainty_note
         return result
 
 

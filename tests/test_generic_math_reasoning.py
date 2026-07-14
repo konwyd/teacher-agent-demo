@@ -3,6 +3,7 @@
 import app.agent.math_analysis as math_analysis
 from app.agent.generic_math_reasoning import GenericMathReasoner
 from app.agent.state import MathAnalysis
+from app.llm.deepseek_client import DeepSeekError
 
 
 class _ReasoningClient:
@@ -87,3 +88,20 @@ def test_unconfigured_reasoner_leaves_a_safe_generic_hint_available() -> None:
     assert result.needs_clarification is False
     assert result.reasoning_steps == []
     assert result.uncertainty_note
+
+
+def test_reasoner_preserves_a_client_error_summary_for_audit() -> None:
+    class _FailingClient:
+        def chat_json(self, system, user, schema, temperature=0.0, max_tokens=None):
+            raise DeepSeekError("simulated transport failure")
+
+    reasoner = GenericMathReasoner(client=_FailingClient())
+
+    result = reasoner.analyze(
+        "我不会做。",
+        "男生和女生人数的比是3:2，总数30人。",
+        MathAnalysis(),
+    )
+
+    assert result.needs_clarification is True
+    assert "DeepSeekError: simulated transport failure" in reasoner.last_error

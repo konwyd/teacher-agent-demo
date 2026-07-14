@@ -3,6 +3,7 @@
 import importlib
 import os
 
+from app.agent.state import GenericMathReasoning, MathAnalysis
 from app.evaluation.generic_math_evaluator import run_generic_math_eval
 from scripts import run_eval
 from scripts import run_generic_math_smoke as live_smoke
@@ -55,3 +56,24 @@ def test_eval_module_and_run_restore_runtime_environment(
     capsys.readouterr()
     assert os.getenv("DEEPSEEK_API_KEY") == "fake-key-for-test"
     assert os.getenv("TEACHER_FORCE_MOCK") is None
+
+
+def test_live_counting_reasoner_writes_the_underlying_error() -> None:
+    class _FailingReasoner:
+        last_error = "DeepSeekError: simulated transport failure"
+
+        def analyze(self, message, problem_context, analysis):
+            return GenericMathReasoning(
+                needs_clarification=True,
+                uncertainty_note="通用数学推理不可用，已降级为澄清教学。",
+            )
+
+    reasoner = live_smoke._CountingReasoner(reasoner=_FailingReasoner())
+
+    reasoner.analyze(
+        "我不会做。",
+        "男生和女生人数的比是3:2，总数30人。",
+        MathAnalysis(),
+    )
+
+    assert reasoner.error == "DeepSeekError: simulated transport failure"

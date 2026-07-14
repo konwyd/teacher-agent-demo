@@ -25,6 +25,7 @@ class GenericMathReasoner:
 
     def __init__(self, client: _ReasoningClient | None = None) -> None:
         self._client = client
+        self.last_error = ""
 
     def analyze(
         self,
@@ -34,6 +35,7 @@ class GenericMathReasoner:
     ) -> GenericMathReasoning:
         """Return structured reasoning or a conservative clarification signal."""
 
+        self.last_error = ""
         if not problem_context.strip() or analysis.needs_clarification:
             return GenericMathReasoning(
                 needs_clarification=True,
@@ -57,7 +59,8 @@ class GenericMathReasoner:
                 temperature=0.0,
                 max_tokens=450,
             )
-        except (DeepSeekError, ValueError):
+        except (DeepSeekError, ValueError) as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
             return GenericMathReasoning(
                 needs_clarification=True,
                 uncertainty_note="通用数学推理不可用，已降级为澄清教学。",
