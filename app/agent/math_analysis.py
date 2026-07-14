@@ -40,7 +40,12 @@ def _fallback_analysis(message: str, problem_context: str = "") -> MathAnalysis:
     )
 
 
-def analyze_turn(message: str, problem_context: str = "") -> MathAnalysis:
+def analyze_turn(
+    message: str,
+    problem_context: str = "",
+    *,
+    allow_llm: bool = True,
+) -> MathAnalysis:
     """Analyze a turn without selecting a topic or assuming a solver.
 
     A configured DeepSeek client may supply the structured analysis. Any client
@@ -49,7 +54,7 @@ def analyze_turn(message: str, problem_context: str = "") -> MathAnalysis:
     """
 
     fallback = _fallback_analysis(message, problem_context)
-    if not is_configured():
+    if not allow_llm or not is_configured():
         return fallback
 
     try:
