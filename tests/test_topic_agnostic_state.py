@@ -4,6 +4,7 @@ import pytest
 
 from app.agent.state import (
     DiagnosisResult,
+    GenericMathReasoning,
     GraphContext,
     MathAnalysis,
     TeacherState,
@@ -38,6 +39,25 @@ def test_neutral_teaching_state_requires_no_equation_or_concept_id() -> None:
     assert dumped["graph_context"]["available"] is False
     assert "target_equation" not in dumped
     assert "detected_concept_id" not in dumped
+
+
+def test_teaching_state_carries_generic_reasoning_without_topic_id() -> None:
+    state = TeachingState(
+        student_id="ratio-student",
+        message="男生和女生人数的比是3:2，总数30人。",
+        math_reasoning=GenericMathReasoning(
+            problem_interpretation="总份数是5份。",
+            reasoning_steps=["先求总份数 3+2。"],
+            next_step_hint="把30按5份平均分。",
+            candidate_conclusion="男生18人，女生12人。",
+            confidence=0.9,
+        ),
+    )
+
+    dumped = state.model_dump(mode="json")
+
+    assert dumped["math_reasoning"]["candidate_conclusion"] == "男生18人，女生12人。"
+    assert "concept_id" not in dumped["math_reasoning"]
 
 
 @pytest.mark.parametrize("legacy_action", list(TeachingAction))

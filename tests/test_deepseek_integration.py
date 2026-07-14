@@ -1,6 +1,9 @@
 """DeepSeek 接入测试：全部离线，不真实调用外部 API。"""
 
+from types import SimpleNamespace
+
 import pytest
+from pydantic import BaseModel
 
 import app.agent.workflow as wf
 from app.agent.state import (
@@ -12,6 +15,21 @@ from app.agent.state import (
     TeachingAction,
 )
 from app.llm.deepseek_client import DeepSeekError, is_configured
+
+
+class _ReplySchema(BaseModel):
+    text: str
+
+
+class _RecordingCompletions:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"text":"ok"}'))]
+        )
 
 
 def _make_state() -> TeacherState:
@@ -107,3 +125,18 @@ def test_client_raises_without_key() -> None:
 
     with pytest.raises(DeepSeekError):
         DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key=""))
+
+
+def test_chat_json_forwards_optional_max_tokens() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+
+    reply = client.chat_json("system", "user", _ReplySchema, max_tokens=450)
+
+    assert reply.text == "ok"
+    assert completions.calls[-1]["max_tokens"] == 450

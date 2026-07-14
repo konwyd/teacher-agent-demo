@@ -76,15 +76,26 @@ class DeepSeekClient:
             max_retries=1,
         )
 
-    def chat(self, system: str, user: str, temperature: float = 0.7) -> str:
+    def chat(
+        self,
+        system: str,
+        user: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> str:
         try:
-            resp = self._client.chat.completions.create(
-                model=self.settings.deepseek_model,
-                messages=[
+            request_args = {
+                "model": self.settings.deepseek_model,
+                "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                temperature=temperature,
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                request_args["max_tokens"] = max_tokens
+            resp = self._client.chat.completions.create(
+                **request_args,
             )
         except Exception as exc:  # noqa: BLE001 - 统一转成带上下文的领域异常
             raise DeepSeekError(
@@ -100,6 +111,7 @@ class DeepSeekClient:
         user: str,
         schema: Type[T],
         temperature: float = 0.0,
+        max_tokens: int | None = None,
     ) -> T:
         """Call DeepSeek in JSON mode and validate against a Pydantic model."""
         system_with_schema = (
@@ -108,14 +120,19 @@ class DeepSeekClient:
             f"{schema.model_json_schema()}"
         )
         try:
-            resp = self._client.chat.completions.create(
-                model=self.settings.deepseek_model,
-                messages=[
+            request_args = {
+                "model": self.settings.deepseek_model,
+                "messages": [
                     {"role": "system", "content": system_with_schema},
                     {"role": "user", "content": user},
                 ],
-                temperature=temperature,
-                response_format={"type": "json_object"},
+                "temperature": temperature,
+                "response_format": {"type": "json_object"},
+            }
+            if max_tokens is not None:
+                request_args["max_tokens"] = max_tokens
+            resp = self._client.chat.completions.create(
+                **request_args,
             )
         except Exception as exc:  # noqa: BLE001
             raise DeepSeekError(

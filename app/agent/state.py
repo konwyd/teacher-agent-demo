@@ -84,6 +84,19 @@ class MathAnalysis(BaseModel):
     needs_clarification: bool = False
 
 
+class GenericMathReasoning(BaseModel):
+    """Advisory reasoning for a math problem without topic-specific routing."""
+
+    problem_interpretation: str = ""
+    student_attempt_assessment: str = ""
+    reasoning_steps: list[str] = Field(default_factory=list)
+    next_step_hint: str = ""
+    candidate_conclusion: str = ""
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    needs_clarification: bool = False
+    uncertainty_note: str = ""
+
+
 class VerificationStatus(str, Enum):
     """Whether an optional mathematical verifier produced usable evidence."""
 
@@ -132,6 +145,7 @@ class TeachingState(BaseModel):
     answer_disclosure_allowed: bool = False
     action_plan: TeachingActionPlan | None = None
     math_analysis: MathAnalysis = Field(default_factory=MathAnalysis)
+    math_reasoning: GenericMathReasoning = Field(default_factory=GenericMathReasoning)
     verification: VerificationResult = Field(default_factory=VerificationResult)
     graph_context: GraphContext = Field(default_factory=GraphContext)
     response: str = ""
