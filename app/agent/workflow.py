@@ -69,6 +69,7 @@ def run_teaching_turn(
     verifier=None,
     graph_context_provider=None,
     reasoner=None,
+    planner=None,
     response_client=None,
     analysis_allow_llm: bool = True,
 ) -> TeachingState:
@@ -81,6 +82,7 @@ def run_teaching_turn(
         verifier=verifier,
         graph_context_provider=graph_context_provider,
         reasoner=reasoner,
+        planner=planner,
         response_client=response_client,
         analysis_allow_llm=analysis_allow_llm,
     ).teaching_state

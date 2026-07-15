@@ -12,9 +12,19 @@ from app.agent.legacy_action_compat import (
     legacy_to_plan,
     plan_to_legacy_action,
 )
-from app.agent.strategy_capabilities import StrategySelection
-from app.agent.teaching_actions import TeachingAction, TeachingActionPlan
-from app.memory.schemas import ContextResolution, EpisodeState, LearningEvent
+from app.agent.orchestration_trace import OrchestrationTrace
+from app.agent.strategy_capabilities import StrategyBundle, StrategySelection
+from app.agent.teaching_actions import (
+    SafetyConstraints,
+    TeachingAction,
+    TeachingActionPlan,
+)
+from app.memory.schemas import (
+    ContextResolution,
+    EpisodeState,
+    LearningEvent,
+    StudentEvidenceSnapshot,
+)
 from app.retrieval.graph_retriever import RetrievalEvidence
 
 
@@ -112,6 +122,16 @@ class TeachingState(BaseModel):
     math_reasoning: GenericMathReasoning = Field(default_factory=GenericMathReasoning)
     verification: VerificationResult = Field(default_factory=VerificationResult)
     graph_context: GraphContext = Field(default_factory=GraphContext)
+    safety_constraints: SafetyConstraints = Field(
+        default_factory=lambda: SafetyConstraints(
+            allowed_actions=[TeachingAction.ELICIT]
+        )
+    )
+    student_evidence_snapshot: StudentEvidenceSnapshot = Field(
+        default_factory=StudentEvidenceSnapshot
+    )
+    strategy_bundle: StrategyBundle = Field(default_factory=StrategyBundle)
+    orchestration_trace: OrchestrationTrace = Field(default_factory=OrchestrationTrace)
     response: str = ""
     trace: list[str] = Field(default_factory=list)
 
@@ -264,6 +284,8 @@ class TurnLog(BaseModel):
     context_resolution: ContextResolution = Field(default_factory=ContextResolution)
     learning_events_this_turn: list[LearningEvent] = Field(default_factory=list)
     updated_profile_summary: dict = Field(default_factory=dict)
+    unified_action_plan: dict = Field(default_factory=dict)
+    orchestration_trace: dict = Field(default_factory=dict)
 
 
 class TeacherState(BaseModel):
