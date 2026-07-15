@@ -68,3 +68,39 @@ def test_correct_verification_after_scaffold_records_progress() -> None:
         model.snapshot(episode, scope_id="linear-equation").progress_after_latest_hint
         is True
     )
+
+
+def test_newer_scaffold_does_not_reuse_stale_hint_outcome() -> None:
+    episode = _episode()
+    model = StudentModel()
+    model.record_turn(
+        episode,
+        verification=VerificationResult(),
+        action_plan=TeachingActionPlan(action=TeachingAction.SCAFFOLD, scaffold_level=1),
+        analysis=MathAnalysis(),
+        source_turn=1,
+        scope_id="linear-equation",
+    )
+    model.record_turn(
+        episode,
+        verification=VerificationResult(
+            status=VerificationStatus.VERIFIED_CORRECT,
+            evidence=["2x=4"],
+        ),
+        action_plan=TeachingActionPlan(action=TeachingAction.CHECK),
+        analysis=MathAnalysis(),
+        source_turn=2,
+        scope_id="linear-equation",
+    )
+    model.record_turn(
+        episode,
+        verification=VerificationResult(),
+        action_plan=TeachingActionPlan(action=TeachingAction.SCAFFOLD, scaffold_level=2),
+        analysis=MathAnalysis(),
+        source_turn=3,
+        scope_id="linear-equation",
+    )
+
+    snapshot = model.snapshot(episode, scope_id="linear-equation")
+    assert snapshot.latest_scaffold_level == 2
+    assert snapshot.progress_after_latest_hint is None

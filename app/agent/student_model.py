@@ -129,14 +129,29 @@ class StudentModel:
             for record in records
             if record.kind is StudentEvidenceKind.TEACHING_ACTION
         ]
-        latest_scaffold = next(
-            (record for record in reversed(action_records) if record.scaffold_level > 0),
+        latest_scaffold_index = next(
+            (
+                index
+                for index in range(len(records) - 1, -1, -1)
+                if records[index].kind is StudentEvidenceKind.TEACHING_ACTION
+                and records[index].scaffold_level > 0
+            ),
             None,
+        )
+        latest_scaffold = (
+            records[latest_scaffold_index]
+            if latest_scaffold_index is not None
+            else None
+        )
+        records_after_latest_scaffold = (
+            records[latest_scaffold_index + 1 :]
+            if latest_scaffold_index is not None
+            else []
         )
         latest_hint_outcome = next(
             (
                 record
-                for record in reversed(records)
+                for record in reversed(records_after_latest_scaffold)
                 if record.kind is StudentEvidenceKind.HINT_OUTCOME
             ),
             None,
