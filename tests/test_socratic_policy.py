@@ -5,8 +5,9 @@ questioning, but it must never override math_checker or original_problem
 grounding.
 """
 
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.socratic_policy import choose_socratic_decision
-from app.agent.state import DiagnosisResult, StudentIntent, TeachingAction
+from app.agent.state import DiagnosisResult, StudentIntent
 
 
 def test_advisor_maps_problem_solving_hint_to_concept_probe() -> None:

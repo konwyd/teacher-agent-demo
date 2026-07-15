@@ -1,6 +1,7 @@
 """Workflow 测试：无 API key、无外部服务也能完整跑一轮（六节点）。"""
 
-from app.agent.state import TeacherState, TeachingAction
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
+from app.agent.state import TeacherState
 from app.agent.workflow import build_workflow, run_turn
 
 EXPECTED_ORDER = [

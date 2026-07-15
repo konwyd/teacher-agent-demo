@@ -7,8 +7,9 @@ does not grade student math and must not override math_checker.
 
 from __future__ import annotations
 
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.math_checker import StepValidity
-from app.agent.state import DiagnosisResult, SocraticDecision, StudentIntent, TeachingAction
+from app.agent.state import DiagnosisResult, SocraticDecision, StudentIntent
 
 
 def choose_socratic_decision(

@@ -6,13 +6,13 @@ import pytest
 from pydantic import BaseModel
 
 import app.agent.workflow as wf
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.state import (
     DiagnosisResult,
     RetrievalResult,
     StudentGap,
     StudentIntent,
     TeacherState,
-    TeachingAction,
 )
 from app.llm.deepseek_client import DeepSeekError, is_configured
 

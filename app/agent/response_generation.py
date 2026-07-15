@@ -4,19 +4,21 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.agent.state import TeachingActionKind, TeachingState
+from app.agent.state import TeachingState
+from app.agent.teaching_actions import TeachingAction
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 
 
-_SAFE_RESPONSES: dict[TeachingActionKind, str] = {
-    TeachingActionKind.ASSESS: "请把题目完整发来，并写出你已经想到的一步。你现在最不确定哪一部分？",
-    TeachingActionKind.DIAGNOSE: "我先不假设题型，也不直接给答案。你觉得自己卡在理解题意、选择方法还是计算哪一步？",
-    TeachingActionKind.GIVE_HINT: "先把题目中的已知条件、所求内容和它们的关系分别写出来。你准备先整理哪一条信息？",
-    TeachingActionKind.EXPLAIN_STEP: "可以先把这一步依据的数学关系说清楚，再把它对应回原题。你认为这一步依据是什么？",
-    TeachingActionKind.CHECK_UNDERSTANDING: "这个结论已经有验证依据了。你能用题目中的条件说明它为什么成立吗？",
-    TeachingActionKind.SHOW_WORKED_EXAMPLE: "我可以按相同思路示范，但先不替代你完成原题。你希望我示范的是读题、列关系还是检查步骤？",
-    TeachingActionKind.OFFER_PRACTICE: "可以安排练习，不过先确定要巩固的思路。你想练习理解题意、建立关系还是检查结果？",
-    TeachingActionKind.FINISH: "这一步可以先收束并保留你的思路记录。下次开始时你想先复习哪一个关键方法？",
+_SAFE_RESPONSES = {
+    TeachingAction.ELICIT: "请把题目完整发来，并写出你已经想到的一步。你现在最不确定哪一部分？",
+    TeachingAction.FOCUS: "我先不假设题型，也不直接给答案。你觉得自己卡在理解题意、选择方法还是计算哪一步？",
+    TeachingAction.SCAFFOLD: "先把题目中的已知条件、所求内容和它们的关系分别写出来。你准备先整理哪一条信息？",
+    TeachingAction.EXPLAIN: "可以先把这一步依据的数学关系说清楚，再把它对应回原题。你认为这一步依据是什么？",
+    TeachingAction.CORRECT: "这一步已有明确的检查证据，可以先定位需要修正的位置。你愿意先重新检查这一处变化吗？",
+    TeachingAction.CHECK: "这个结论已经有验证依据了。你能用题目中的条件说明它为什么成立吗？",
+    TeachingAction.MODEL: "我可以按相同思路示范，但先不替代你完成原题。你希望我示范的是读题、列关系还是检查步骤？",
+    TeachingAction.PRACTICE: "可以安排练习，不过先确定要巩固的思路。你想练习理解题意、建立关系还是检查结果？",
+    TeachingAction.CONSOLIDATE: "我们先把刚才确认过的方法收束成一句话。你能说出下一次遇到同类关系时先看什么吗？",
 }
 
 
@@ -38,11 +40,7 @@ def _safe_response(state: TeachingState) -> str:
 
 
 def _candidate_is_authorized(state: TeachingState) -> bool:
-    return bool(
-        state.action_plan
-        and state.action_plan.answer_disclosure_allowed
-        and state.answer_disclosure_allowed
-    )
+    return state.answer_disclosure_allowed
 
 
 def _approved_context(state: TeachingState) -> str:
@@ -53,7 +51,7 @@ def _approved_context(state: TeachingState) -> str:
     facts = [
         f"原题：{state.problem_context}",
         f"教学动作：{state.action_plan.action.value}",
-        f"提示层级：{state.action_plan.hint_level}",
+        f"提示层级：{state.action_plan.scaffold_level}",
     ]
     if reasoning.reasoning_steps:
         facts.append("可使用的推理步骤：" + "\n".join(reasoning.reasoning_steps))

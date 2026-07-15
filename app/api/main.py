@@ -8,8 +8,8 @@ from __future__ import annotations
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
-from app.agent.state import project_teacher_state
-from app.agent.workflow import run_turn
+from app.agent.legacy_action_compat import legacy_kind_code
+from app.agent.workflow import execute_turn
 from app.memory.episode_state import create_conversation, get_episode_store
 from app.memory.learning_history import get_learning_events, reset_learning_history, summarize_learning_history
 from app.memory.profile_updater import get_profile_store, summarize_profile
@@ -31,6 +31,9 @@ class TurnResponse(BaseModel):
     teaching_action: str | None = None
     teaching_action_kind: str | None = None
     teaching_state: dict = Field(default_factory=dict)
+    teaching_action_plan: dict = Field(default_factory=dict)
+    safety_constraints: dict = Field(default_factory=dict)
+    orchestration_trace: dict = Field(default_factory=dict)
     socratic_stage: str = ""
     socratic_move: str = ""
     socratic_reason: str = ""
@@ -83,8 +86,13 @@ def health() -> dict:
 @app.post("/turn", response_model=TurnResponse)
 def turn(req: TurnRequest) -> TurnResponse:
     conversation_id = req.conversation_id or create_conversation(req.student_id).conversation_id
-    state = run_turn(req.student_id, req.message, conversation_id=conversation_id)
-    teaching_state = project_teacher_state(state)
+    result = execute_turn(req.student_id, req.message, conversation_id=conversation_id)
+    state = result.teacher_state
+    teaching_state = result.teaching_state
+    teaching_state_payload = teaching_state.model_dump(mode="json")
+    unified_plan = teaching_state.action_plan
+    if unified_plan is not None:
+        teaching_state_payload["action_plan"]["action"] = legacy_kind_code(unified_plan)
     diagnosis = state.diagnosis
     retrieval = state.retrieval
     pedagogical = state.pedagogical_context
@@ -94,9 +102,12 @@ def turn(req: TurnRequest) -> TurnResponse:
         student_gap=diagnosis.student_gap.value if diagnosis else None,
         teaching_action=state.action.value if state.action else None,
         teaching_action_kind=(
-            teaching_state.action_plan.action.value if teaching_state.action_plan else None
+            legacy_kind_code(unified_plan) if unified_plan is not None else None
         ),
-        teaching_state=teaching_state.model_dump(mode="json"),
+        teaching_state=teaching_state_payload,
+        teaching_action_plan=(
+            unified_plan.model_dump(mode="json") if unified_plan is not None else {}
+        ),
         socratic_stage=state.socratic_stage,
         socratic_move=state.socratic_move,
         socratic_reason=state.socratic_reason,

@@ -1,8 +1,7 @@
 """Tests for the topic-agnostic workflow facade and legacy adapter boundary."""
 
-from app.agent.state import GenericMathReasoning
-
-from app.agent.state import TeachingActionKind, VerificationStatus
+from app.agent.state import GenericMathReasoning, VerificationStatus
+from app.agent.teaching_actions import TeachingAction
 from app.agent.workflow import run_teaching_turn, run_turn
 
 
@@ -13,7 +12,7 @@ def test_non_equation_turn_uses_generic_harness_without_a_legacy_concept() -> No
     )
 
     assert state.action_plan is not None
-    assert state.action_plan.action is TeachingActionKind.GIVE_HINT
+    assert state.action_plan.action is TeachingAction.SCAFFOLD
     assert state.graph_context.available is False
     assert state.verification.status is VerificationStatus.NOT_APPLICABLE
     assert state.current_phase == state.action_plan.action.value
@@ -73,7 +72,7 @@ def test_non_equation_turn_uses_injected_reasoning_without_leaking_answer() -> N
     )
 
     assert state.action_plan is not None
-    assert state.action_plan.action is TeachingActionKind.GIVE_HINT
+    assert state.action_plan.action is TeachingAction.SCAFFOLD
     assert state.answer_disclosure_allowed is False
     assert "18" not in state.response
     assert state.math_reasoning.reasoning_steps

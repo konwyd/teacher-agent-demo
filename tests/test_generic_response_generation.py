@@ -3,10 +3,9 @@
 from app.agent.response_generation import generate_response
 from app.agent.state import (
     GenericMathReasoning,
-    TeachingActionKind,
-    TeachingActionPlan,
     TeachingState,
 )
+from app.agent.teaching_actions import TeachingAction, TeachingActionPlan
 
 
 class _ResponseClient:
@@ -31,7 +30,10 @@ def _hint_state() -> TeachingState:
         student_id="ratio-student",
         message="给我一个提示。",
         problem_context="男生和女生人数的比是3:2，总数30人。",
-        action_plan=TeachingActionPlan(action=TeachingActionKind.GIVE_HINT),
+        action_plan=TeachingActionPlan(
+            action=TeachingAction.SCAFFOLD,
+            scaffold_level=1,
+        ),
         math_reasoning=GenericMathReasoning(
             reasoning_steps=["把3:2看成5个相等份。"],
             next_step_hint="先算总份数。",
@@ -56,8 +58,7 @@ def test_response_can_pass_candidate_only_after_explicit_authorization() -> None
     client = _ResponseClient("总份数是5，所以每份是6。男生18人，女生12人。你能复述这个分配过程吗？")
     state = _hint_state()
     state.action_plan = TeachingActionPlan(
-        action=TeachingActionKind.EXPLAIN_STEP,
-        answer_disclosure_allowed=True,
+        action=TeachingAction.EXPLAIN,
     )
     state.answer_disclosure_allowed = True
 

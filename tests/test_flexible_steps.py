@@ -3,8 +3,9 @@
 from fractions import Fraction
 
 from app.agent import math_checker as mc
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.math_checker import StepValidity
-from app.agent.state import StudentIntent, TeachingAction
+from app.agent.state import StudentIntent
 from app.agent.workflow import run_turn
 
 PROBLEM = "老师3x+4=7怎么解？"

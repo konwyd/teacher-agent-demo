@@ -3,7 +3,8 @@
 import os
 from pathlib import Path
 
-from app.agent.state import DiagnosisResult, StudentIntent, TeachingAction
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
+from app.agent.state import DiagnosisResult, StudentIntent
 from app.agent.workflow import _choose_action, run_turn
 from app.memory.student_state import ConceptMastery, JsonStudentStateStore
 

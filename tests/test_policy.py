@@ -4,12 +4,12 @@ import json
 import os
 from pathlib import Path
 
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.state import (
     DiagnosisResult,
     StudentGap,
     StudentIntent,
     TeacherState,
-    TeachingAction,
     TurnLog,
 )
 from app.agent.workflow import _choose_action, diagnose_node, run_turn

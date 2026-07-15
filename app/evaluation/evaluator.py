@@ -9,8 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.agent import math_checker as mc
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.math_checker import StepValidity
-from app.agent.state import TeacherState, TeachingAction
+from app.agent.state import TeacherState
 from app.agent.workflow import BASIC_LANGUAGE_MARKERS, is_step_message, run_turn
 
 EVAL_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "eval"

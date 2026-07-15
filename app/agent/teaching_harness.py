@@ -101,7 +101,6 @@ def run_generic_teaching_turn(
         ],
     )
     state.action_plan = TeachingPolicy().choose(state)
-    state.answer_disclosure_allowed = state.action_plan.answer_disclosure_allowed
     state.current_phase = state.action_plan.action.value
     state.response = generate_response(state, client=response_client)
     state.trace.extend(["generic_teaching_policy", "generic_response_generation"])

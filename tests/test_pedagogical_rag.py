@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.agent import math_checker as mc
-from app.agent.state import TeachingAction
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.workflow import run_turn
 from app.api.main import app
 from app.memory.student_state import get_store

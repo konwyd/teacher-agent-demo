@@ -22,6 +22,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agent import math_checker as mc
 from app.agent.context_resolver import ContextResolver
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
 from app.agent.math_checker import StepValidity
 from app.agent.state import (
     DiagnosisResult,
@@ -31,7 +32,6 @@ from app.agent.state import (
     StudentIntent,
     StudentMasteryUpdate,
     TeacherState,
-    TeachingAction,
     TurnLog,
 )
 from app.agent.socratic_policy import choose_socratic_decision

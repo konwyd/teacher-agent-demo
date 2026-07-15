@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 
 from app.agent import math_checker as mc
-from app.agent.state import StudentIntent, TeachingAction, TurnLog
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
+from app.agent.state import StudentIntent, TurnLog
 from app.agent.workflow import run_turn
 
 PROBLEM = "老师 3x+6=10 怎么解？"

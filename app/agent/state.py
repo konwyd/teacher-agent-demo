@@ -7,55 +7,14 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.agent.legacy_action_compat import (
+    LegacyTeachingAction,
+    legacy_to_plan,
+    plan_to_legacy_action,
+)
+from app.agent.teaching_actions import TeachingAction, TeachingActionPlan
 from app.memory.schemas import ContextResolution, EpisodeState, LearningEvent
 from app.retrieval.graph_retriever import RetrievalEvidence
-
-
-class TeachingAction(str, Enum):
-    """Allowed teaching actions (see CLAUDE.md)."""
-
-    ASK_DIAGNOSTIC_QUESTION = "ask_diagnostic_question"
-    EXPLAIN_CONCEPT = "explain_concept"
-    GIVE_HINT_LEVEL_1 = "give_hint_level_1"
-    GIVE_HINT_LEVEL_2 = "give_hint_level_2"
-    SHOW_WORKED_EXAMPLE = "show_worked_example"
-    GIVE_PRACTICE_QUESTION = "give_practice_question"
-    GENERATE_PRACTICE_QUESTION = "generate_practice_question"
-    GENERATE_SIMILAR_EXERCISE = "generate_similar_exercise"
-    GENERATE_HARDER_EXERCISE = "generate_harder_exercise"
-    GENERATE_EASIER_EXERCISE = "generate_easier_exercise"
-    SUMMARIZE_THEN_PRACTICE = "summarize_then_practice"
-    GRADE_AND_FEEDBACK = "grade_and_feedback"
-    SCHEDULE_REVIEW = "schedule_review"
-
-
-class TeachingActionKind(str, Enum):
-    """Topic-agnostic actions used at the teaching-harness boundary.
-
-    ``TeachingAction`` remains the legacy runtime enum in Stage 2.  This
-    separate enum gives new callers a stable, domain-neutral vocabulary without
-    changing the workflow's existing action dispatch.
-    """
-
-    ASSESS = "assess"
-    DIAGNOSE = "diagnose"
-    GIVE_HINT = "give_hint"
-    EXPLAIN_STEP = "explain_step"
-    CHECK_UNDERSTANDING = "check_understanding"
-    SHOW_WORKED_EXAMPLE = "show_worked_example"
-    OFFER_PRACTICE = "offer_practice"
-    FINISH = "finish"
-
-
-class TeachingActionPlan(BaseModel):
-    """A neutral next-action decision, independent of a math topic."""
-
-    action: TeachingActionKind
-    hint_level: int = Field(default=0, ge=0, le=3)
-    allow_worked_example: bool = False
-    answer_disclosure_allowed: bool = False
-    rationale: str = ""
-    requires_student_response: bool = True
 
 
 class TeachingIntent(str, Enum):
@@ -155,43 +114,14 @@ class TeachingState(BaseModel):
     trace: list[str] = Field(default_factory=list)
 
 
-_LEGACY_TO_TEACHING_ACTION: dict[TeachingAction, TeachingActionKind] = {
-    TeachingAction.ASK_DIAGNOSTIC_QUESTION: TeachingActionKind.DIAGNOSE,
-    TeachingAction.EXPLAIN_CONCEPT: TeachingActionKind.EXPLAIN_STEP,
-    TeachingAction.GIVE_HINT_LEVEL_1: TeachingActionKind.GIVE_HINT,
-    TeachingAction.GIVE_HINT_LEVEL_2: TeachingActionKind.GIVE_HINT,
-    TeachingAction.SHOW_WORKED_EXAMPLE: TeachingActionKind.SHOW_WORKED_EXAMPLE,
-    TeachingAction.GIVE_PRACTICE_QUESTION: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.GENERATE_PRACTICE_QUESTION: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.GENERATE_SIMILAR_EXERCISE: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.GENERATE_HARDER_EXERCISE: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.GENERATE_EASIER_EXERCISE: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.SUMMARIZE_THEN_PRACTICE: TeachingActionKind.OFFER_PRACTICE,
-    TeachingAction.GRADE_AND_FEEDBACK: TeachingActionKind.CHECK_UNDERSTANDING,
-    TeachingAction.SCHEDULE_REVIEW: TeachingActionKind.FINISH,
-}
-
-_TEACHING_TO_LEGACY_ACTION: dict[TeachingActionKind, TeachingAction] = {
-    TeachingActionKind.ASSESS: TeachingAction.ASK_DIAGNOSTIC_QUESTION,
-    TeachingActionKind.DIAGNOSE: TeachingAction.ASK_DIAGNOSTIC_QUESTION,
-    TeachingActionKind.GIVE_HINT: TeachingAction.GIVE_HINT_LEVEL_1,
-    TeachingActionKind.EXPLAIN_STEP: TeachingAction.EXPLAIN_CONCEPT,
-    TeachingActionKind.CHECK_UNDERSTANDING: TeachingAction.GRADE_AND_FEEDBACK,
-    TeachingActionKind.SHOW_WORKED_EXAMPLE: TeachingAction.SHOW_WORKED_EXAMPLE,
-    TeachingActionKind.OFFER_PRACTICE: TeachingAction.GIVE_PRACTICE_QUESTION,
-    TeachingActionKind.FINISH: TeachingAction.SCHEDULE_REVIEW,
-}
-
-
-def project_teaching_action(action: TeachingAction | None) -> TeachingActionKind | None:
+def project_teaching_action(
+    action: LegacyTeachingAction | None,
+) -> TeachingAction | None:
     """Map a legacy runtime action to the neutral harness action vocabulary."""
 
     if action is None:
         return None
-    try:
-        return _LEGACY_TO_TEACHING_ACTION[action]
-    except KeyError as exc:
-        raise ValueError(f"No neutral action mapping for legacy action: {action!r}") from exc
+    return legacy_to_plan(action).action
 
 
 class StudentIntent(str, Enum):
@@ -252,7 +182,7 @@ class PedagogicalContext(BaseModel):
 class TeacherResponse(BaseModel):
     """教学回复（动作 + 文本）。"""
 
-    action: TeachingAction
+    action: LegacyTeachingAction
     response: str
 
 
@@ -387,7 +317,7 @@ class TeacherState(BaseModel):
     expected_student_response: str = ""
 
     # policy + teach
-    action: Optional[TeachingAction] = None
+    action: Optional[LegacyTeachingAction] = None
     response: str = ""
     socratic_decision: Optional[SocraticDecision] = None
     socratic_stage: str = ""
@@ -446,9 +376,9 @@ def _project_verification_result(legacy_state: TeacherState) -> VerificationResu
 def _legacy_hint_level(legacy_state: TeacherState) -> int:
     """Preserve the hint level encoded by pre-existing legacy actions."""
 
-    if legacy_state.action is TeachingAction.GIVE_HINT_LEVEL_2:
+    if legacy_state.action is LegacyTeachingAction.GIVE_HINT_LEVEL_2:
         return max(2, legacy_state.selected_hint_level)
-    if legacy_state.action is TeachingAction.GIVE_HINT_LEVEL_1:
+    if legacy_state.action is LegacyTeachingAction.GIVE_HINT_LEVEL_1:
         return max(1, legacy_state.selected_hint_level)
     return legacy_state.selected_hint_level
 
@@ -489,19 +419,25 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
         source_ids=[item.node_id for item in legacy_state.retrieval_evidence],
     )
 
-    action = project_teaching_action(legacy_state.action)
+    verification = _project_verification_result(legacy_state)
     action_plan = (
-        TeachingActionPlan(
-            action=action,
-            hint_level=_legacy_hint_level(legacy_state),
-            allow_worked_example=legacy_state.allowed_to_use_new_example,
-            answer_disclosure_allowed=legacy_state.problem_solved,
-            rationale=legacy_state.socratic_reason,
-            requires_student_response=not legacy_state.problem_solved,
+        legacy_to_plan(
+            legacy_state.action,
+            verified_incorrect=(
+                verification.status is VerificationStatus.VERIFIED_INCORRECT
+            ),
         )
-        if action is not None
+        if legacy_state.action is not None
         else None
     )
+    if action_plan is not None:
+        update = {
+            "rationale": legacy_state.socratic_reason,
+            "requires_student_response": not legacy_state.problem_solved,
+        }
+        if action_plan.action is TeachingAction.SCAFFOLD:
+            update["scaffold_level"] = _legacy_hint_level(legacy_state)
+        action_plan = action_plan.model_copy(update=update)
 
     return TeachingState(
         student_id=legacy_state.student_id,
@@ -520,7 +456,7 @@ def project_teacher_state(legacy_state: TeacherState) -> TeachingState:
         action_plan=action_plan,
         math_analysis=math_analysis,
         math_reasoning=legacy_state.math_reasoning,
-        verification=_project_verification_result(legacy_state),
+        verification=verification,
         graph_context=graph_context,
         response=legacy_state.response,
         trace=list(legacy_state.trace),
@@ -536,9 +472,9 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
 
     action_plan = teaching_state.action_plan
     action = (
-        _TEACHING_TO_LEGACY_ACTION[action_plan.action]
+        plan_to_legacy_action(action_plan)
         if action_plan is not None
-        else TeachingAction.ASK_DIAGNOSTIC_QUESTION
+        else LegacyTeachingAction.ASK_DIAGNOSTIC_QUESTION
     )
     return TeacherState(
         student_id=teaching_state.student_id,
@@ -559,7 +495,11 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
         current_phase=teaching_state.current_phase,
         problem_solved=teaching_state.answer_disclosure_allowed,
         action=action,
-        selected_hint_level=action_plan.hint_level if action_plan else 0,
+        selected_hint_level=(
+            action_plan.scaffold_level
+            if action_plan is not None and action_plan.action is TeachingAction.SCAFFOLD
+            else 0
+        ),
         response=teaching_state.response,
         trace=list(teaching_state.trace),
     )

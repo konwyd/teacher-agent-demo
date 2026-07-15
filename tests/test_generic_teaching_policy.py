@@ -5,12 +5,12 @@ from app.agent.response_generation import generate_response
 from app.agent.state import (
     GenericMathReasoning,
     MathAnalysis,
-    TeachingActionKind,
     TeachingIntent,
     TeachingState,
     VerificationResult,
     VerificationStatus,
 )
+from app.agent.teaching_actions import TeachingAction
 from app.agent.teaching_policy import TeachingPolicy
 
 
@@ -27,7 +27,7 @@ def test_unverified_problem_uses_a_hint_without_disclosing_an_answer() -> None:
     state.action_plan = TeachingPolicy().choose(state)
     response = generate_response(state)
 
-    assert state.action_plan.action is TeachingActionKind.GIVE_HINT
+    assert state.action_plan.action is TeachingAction.SCAFFOLD
     assert state.answer_disclosure_allowed is False
     assert "18" not in response
     assert "12" not in response
@@ -45,7 +45,7 @@ def test_verified_result_precedes_generic_mastery_signals() -> None:
 
     action = TeachingPolicy().choose(state)
 
-    assert action.action is TeachingActionKind.CHECK_UNDERSTANDING
+    assert action.action is TeachingAction.CHECK
 
 
 def test_example_request_is_an_explicit_action() -> None:
@@ -58,8 +58,7 @@ def test_example_request_is_an_explicit_action() -> None:
 
     action = TeachingPolicy().choose(state)
 
-    assert action.action is TeachingActionKind.SHOW_WORKED_EXAMPLE
-    assert action.allow_worked_example is True
+    assert action.action is TeachingAction.MODEL
 
 
 def test_explicit_answer_request_allows_high_confidence_candidate_only() -> None:
@@ -76,8 +75,8 @@ def test_explicit_answer_request_allows_high_confidence_candidate_only() -> None
 
     action = TeachingPolicy().choose(state)
 
-    assert action.action is TeachingActionKind.EXPLAIN_STEP
-    assert action.answer_disclosure_allowed is True
+    assert action.action is TeachingAction.EXPLAIN
+    assert state.answer_disclosure_allowed is True
 
 
 def test_hint_request_never_allows_candidate_conclusion() -> None:
@@ -94,5 +93,24 @@ def test_hint_request_never_allows_candidate_conclusion() -> None:
 
     action = TeachingPolicy().choose(state)
 
-    assert action.action is TeachingActionKind.GIVE_HINT
-    assert action.answer_disclosure_allowed is False
+    assert action.action is TeachingAction.SCAFFOLD
+    assert state.answer_disclosure_allowed is False
+
+
+def test_non_answer_action_revokes_stale_answer_disclosure() -> None:
+    state = TeachingState(
+        student_id="ratio-student",
+        message="再给我一个提示。",
+        problem_context="男生和女生人数的比是3:2，总数30人。",
+        answer_disclosure_allowed=True,
+        math_reasoning=GenericMathReasoning(
+            next_step_hint="先求总份数。",
+            candidate_conclusion="男生18人，女生12人。",
+            confidence=0.99,
+        ),
+    )
+
+    action = TeachingPolicy().choose(state)
+
+    assert action.action is TeachingAction.SCAFFOLD
+    assert state.answer_disclosure_allowed is False

@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.agent.state import DiagnosisResult, StudentIntent, TeacherState, TeachingAction
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
+from app.agent.state import DiagnosisResult, StudentIntent, TeacherState
 from app.agent.workflow import (
     _choose_action,
     _keep_single_question,

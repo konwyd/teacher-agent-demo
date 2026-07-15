@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.agent.state import TeacherState, TeachingAction
+from app.agent.legacy_action_compat import LegacyTeachingAction as TeachingAction
+from app.agent.state import TeacherState
 from app.evaluation.evaluator import (
     GoldenCase,
     GoldenTurn,

@@ -7,6 +7,8 @@ compatibility boundary, preserving the legacy ``run_turn`` return contract.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from app.agent import linear_equation_adapter as _legacy
 from app.agent.state import (
     TeacherState,
@@ -18,6 +20,12 @@ from app.agent.teaching_harness import run_generic_teaching_turn
 from app.retrieval.graph_retriever import get_retriever as _legacy_graph_retriever
 
 
+@dataclass(frozen=True)
+class TeachingTurnResult:
+    teacher_state: TeacherState
+    teaching_state: TeachingState
+
+
 def _run_legacy_turn_if_supported(
     student_id: str,
     message: str,
@@ -26,6 +34,31 @@ def _run_legacy_turn_if_supported(
     if not _legacy.supports_legacy_equation_turn(student_id, message, conversation_id):
         return None
     return _legacy.run_legacy_equation_turn(student_id, message, conversation_id)
+
+
+def execute_turn(
+    student_id: str,
+    message: str,
+    conversation_id: str | None = None,
+    **generic_dependencies,
+) -> TeachingTurnResult:
+    """Execute one route once while retaining legacy and unified views."""
+    legacy_state = _run_legacy_turn_if_supported(student_id, message, conversation_id)
+    if legacy_state is not None:
+        return TeachingTurnResult(
+            teacher_state=legacy_state,
+            teaching_state=project_teacher_state(legacy_state),
+        )
+    teaching_state = run_generic_teaching_turn(
+        student_id,
+        message,
+        conversation_id,
+        **generic_dependencies,
+    )
+    return TeachingTurnResult(
+        teacher_state=project_teaching_state_to_teacher_state(teaching_state),
+        teaching_state=teaching_state,
+    )
 
 
 def run_teaching_turn(
@@ -41,10 +74,7 @@ def run_teaching_turn(
 ) -> TeachingState:
     """Run the default neutral teaching harness for one tutoring turn."""
 
-    legacy_state = _run_legacy_turn_if_supported(student_id, message, conversation_id)
-    if legacy_state is not None:
-        return project_teacher_state(legacy_state)
-    return run_generic_teaching_turn(
+    return execute_turn(
         student_id,
         message,
         conversation_id,
@@ -53,7 +83,7 @@ def run_teaching_turn(
         reasoner=reasoner,
         response_client=response_client,
         analysis_allow_llm=analysis_allow_llm,
-    )
+    ).teaching_state
 
 
 def run_turn(
@@ -63,12 +93,7 @@ def run_turn(
 ) -> TeacherState:
     """Compatibility API returning ``TeacherState`` for existing callers."""
 
-    legacy_state = _run_legacy_turn_if_supported(student_id, message, conversation_id)
-    if legacy_state is not None:
-        return legacy_state
-    return project_teaching_state_to_teacher_state(
-        run_generic_teaching_turn(student_id, message, conversation_id)
-    )
+    return execute_turn(student_id, message, conversation_id).teacher_state
 
 
 def build_workflow():
