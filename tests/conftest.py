@@ -14,3 +14,16 @@ def offline_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("TEACHER_EPISODE_PATH", str(tmp_path / "episode_states.json"))
     monkeypatch.setenv("TEACHER_LEARNING_EVENTS_PATH", str(tmp_path / "learning_events.jsonl"))
     monkeypatch.setenv("TEACHER_THREE_LAYER_PROFILE_PATH", str(tmp_path / "student_profiles_v2.json"))
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Classify tests by migration directory without editing frozen modules."""
+
+    for item in items:
+        path = Path(str(item.path)).as_posix()
+        if "/tests/contracts/" in f"/{path}":
+            item.add_marker(pytest.mark.safety_contract)
+        elif "/tests/behavior/" in f"/{path}":
+            item.add_marker(pytest.mark.teaching_behavior)
+        else:
+            item.add_marker(pytest.mark.legacy_lock)

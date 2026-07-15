@@ -28,3 +28,8 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "safety_contract: permanent safety and public-contract regression",
+    "legacy_lock: frozen implementation-lock test; keep green and add no new cases",
+    "teaching_behavior: new multi-turn teaching-quality behavior test",
+]
