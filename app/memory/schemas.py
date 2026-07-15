@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -25,6 +26,41 @@ class StudentProfile(BaseModel):
     last_updated_at: str | None = None
 
 
+class StudentEvidenceKind(str, Enum):
+    CONFIRMED_CORRECT = "confirmed_correct"
+    VERIFIED_ERROR = "verified_error"
+    UNRESOLVED_OBSTACLE = "unresolved_obstacle"
+    TEACHING_ACTION = "teaching_action"
+    HINT_OUTCOME = "hint_outcome"
+    SOFT_CLAIM = "soft_claim"
+
+
+class StudentEvidenceRecord(BaseModel):
+    evidence_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    timestamp: str = Field(default_factory=now_iso)
+    source_turn: int = Field(ge=1)
+    scope_id: str = ""
+    kind: StudentEvidenceKind
+    text: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    verifier_name: str = ""
+    teaching_action_code: str = ""
+    scaffold_level: int = Field(default=0, ge=0, le=3)
+    progressed_after_hint: bool | None = None
+
+
+class StudentEvidenceSnapshot(BaseModel):
+    records: list[StudentEvidenceRecord] = Field(default_factory=list)
+    confirmed_correct: list[StudentEvidenceRecord] = Field(default_factory=list)
+    verified_errors: list[StudentEvidenceRecord] = Field(default_factory=list)
+    unresolved_obstacles: list[StudentEvidenceRecord] = Field(default_factory=list)
+    recent_action_codes: list[str] = Field(default_factory=list)
+    latest_scaffold_level: int = Field(default=0, ge=0, le=3)
+    latest_verified_step: str = ""
+    progress_after_latest_hint: bool | None = None
+    consecutive_verified_errors: int = Field(default=0, ge=0)
+
+
 class EpisodeState(BaseModel):
     """Layer 2: current teaching episode working memory."""
 
@@ -41,6 +77,8 @@ class EpisodeState(BaseModel):
     pending_question_type: str | None = None
     pending_practice_problem: str | None = None
     recent_turns: list[dict[str, Any]] = Field(default_factory=list)
+    student_evidence: list[StudentEvidenceRecord] = Field(default_factory=list)
+    last_orchestration_trace: dict[str, Any] = Field(default_factory=dict)
     is_problem_solved: bool = False
 
 
