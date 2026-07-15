@@ -165,7 +165,7 @@ class StrategyRegistry:
         failures: list[str] = []
         primary_capability = self._capabilities.get(normalized.primary.strategy_id)
         if primary_capability is None:
-            primary = self._unknown_capability().advise(context)
+            primary = UnknownCapability().advise(context)
         else:
             try:
                 primary = primary_capability.advise(context)
@@ -173,7 +173,7 @@ class StrategyRegistry:
                 failures.append(
                     f"{normalized.primary.strategy_id.value}:{type(exc).__name__}"
                 )
-                primary = self._unknown_capability().advise(context)
+                primary = UnknownCapability().advise(context)
 
         supporting: list[StrategyGuidance] = []
         for candidate in normalized.supporting:
@@ -190,6 +190,3 @@ class StrategyRegistry:
             supporting=supporting,
             failure_reasons=failures,
         )
-
-    def _unknown_capability(self) -> StrategyCapability:
-        return self._capabilities.get(StrategyId.UNKNOWN, UnknownCapability())

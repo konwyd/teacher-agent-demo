@@ -141,6 +141,17 @@ class _FailingCapability:
         raise RuntimeError("simulated capability failure")
 
 
+class _CountingFailingUnknownCapability:
+    strategy_id = StrategyId.UNKNOWN
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def advise(self, context: StrategyContext) -> StrategyGuidance:
+        self.calls += 1
+        raise LookupError("simulated unknown capability failure")
+
+
 def test_registry_invokes_primary_once_and_only_registered_supporting() -> None:
     calls: list[StrategyId] = []
     registry = StrategyRegistry(
@@ -218,7 +229,7 @@ def test_supporting_failure_is_isolated_and_recorded() -> None:
         _FailingCapability(StrategyId.DATA_ANALYSIS),
     ],
 )
-def test_missing_or_failed_primary_falls_back_to_unknown(primary_capability) -> None:
+def test_missing_or_failed_primary_uses_builtin_unknown(primary_capability) -> None:
     calls: list[StrategyId] = []
     capabilities = [_RecordingCapability(StrategyId.UNKNOWN, calls)]
     if primary_capability is not None:
@@ -236,8 +247,58 @@ def test_missing_or_failed_primary_falls_back_to_unknown(primary_capability) -> 
     )
 
     assert bundle.primary.source_strategy is StrategyId.UNKNOWN
-    assert calls == [StrategyId.UNKNOWN]
+    assert calls == []
     expected_failures = (
         [] if primary_capability is None else ["data_analysis:RuntimeError"]
+    )
+    assert bundle.failure_reasons == expected_failures
+
+
+def test_selected_failing_unknown_runs_once_then_uses_safe_unknown_guidance() -> None:
+    failing_unknown = _CountingFailingUnknownCapability()
+    registry = StrategyRegistry([failing_unknown])
+
+    bundle = registry.advise(
+        StrategySelection(
+            primary=StrategyCandidate(
+                strategy_id=StrategyId.UNKNOWN,
+                confidence=0.8,
+            )
+        ),
+        StrategyContext(problem_context="未知题型", student_message="我不确定。"),
+    )
+
+    assert failing_unknown.calls == 1
+    assert bundle.primary.source_strategy is StrategyId.UNKNOWN
+    assert bundle.primary.primary_next_step == ""
+    assert bundle.primary.confidence == 0.0
+    assert bundle.failure_reasons == ["unknown:LookupError"]
+
+
+@pytest.mark.parametrize("include_failing_primary", [False, True])
+def test_non_unknown_fallback_does_not_invoke_broken_registered_unknown(
+    include_failing_primary: bool,
+) -> None:
+    failing_unknown = _CountingFailingUnknownCapability()
+    capabilities = [failing_unknown]
+    if include_failing_primary:
+        capabilities.append(_FailingCapability(StrategyId.DATA_ANALYSIS))
+    registry = StrategyRegistry(capabilities)
+
+    bundle = registry.advise(
+        StrategySelection(
+            primary=StrategyCandidate(
+                strategy_id=StrategyId.DATA_ANALYSIS,
+                confidence=0.8,
+            )
+        ),
+        StrategyContext(problem_context="表格", student_message="下一步呢？"),
+    )
+
+    assert failing_unknown.calls == 0
+    assert bundle.primary.source_strategy is StrategyId.UNKNOWN
+    assert bundle.primary.primary_next_step == ""
+    expected_failures = (
+        ["data_analysis:RuntimeError"] if include_failing_primary else []
     )
     assert bundle.failure_reasons == expected_failures
