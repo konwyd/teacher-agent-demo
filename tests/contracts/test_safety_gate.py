@@ -60,6 +60,30 @@ def test_total_confusion_markers_are_narrow(message: str) -> None:
     assert context.expresses_total_confusion is True
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "我不是完全不懂，只是不知道怎么选方法",
+        "我完全不懂？不是，我只是不知道怎么选方法",
+        "题目中引用了“我完全不懂”",
+        "我完全不懂这个术语，但题会做",
+    ],
+    ids=["negated", "negated_exact_phrase", "quoted", "qualified"],
+)
+def test_total_confusion_near_matches_do_not_unlock_model(message: str) -> None:
+    context = SafetyInput.from_turn(problem_context="一个数学问题", message=message)
+    result = SafetyGate().evaluate(context)
+
+    assert context.expresses_total_confusion is False
+    assert TeachingAction.MODEL not in result.allowed_actions
+
+
+@pytest.mark.parametrize("message", ["  我完全不懂。 ", "我一点都不会！", "我完全不会做？"])
+def test_total_confusion_allows_harmless_outer_formatting(message: str) -> None:
+    context = SafetyInput.from_turn(problem_context="一个数学问题", message=message)
+    assert context.expresses_total_confusion is True
+
+
 def test_ordinary_method_uncertainty_does_not_unlock_model() -> None:
     context = SafetyInput.from_turn(
         problem_context="一个数学问题",

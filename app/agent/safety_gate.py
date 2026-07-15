@@ -13,6 +13,7 @@ from app.agent.teaching_actions import (
 
 
 _TOTAL_CONFUSION_MARKERS = ("我完全不懂", "我一点都不会", "我完全不会做")
+_HARMLESS_END_PUNCTUATION = "。.!！?？…"
 
 
 class SafetyInput(BaseModel):
@@ -30,11 +31,10 @@ class SafetyInput(BaseModel):
 
     @classmethod
     def from_turn(cls, *, problem_context: str, message: str) -> SafetyInput:
+        normalized_message = message.strip().rstrip(_HARMLESS_END_PUNCTUATION)
         return cls(
             problem_context=problem_context,
-            expresses_total_confusion=any(
-                marker in message for marker in _TOTAL_CONFUSION_MARKERS
-            ),
+            expresses_total_confusion=normalized_message in _TOTAL_CONFUSION_MARKERS,
         )
 
 
