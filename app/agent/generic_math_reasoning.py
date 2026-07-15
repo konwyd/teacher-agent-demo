@@ -53,6 +53,9 @@ class GenericMathReasoner:
                     "你是初中数学推理器。给出短小、可教学的推理，明确不确定性。"
                     "不要选择教学动作，不要给学生回复，不要声称 verifier 已验证，"
                     "题意不清或不能可靠推理时必须设置 needs_clarification=true。"
+                    "在同一次 JSON 结果的 strategy_selection 中给出一个 primary "
+                    "和最多两个 supporting；strategy_id 只能是 symbolic_transformation、"
+                    "quantitative_modeling、geometric_reasoning、data_analysis 或 unknown。"
                 ),
                 user=f"题目：{problem_context}\n学生消息：{message}",
                 schema=GenericMathReasoning,

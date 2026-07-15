@@ -2,6 +2,7 @@
 
 import app.agent.math_analysis as math_analysis
 from app.agent.generic_math_reasoning import GenericMathReasoner
+from app.agent.strategy_capabilities import StrategyId
 from app.agent.state import MathAnalysis
 from app.llm.deepseek_client import DeepSeekError
 
@@ -26,6 +27,19 @@ class _ReasoningClient:
             next_step_hint="先计算每份是多少。",
             candidate_conclusion="男生18人，女生12人。",
             confidence=0.9,
+            strategy_selection={
+                "primary": {
+                    "strategy_id": "quantitative_modeling",
+                    "confidence": 0.83,
+                    "rationale": "题目需要建立数量关系。",
+                },
+                "supporting": [
+                    {
+                        "strategy_id": "symbolic_transformation",
+                        "confidence": 0.72,
+                    }
+                ],
+            },
         )
 
 
@@ -40,8 +54,13 @@ def test_reasoner_returns_validated_reasoning_with_a_token_cap() -> None:
 
     assert result.confidence == 0.9
     assert result.reasoning_steps == ["把3:2看成5个相等份。"]
+    assert result.strategy_selection.primary.strategy_id is StrategyId.QUANTITATIVE_MODELING
+    assert result.strategy_selection.supporting[0].strategy_id is StrategyId.SYMBOLIC_TRANSFORMATION
+    assert len(client.calls) == 1
     assert client.calls[-1]["max_tokens"] == 450
     assert "不要选择教学动作" in client.calls[-1]["system"]
+    assert "一个 primary" in client.calls[-1]["system"]
+    assert "最多两个 supporting" in client.calls[-1]["system"]
 
 
 def test_reasoner_declines_ambiguous_context_without_calling_client() -> None:
@@ -88,6 +107,7 @@ def test_unconfigured_reasoner_leaves_a_safe_generic_hint_available() -> None:
     assert result.needs_clarification is False
     assert result.reasoning_steps == []
     assert result.uncertainty_note
+    assert result.strategy_selection.primary.strategy_id is StrategyId.UNKNOWN
 
 
 def test_reasoner_preserves_a_client_error_summary_for_audit() -> None:
@@ -104,4 +124,5 @@ def test_reasoner_preserves_a_client_error_summary_for_audit() -> None:
     )
 
     assert result.needs_clarification is True
+    assert result.strategy_selection.primary.strategy_id is StrategyId.UNKNOWN
     assert "DeepSeekError: simulated transport failure" in reasoner.last_error

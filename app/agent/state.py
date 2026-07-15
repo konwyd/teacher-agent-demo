@@ -12,6 +12,7 @@ from app.agent.legacy_action_compat import (
     legacy_to_plan,
     plan_to_legacy_action,
 )
+from app.agent.strategy_capabilities import StrategySelection
 from app.agent.teaching_actions import TeachingAction, TeachingActionPlan
 from app.memory.schemas import ContextResolution, EpisodeState, LearningEvent
 from app.retrieval.graph_retriever import RetrievalEvidence
@@ -55,6 +56,7 @@ class GenericMathReasoning(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     needs_clarification: bool = False
     uncertainty_note: str = ""
+    strategy_selection: StrategySelection = Field(default_factory=StrategySelection)
 
 
 class VerificationStatus(str, Enum):
