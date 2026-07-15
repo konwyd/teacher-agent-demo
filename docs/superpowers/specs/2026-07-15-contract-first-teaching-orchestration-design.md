@@ -1,6 +1,6 @@
 # 契约优先的数学教学编排重构设计
 
-状态：已批准，等待书面规格复核
+状态：已批准
 
 日期：2026-07-15
 
@@ -242,9 +242,9 @@ StudentModel 不保存“代数很差”“喜欢直接讲解”等未经验证�
 
 1. ContextResolver 稳定解析首轮 `problem_context` 和当前请求；
 2. StudentModel 生成当前证据快照；
-3. MathReasoner 按需理解题目、分析尝试、选择策略和候选下一步；
-4. StrategyRegistry 运行一个 primary 和最多两个 supporting 插件；
-5. OptionalVerifier 验证学生步骤及可验证的候选事实；
+3. OptionalVerifier 对当前学生步骤做确定性预检；不适用时返回 `not_applicable`，不能阻断教学；
+4. MathReasoner 在 verifier 证据不足时按需理解题目、分析尝试、选择策略和候选下一步；
+5. StrategyRegistry 运行一个 primary 和最多两个 supporting 插件；
 6. 可选 Graph/RAG 只补充与当前教学决策直接相关的证据；
 7. SafetyGate 计算允许动作、披露上限以及例题和新题权限；
 8. TeachingPlanner 按需选择一个动作及参数；
