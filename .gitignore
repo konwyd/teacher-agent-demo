@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.egg-info/
+*.egg
+.pytest_cache/
+logs/
+*.log
+.env.example
+# 保留 .env 模板但排除真实密钥
