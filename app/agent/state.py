@@ -502,6 +502,25 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
         if action_plan is not None
         else LegacyTeachingAction.ASK_DIAGNOSTIC_QUESTION
     )
+    verification = teaching_state.verification
+    if not teaching_state.context_resolution.is_reply_to_previous_teacher:
+        student_step_validity = ""
+    elif verification.status is VerificationStatus.NOT_APPLICABLE:
+        student_step_validity = ""
+    elif verification.summary in {
+        "not_a_step",
+        "correct_step",
+        "correct_final_answer",
+        "incorrect_step",
+        "unparseable",
+    }:
+        student_step_validity = verification.summary
+    else:
+        student_step_validity = {
+            VerificationStatus.VERIFIED_CORRECT: "correct_step",
+            VerificationStatus.VERIFIED_INCORRECT: "incorrect_step",
+            VerificationStatus.UNABLE_TO_VERIFY: "unparseable",
+        }.get(verification.status, "")
     return TeacherState(
         student_id=teaching_state.student_id,
         message=teaching_state.message,
@@ -520,6 +539,7 @@ def project_teaching_state_to_teacher_state(teaching_state: TeachingState) -> Te
         expected_student_response=teaching_state.expected_student_response,
         current_phase=teaching_state.current_phase,
         problem_solved=teaching_state.answer_disclosure_allowed,
+        student_step_validity=student_step_validity,
         action=action,
         selected_hint_level=(
             action_plan.scaffold_level

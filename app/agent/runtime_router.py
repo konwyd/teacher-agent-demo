@@ -30,12 +30,7 @@ class RuntimeDecision:
 
 
 def unified_linear_slice_enabled() -> bool:
-    return os.getenv("TEACHER_UNIFIED_LINEAR_SLICE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return os.getenv("TEACHER_UNIFIED_LINEAR_SLICE", "").strip().lower() == "true"
 
 
 def resolve_runtime_path(
@@ -54,7 +49,10 @@ def resolve_runtime_path(
     if existing_episode and existing_episode.target_equation:
         return RuntimePath.LEGACY_EQUATION
     if existing_episode and existing_episode.orchestration_path:
-        return RuntimePath(existing_episode.orchestration_path)
+        try:
+            return RuntimePath(existing_episode.orchestration_path)
+        except ValueError:
+            return RuntimePath.GENERIC
     if existing_episode and existing_episode.problem_context:
         return RuntimePath.GENERIC
     if is_legacy_concept_request(message):
