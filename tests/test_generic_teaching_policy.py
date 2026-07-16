@@ -10,7 +10,12 @@ from app.agent.state import (
     VerificationResult,
     VerificationStatus,
 )
-from app.agent.teaching_actions import TeachingAction
+from app.agent.teaching_actions import (
+    DisclosureLevel,
+    SafetyConstraints,
+    TeachingAction,
+)
+from app.agent.teaching_brief import TeachingBriefComposer
 from app.agent.teaching_policy import TeachingPolicy
 
 
@@ -25,7 +30,20 @@ def test_unverified_problem_uses_a_hint_without_disclosing_an_answer() -> None:
         ),
     )
     state.action_plan = TeachingPolicy().choose(state)
-    response = generate_response(state)
+    brief = TeachingBriefComposer().compose(
+        problem_context=state.problem_context,
+        current_student_request=state.message,
+        verified_facts=[],
+        student_evidence=[],
+        action_plan=state.action_plan,
+        constraints=SafetyConstraints(
+            allowed_actions=[state.action_plan.action],
+            disclosure_ceiling=DisclosureLevel.NEXT_STEP,
+        ),
+        next_step_candidates=[state.math_reasoning.next_step_hint],
+        candidate_conclusion=state.math_reasoning.candidate_conclusion,
+    )
+    response = generate_response(brief)
 
     assert state.action_plan.action is TeachingAction.SCAFFOLD
     assert state.answer_disclosure_allowed is False

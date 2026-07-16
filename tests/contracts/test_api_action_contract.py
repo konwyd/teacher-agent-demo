@@ -18,3 +18,5 @@ def test_api_preserves_legacy_action_codes_and_adds_unified_plan() -> None:
     assert data["teaching_state"]["action_plan"]["action"] == "give_hint"
     assert data["teaching_action_plan"]["action"] == "scaffold"
     assert data["teaching_action_plan"]["scaffold_level"] == 1
+    assert data["safety_constraints"]["allowed_actions"]
+    assert isinstance(data["orchestration_trace"]["decisions"], list)

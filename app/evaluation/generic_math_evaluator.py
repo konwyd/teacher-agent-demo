@@ -8,6 +8,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.agent.state import GenericMathReasoning, VerificationStatus
+from app.agent.teaching_actions import DisclosureLevel
+from app.agent.teaching_brief import TeachingBrief
 from app.agent.teaching_harness import run_generic_teaching_turn
 
 
@@ -65,9 +67,12 @@ class _FixtureReasoner:
 class _FixtureResponseClient:
     def chat(self, system, user, temperature=0.2, max_tokens=None) -> str:
         del system, temperature, max_tokens
-        marker = "获准披露的候选结论："
-        if marker in user:
-            conclusion = user.split(marker, 1)[1].split("\n", 1)[0]
+        brief = TeachingBrief.model_validate_json(user)
+        if (
+            brief.disclosure_ceiling is DisclosureLevel.FINAL
+            and brief.allowed_content
+        ):
+            conclusion = brief.allowed_content[-1]
             return f"根据题目条件逐步整理，可以得到：{conclusion} 你能复述关键关系吗？"
         return "先把题目中的条件和所求内容对应起来。你准备先写出哪一条关系？"
 

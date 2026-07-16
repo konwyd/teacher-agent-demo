@@ -46,6 +46,10 @@ def reset_chat_window(conversation_id: str) -> None:
 def render_meta(meta: dict[str, Any]) -> None:
     episode = meta.get("episode_state_summary") or {}
     context = meta.get("context_resolution") or {}
+    action_plan = meta.get("teaching_action_plan") or {}
+    constraints = meta.get("safety_constraints") or {}
+    orchestration = meta.get("orchestration_trace") or {}
+    shadow_plan = orchestration.get("shadow_plan") or {}
     with st.expander("诊断与检索详情"):
         st.write("**conversation_id**:", meta.get("conversation_id"))
         st.write("**current_phase**:", episode.get("current_phase"))
@@ -67,6 +71,23 @@ def render_meta(meta: dict[str, Any]) -> None:
         st.write("**intent**:", meta.get("intent"))
         st.write("**student_gap**:", meta.get("student_gap"))
         st.write("**teaching_action**:", meta.get("teaching_action"))
+        st.write("**unified_action**:", action_plan.get("action") or "无")
+        st.write("**unified_scaffold_level**:", action_plan.get("scaffold_level", 0))
+        st.write(
+            "**disclosure_ceiling**:",
+            constraints.get("disclosure_ceiling") or "无",
+        )
+        st.write("**shadow_action**:", shadow_plan.get("action") or "无")
+        st.write("**llm_call_count**:", orchestration.get("llm_call_count", 0))
+        for decision in orchestration.get("decisions") or []:
+            st.write(
+                f"**module:{decision.get('module', 'unknown')}**:",
+                {
+                    "called": decision.get("called"),
+                    "reason": decision.get("reason"),
+                    "llm_calls": decision.get("llm_calls", 0),
+                },
+            )
         st.write("**socratic_stage**:", meta.get("socratic_stage"))
         st.write("**socratic_move**:", meta.get("socratic_move"))
         st.write("**socratic_reason**:", meta.get("socratic_reason"))

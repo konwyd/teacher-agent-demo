@@ -6,7 +6,7 @@ from app.agent.generic_math_reasoning import GenericMathReasoner
 from app.agent.math_analysis import analyze_turn
 from app.agent.optional_verifier import NoopVerifier, OptionalVerifier, VerificationRequest
 from app.agent.orchestration_trace import ModuleDecision, OrchestrationTrace
-from app.agent.response_generation import generate_response
+from app.agent import response_generation
 from app.agent.safety_gate import SafetyGate, SafetyInput
 from app.agent.state import (
     GenericMathReasoning,
@@ -22,6 +22,7 @@ from app.agent.strategy_capabilities import (
 from app.agent.student_model import StudentModel
 from app.agent.teaching_planner import PlannerInput, PlannerResult, TeachingPlanner
 from app.agent.teaching_policy import TeachingPolicy
+from app.agent.teaching_brief import TeachingBriefComposer
 from app.llm.deepseek_client import is_configured
 from app.memory.episode_state import get_episode_store
 from app.memory.schemas import ContextResolution, EpisodeState, now_iso
@@ -30,6 +31,27 @@ from app.retrieval.context_provider import (
     GraphContextProvider,
     GraphContextRequest,
 )
+
+
+class _TrackedResponseClient:
+    def __init__(self, client, on_llm_call) -> None:
+        self._client = client
+        self._on_llm_call = on_llm_call
+
+    def chat(self, system, user, temperature=0.2, max_tokens=None):
+        self._on_llm_call()
+        return self._client.chat(
+            system=system,
+            user=user,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+
+class _UnavailableResponseClient:
+    def chat(self, system, user, temperature=0.2, max_tokens=None):
+        _ = system, user, temperature, max_tokens
+        raise response_generation.DeepSeekError("response client unavailable")
 
 
 def _last_question(response: str) -> str | None:
@@ -410,16 +432,49 @@ def run_generic_teaching_turn(
     # compatibility but cannot change the active compatibility policy yet.
     _ = activate_planner
     state.current_phase = state.action_plan.action.value
+    state.teaching_brief = TeachingBriefComposer().compose(
+        problem_context=problem_context,
+        current_student_request=message,
+        verified_facts=list(verification.evidence),
+        student_evidence=[record.text for record in evidence_snapshot.records],
+        action_plan=state.action_plan,
+        constraints=safety_constraints,
+        next_step_candidates=[
+            strategy_bundle.primary.primary_next_step,
+            *(
+                guidance.primary_next_step
+                for guidance in strategy_bundle.supporting
+            ),
+            reasoning.next_step_hint,
+            *reasoning.reasoning_steps,
+        ],
+        candidate_conclusion=reasoning.candidate_conclusion,
+    )
     response_llm_calls = 0
 
     def record_response_llm_call() -> None:
         nonlocal response_llm_calls
         response_llm_calls += 1
 
-    state.response = generate_response(
-        state,
-        client=response_client,
-        on_llm_call=record_response_llm_call,
+    active_response_client = response_client
+    if (
+        active_response_client is None
+        and state.teaching_brief.primary_next_step
+        and is_configured()
+    ):
+        try:
+            active_response_client = response_generation.DeepSeekClient()
+        except (response_generation.DeepSeekError, ValueError):
+            active_response_client = _UnavailableResponseClient()
+    tracked_response_client = (
+        _TrackedResponseClient(active_response_client, record_response_llm_call)
+        if active_response_client is not None
+        and not isinstance(active_response_client, _UnavailableResponseClient)
+        else active_response_client
+    )
+    state.response = response_generation.generate_response(
+        state.teaching_brief,
+        client=tracked_response_client,
     )
     decisions.extend(
         [

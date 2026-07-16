@@ -1,7 +1,10 @@
 """Tests for the topic-agnostic workflow facade and legacy adapter boundary."""
 
+import json
+
 from app.agent.state import GenericMathReasoning, VerificationStatus
 from app.agent.teaching_actions import TeachingAction
+from app.agent.teaching_brief import TeachingBrief
 from app.agent.workflow import run_teaching_turn, run_turn
 
 
@@ -16,6 +19,8 @@ def test_non_equation_turn_uses_generic_harness_without_a_legacy_concept() -> No
     assert state.graph_context.available is False
     assert state.verification.status is VerificationStatus.NOT_APPLICABLE
     assert state.current_phase == state.action_plan.action.value
+    assert state.teaching_brief is not None
+    assert state.teaching_brief.action_plan == state.action_plan
     assert state.response.count("？") == 1
 
 
@@ -30,8 +35,20 @@ class _FakeReasoner:
 
 
 class _FakeResponseClient:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     def chat(self, system, user, temperature=0.2, max_tokens=None):
+        self.calls.append(user)
         return "先把3和2相加得到总份数。你能先写出总份数吗？"
+
+
+class _ReasoningStepsOnly:
+    def analyze(self, message, problem_context, analysis):
+        return GenericMathReasoning(
+            reasoning_steps=["先把比的两项相加得到总份数。", "再计算每份人数。"],
+            confidence=0.9,
+        )
 
 
 class _RecordingEquationSystemReasoner:
@@ -64,11 +81,12 @@ class _SequentialEquationSystemResponseClient:
 
 
 def test_non_equation_turn_uses_injected_reasoning_without_leaking_answer() -> None:
+    response_client = _FakeResponseClient()
     state = run_teaching_turn(
         "ratio-reasoning-student",
         "男生和女生人数的比是3:2，总数30人，我不知道先想什么。",
         reasoner=_FakeReasoner(),
-        response_client=_FakeResponseClient(),
+        response_client=response_client,
     )
 
     assert state.action_plan is not None
@@ -77,6 +95,26 @@ def test_non_equation_turn_uses_injected_reasoning_without_leaking_answer() -> N
     assert "18" not in state.response
     assert state.math_reasoning.reasoning_steps
     assert state.trace[:2] == ["generic_analysis", "generic_math_reasoning"]
+    assert state.teaching_brief is not None
+    assert "男生18人，女生12人。" in state.teaching_brief.forbidden_disclosures
+    assert set(json.loads(response_client.calls[-1])) == set(TeachingBrief.model_fields)
+
+
+def test_first_reasoning_step_becomes_the_only_primary_next_step() -> None:
+    response_client = _FakeResponseClient()
+
+    state = run_teaching_turn(
+        "reasoning-step-student",
+        "男生和女生人数的比是3:2，总数30人。",
+        reasoner=_ReasoningStepsOnly(),
+        response_client=response_client,
+        analysis_allow_llm=False,
+    )
+
+    assert state.teaching_brief is not None
+    assert state.teaching_brief.primary_next_step == "先把比的两项相加得到总份数。"
+    assert "再计算每份人数。" not in state.teaching_brief.allowed_content
+    assert len(response_client.calls) == 1
 
 
 def test_equation_turn_still_uses_the_legacy_compatibility_adapter() -> None:

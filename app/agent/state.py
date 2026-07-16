@@ -19,6 +19,7 @@ from app.agent.teaching_actions import (
     TeachingAction,
     TeachingActionPlan,
 )
+from app.agent.teaching_brief import TeachingBrief
 from app.memory.schemas import (
     ContextResolution,
     EpisodeState,
@@ -118,6 +119,7 @@ class TeachingState(BaseModel):
     current_phase: str = ""
     answer_disclosure_allowed: bool = False
     action_plan: TeachingActionPlan | None = None
+    teaching_brief: TeachingBrief | None = None
     math_analysis: MathAnalysis = Field(default_factory=MathAnalysis)
     math_reasoning: GenericMathReasoning = Field(default_factory=GenericMathReasoning)
     verification: VerificationResult = Field(default_factory=VerificationResult)

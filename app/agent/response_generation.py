@@ -1,12 +1,14 @@
-"""Guarded response generation for the topic-agnostic teaching harness."""
+"""Guarded response generation from a policy-approved teaching brief."""
 
 from __future__ import annotations
 
+import json
+import unicodedata
 from collections.abc import Callable
 from typing import Protocol
 
-from app.agent.state import TeachingState
 from app.agent.teaching_actions import TeachingAction
+from app.agent.teaching_brief import TeachingBrief
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 
 
@@ -34,57 +36,70 @@ class _ResponseClient(Protocol):
         """Return a teacher response."""
 
 
-def _safe_response(state: TeachingState) -> str:
-    if state.action_plan is None:
-        raise ValueError("TeachingState requires an action plan before response generation")
-    return _SAFE_RESPONSES[state.action_plan.action]
+GroundingGuard = Callable[[str, TeachingBrief], bool]
 
 
-def _candidate_is_authorized(state: TeachingState) -> bool:
-    return state.answer_disclosure_allowed
+def _generic_grounding_guard(response: str, brief: TeachingBrief) -> bool:
+    _ = response, brief
+    return True
 
 
-def _approved_context(state: TeachingState) -> str:
-    if state.action_plan is None:
-        raise ValueError("TeachingState requires an action plan before response generation")
-
-    reasoning = state.math_reasoning
-    facts = [
-        f"原题：{state.problem_context}",
-        f"教学动作：{state.action_plan.action.value}",
-        f"提示层级：{state.action_plan.scaffold_level}",
-    ]
-    if reasoning.reasoning_steps:
-        facts.append("可使用的推理步骤：" + "\n".join(reasoning.reasoning_steps))
-    if reasoning.next_step_hint:
-        facts.append(f"可使用的下一步提示：{reasoning.next_step_hint}")
-    if _candidate_is_authorized(state) and reasoning.candidate_conclusion:
-        facts.append(f"获准披露的候选结论：{reasoning.candidate_conclusion}")
-    return "\n".join(facts)
+def _normalize_for_disclosure(value: str) -> str:
+    return "".join(unicodedata.normalize("NFKC", value).split())
 
 
-def _has_single_final_question(response: str) -> bool:
-    question_count = response.count("？") + response.count("?")
-    return question_count == 1 and response.rstrip().endswith(("？", "?"))
+class ResponseGuard:
+    """Validate response shape, disclosure, and optional grounding evidence."""
+
+    @staticmethod
+    def validate(
+        response: str,
+        brief: TeachingBrief,
+        grounding_guard: GroundingGuard | None = None,
+    ) -> bool:
+        text = response.strip()
+        if not text:
+            return False
+        if text.count("？") + text.count("?") != 1:
+            return False
+        if not text.endswith(("？", "?")):
+            return False
+
+        normalized_response = _normalize_for_disclosure(text)
+        if any(
+            normalized_forbidden
+            and normalized_forbidden in normalized_response
+            for normalized_forbidden in (
+                _normalize_for_disclosure(item)
+                for item in brief.forbidden_disclosures
+            )
+        ):
+            return False
+
+        active_grounding_guard = grounding_guard or _generic_grounding_guard
+        if brief.action_plan.action not in {
+            TeachingAction.MODEL,
+            TeachingAction.PRACTICE,
+        } and not active_grounding_guard(text, brief):
+            return False
+        return True
 
 
-def _contains_unapproved_candidate(response: str, state: TeachingState) -> bool:
-    candidate = state.math_reasoning.candidate_conclusion
-    if not candidate or _candidate_is_authorized(state):
-        return False
-    return candidate.replace(" ", "") in response.replace(" ", "")
+def _safe_response(brief: TeachingBrief) -> str:
+    return _SAFE_RESPONSES[brief.action_plan.action]
 
 
 def generate_response(
-    state: TeachingState,
+    brief: TeachingBrief,
     *,
     client: _ResponseClient | None = None,
-    on_llm_call: Callable[[], None] | None = None,
 ) -> str:
-    """Generate from policy-approved facts or return a one-question safe fallback."""
+    """Generate only from the approved brief or return its action fallback."""
 
-    fallback = _safe_response(state)
-    if not state.math_reasoning.reasoning_steps and not state.math_reasoning.next_step_hint:
+    if not isinstance(brief, TeachingBrief):
+        raise TypeError("generate_response requires a TeachingBrief")
+    fallback = _safe_response(brief)
+    if not brief.primary_next_step:
         return fallback
     if client is None and not is_configured():
         return fallback
@@ -95,23 +110,23 @@ def generate_response(
         return fallback
 
     try:
-        if on_llm_call is not None:
-            on_llm_call()
         response = active_client.chat(
             system=(
-                "你是初中数学老师。只能使用输入中的获准事实，围绕原题给一个可执行的下一步。"
-                "未获准时不得给出最终答案或等价结论；只能保留一个结尾问句；"
-                "不得声称候选结论已经被 verifier 验证。"
+                "你是初中数学老师。只能使用用户消息中 TeachingBrief 的获准内容，"
+                "围绕稳定原题给一个可执行的下一步。不得披露禁止内容；"
+                "只能保留一个结尾问句。"
             ),
-            user=_approved_context(state),
+            user=json.dumps(
+                brief.model_dump(mode="json"),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
             temperature=0.2,
             max_tokens=350,
         ).strip()
     except (DeepSeekError, ValueError):
         return fallback
 
-    if not response or not _has_single_final_question(response):
-        return fallback
-    if _contains_unapproved_candidate(response, state):
+    if not ResponseGuard.validate(response, brief):
         return fallback
     return response

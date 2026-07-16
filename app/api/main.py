@@ -108,6 +108,8 @@ def turn(req: TurnRequest) -> TurnResponse:
         teaching_action_plan=(
             unified_plan.model_dump(mode="json") if unified_plan is not None else {}
         ),
+        safety_constraints=teaching_state.safety_constraints.model_dump(mode="json"),
+        orchestration_trace=teaching_state.orchestration_trace.model_dump(mode="json"),
         socratic_stage=state.socratic_stage,
         socratic_move=state.socratic_move,
         socratic_reason=state.socratic_reason,
