@@ -54,6 +54,19 @@ class DisclosureReason(str, Enum):
     TEACHER_JUDGMENT = "teacher_judgment"
 
 
+class TaskShape(str, Enum):
+    DIRECT_FACT = "direct_fact"
+    CONCEPTUAL = "conceptual"
+    MULTI_STEP_PROBLEM = "multi_step_problem"
+    OTHER = "other"
+
+
+class ResponseScope(str, Enum):
+    SINGLE_MOVE = "single_move"
+    PARTIAL_SOLUTION = "partial_solution"
+    FULL_SOLUTION = "full_solution"
+
+
 class LLMTeachingTurn(BaseModel):
     """One autonomous teaching decision and response from the LLM."""
 
@@ -63,6 +76,8 @@ class LLMTeachingTurn(BaseModel):
     expects_student_response: bool = True
     disclosure_level: DisclosureLevel = DisclosureLevel.NONE
     disclosure_reason: DisclosureReason = DisclosureReason.NONE
+    task_shape: TaskShape = TaskShape.OTHER
+    response_scope: ResponseScope = ResponseScope.SINGLE_MOVE
     evidence_turn_ids: list[int] = Field(default_factory=list)
     mathematical_claims: list[str] = Field(default_factory=list)
     rationale: str = ""
@@ -114,10 +129,14 @@ _SYSTEM_PROMPT = """你是一名中文初中数学老师，由你自主完成整
 4. 不要因为缺少 verifier 就退回“我不假设题型”或让学生重新说明已经清楚的信息。
 5. 学生问为什么时直接解释原因；学生跳步时按实际内容回应。
 6. 每轮最多提出一个真正必要的问题，也可以不提问；不要为了格式机械追问或要求反复复述依据。
-7. 由你判断是否披露局部结果或最终答案，但必须如实填写 disclosure_level、disclosure_reason 和证据回合。
-8. 学生明确说不要答案时不得给最终答案。
-9. mathematical_claims 只列出你在回复中明确断言成立的关键算式、数值或结论；不要列问题、假设或原题复述。
-10. action_label 只是对本轮行为的事后描述，不会限制你的教学。
+7. 对 multi_step_problem，学生只说“怎么解”“我不会”“帮我”时，默认一轮只推进一个有意义的步骤；具体教哪一步由你决定。
+8. 只有学生明确要求“直接给答案”“完整步骤”“从头到尾讲解”，或历史回合显示持续卡住时，才可以一次给出 full_solution。
+9. direct_fact 可以直接回答；conceptual 可以完整解释概念，不要为了拆步骤而故意回避结论。
+10. 必须如实填写 task_shape 和 response_scope；不能把完整解法标成 single_move。
+11. 由你判断是否披露局部结果或最终答案，但必须如实填写 disclosure_level、disclosure_reason 和证据回合。
+12. 学生明确说不要答案时不得给最终答案。
+13. mathematical_claims 只列出你在回复中明确断言成立的关键算式、数值或结论；不要列问题、假设或原题复述。
+14. action_label 只是对本轮行为的事后描述，不会限制你的教学。
 """
 
 
@@ -134,6 +153,18 @@ _NO_ANSWER_MARKERS = (
     "别告诉我答案",
     "不要直接给答案",
     "先别给答案",
+)
+
+_FULL_SOLUTION_REQUEST_MARKERS = (
+    "直接告诉我答案",
+    "直接给答案",
+    "只要答案",
+    "完整答案",
+    "完整步骤",
+    "全部步骤",
+    "完整解答",
+    "从头到尾",
+    "完整讲解",
 )
 
 
@@ -206,6 +237,30 @@ def _question_count(text: str) -> int:
     return text.count("？") + text.count("?")
 
 
+def _explicitly_requests_full_solution(message: str) -> bool:
+    return any(marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS)
+
+
+def _has_prior_disclosure_evidence(
+    episode: PrototypeEpisode,
+    output: LLMTeachingTurn,
+) -> bool:
+    return any(1 <= turn_id <= len(episode.turns) for turn_id in output.evidence_turn_ids)
+
+
+def _has_verified_final_claim(claim_audits: list[ClaimAudit]) -> bool:
+    for audit in claim_audits:
+        if audit.verification.status is not VerificationStatus.VERIFIED_CORRECT:
+            continue
+        equation_text = mc.extract_equation(audit.claim)
+        if equation_text is None:
+            continue
+        equation = mc.parse_equation(equation_text)
+        if equation is not None and mc.is_final_form(equation):
+            return True
+    return False
+
+
 def _collect_warnings(
     episode: PrototypeEpisode,
     message: str,
@@ -245,6 +300,31 @@ def _collect_warnings(
         and not output.evidence_turn_ids
     ):
         warnings.append("教师自主披露最终答案，但没有提供对话证据。")
+    full_solution_claimed = (
+        output.response_scope is ResponseScope.FULL_SOLUTION
+        or (
+            not episode.turns
+            and (
+                output.disclosure_level is DisclosureLevel.FINAL
+                or _has_verified_final_claim(claim_audits)
+            )
+        )
+    )
+    full_solution_allowed = (
+        _explicitly_requests_full_solution(message)
+        or (
+            output.disclosure_reason is DisclosureReason.TEACHER_JUDGMENT
+            and _has_prior_disclosure_evidence(episode, output)
+        )
+    )
+    if (
+        output.task_shape is TaskShape.MULTI_STEP_PROBLEM
+        and full_solution_claimed
+        and not full_solution_allowed
+    ):
+        warnings.append(
+            "多步题的普通求助不是完整解答请求；本轮应只推进一个有意义的步骤。"
+        )
     return warnings
 
 

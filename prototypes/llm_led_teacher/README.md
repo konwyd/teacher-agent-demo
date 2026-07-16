@@ -6,6 +6,9 @@ verifies supported mathematical claims, audits disclosure, and records labels?
 
 It deliberately bypasses TeachingPlanner, strategy capabilities, Pedagogical
 RAG, and mastery-based control. State is kept only in Streamlit session memory.
+For multi-step problems, the LLM still chooses the teaching move, but one normal
+turn advances only one meaningful step unless the student explicitly requests a
+full solution or prior turns provide evidence of sustained difficulty.
 
 Run from the worktree root:
 

@@ -73,6 +73,8 @@ for turn in episode.turns:
                 )
                 st.write("**披露层级**", turn.teacher_output.disclosure_level.value)
                 st.write("**披露理由**", turn.teacher_output.disclosure_reason.value)
+                st.write("**任务形态**", turn.teacher_output.task_shape.value)
+                st.write("**回复范围**", turn.teacher_output.response_scope.value)
                 st.write("**证据回合**", turn.teacher_output.evidence_turn_ids)
                 st.write("**置信度**", turn.teacher_output.confidence)
                 st.write("**LLM理由**", turn.teacher_output.rationale or "无")
