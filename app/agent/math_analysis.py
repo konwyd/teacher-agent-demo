@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.agent.state import MathAnalysis, TeachingIntent
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekError, is_configured
 
@@ -45,6 +47,7 @@ def analyze_turn(
     problem_context: str = "",
     *,
     allow_llm: bool = True,
+    on_llm_call: Callable[[], None] | None = None,
 ) -> MathAnalysis:
     """Analyze a turn without selecting a topic or assuming a solver.
 
@@ -58,7 +61,10 @@ def analyze_turn(
         return fallback
 
     try:
-        result = DeepSeekClient().chat_json(
+        client = DeepSeekClient()
+        if on_llm_call is not None:
+            on_llm_call()
+        result = client.chat_json(
             system=(
                 "你是初中数学教学分析器。只分析学生的当前意图、已给出的尝试、"
                 "可能卡点和置信度；不要选择知识点，不要判断数学正误，不要给出答案。"

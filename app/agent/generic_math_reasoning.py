@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from app.agent.state import GenericMathReasoning, MathAnalysis
@@ -32,6 +33,8 @@ class GenericMathReasoner:
         message: str,
         problem_context: str,
         analysis: MathAnalysis,
+        *,
+        on_llm_call: Callable[[], None] | None = None,
     ) -> GenericMathReasoning:
         """Return structured reasoning or a conservative clarification signal."""
 
@@ -46,8 +49,10 @@ class GenericMathReasoner:
                 uncertainty_note="未配置通用数学推理模型。",
             )
 
-        client = self._client or DeepSeekClient()
         try:
+            client = self._client or DeepSeekClient()
+            if on_llm_call is not None:
+                on_llm_call()
             return client.chat_json(
                 system=(
                     "你是初中数学推理器。给出短小、可教学的推理，明确不确定性。"

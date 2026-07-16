@@ -100,7 +100,7 @@ def run_generic_teaching_turn(
             module="context_resolution",
             called=True,
             reason="context_resolved",
-            llm_calls=int(analysis_allow_llm and is_configured()),
+            llm_calls=0,
         )
     ]
 
@@ -144,10 +144,25 @@ def run_generic_teaching_turn(
             )
         )
 
+    analysis_llm_calls = 0
+
+    def record_analysis_llm_call() -> None:
+        nonlocal analysis_llm_calls
+        analysis_llm_calls += 1
+
     analysis = analyze_turn(
         message,
         problem_context,
         allow_llm=analysis_allow_llm,
+        on_llm_call=record_analysis_llm_call,
+    )
+    decisions.append(
+        ModuleDecision(
+            module="analysis",
+            called=True,
+            reason="analysis_completed",
+            llm_calls=analysis_llm_calls,
+        )
     )
     active_reasoner = reasoner or GenericMathReasoner()
     verifier_evidence_sufficient = (
@@ -159,6 +174,11 @@ def run_generic_teaching_turn(
         and bool(verification.evidence)
     )
     reasoner_llm_calls = 0
+
+    def record_reasoner_llm_call() -> None:
+        nonlocal reasoner_llm_calls
+        reasoner_llm_calls += 1
+
     if verifier_evidence_sufficient:
         reasoning = GenericMathReasoning()
         decisions.append(
@@ -169,24 +189,36 @@ def run_generic_teaching_turn(
             )
         )
     else:
-        reasoner_llm_calls = int(
-            isinstance(active_reasoner, GenericMathReasoner)
-            and (
-                getattr(active_reasoner, "_client", None) is not None
-                or is_configured()
-            )
-            and bool(problem_context.strip())
-            and not analysis.needs_clarification
-        )
         try:
-            reasoning = GenericMathReasoning.model_validate(
-                active_reasoner.analyze(message, problem_context, analysis)
+            if isinstance(active_reasoner, GenericMathReasoner):
+                reasoner_result = active_reasoner.analyze(
+                    message,
+                    problem_context,
+                    analysis,
+                    on_llm_call=record_reasoner_llm_call,
+                )
+            else:
+                reasoner_result = active_reasoner.analyze(
+                    message,
+                    problem_context,
+                    analysis,
+                )
+            reasoning = GenericMathReasoning.model_validate(reasoner_result)
+            reasoner_failed = bool(
+                isinstance(active_reasoner, GenericMathReasoner)
+                and active_reasoner.last_error
             )
+            if reasoner_failed:
+                fallback_reasons.append("reasoner_failed")
             decisions.append(
                 ModuleDecision(
                     module="reasoner",
                     called=True,
-                    reason="reasoning_completed",
+                    reason=(
+                        "reasoner_failed"
+                        if reasoner_failed
+                        else "reasoning_completed"
+                    ),
                     llm_calls=reasoner_llm_calls,
                 )
             )
@@ -325,7 +357,7 @@ def run_generic_teaching_turn(
     planner_input = PlannerInput(
         problem_context=problem_context,
         current_student_request=message,
-        constraints=safety_constraints,
+        constraints=safety_constraints.model_copy(deep=True),
         verified_facts=list(verification.evidence),
         student_evidence=evidence_snapshot.model_dump(mode="json"),
         strategy_bundle=strategy_bundle.model_dump(mode="json"),
@@ -333,13 +365,16 @@ def run_generic_teaching_turn(
         has_confirmed_progress=has_confirmed_progress,
     )
     active_planner = planner or TeachingPlanner()
-    response_llm_calls = int(
+    response_call_reserved = int(
         bool(reasoning.reasoning_steps or reasoning.next_step_hint)
         and (response_client is not None or is_configured())
     )
     calls_before_planner = sum(decision.llm_calls for decision in decisions)
-    if calls_before_planner + response_llm_calls >= 3:
-        validated = active_planner.validate_or_fallback(active_plan, planner_input)
+    if calls_before_planner + response_call_reserved >= 3:
+        validated = TeachingPlanner().validate_or_fallback(
+            active_plan.model_copy(deep=True),
+            planner_input.model_copy(deep=True),
+        )
         planner_result = PlannerResult(
             plan=validated.plan,
             used_llm=False,
@@ -348,13 +383,13 @@ def run_generic_teaching_turn(
         planner_called = False
     else:
         try:
-            planner_result = active_planner.plan(planner_input)
+            planner_result = active_planner.plan(planner_input.model_copy(deep=True))
             planner_called = True
         except Exception:
             fallback_reasons.append("planner_failed")
             validated = TeachingPlanner().validate_or_fallback(
-                active_plan,
-                planner_input,
+                active_plan.model_copy(deep=True),
+                planner_input.model_copy(deep=True),
             )
             planner_result = PlannerResult(
                 plan=validated.plan,
@@ -375,7 +410,17 @@ def run_generic_teaching_turn(
     # compatibility but cannot change the active compatibility policy yet.
     _ = activate_planner
     state.current_phase = state.action_plan.action.value
-    state.response = generate_response(state, client=response_client)
+    response_llm_calls = 0
+
+    def record_response_llm_call() -> None:
+        nonlocal response_llm_calls
+        response_llm_calls += 1
+
+    state.response = generate_response(
+        state,
+        client=response_client,
+        on_llm_call=record_response_llm_call,
+    )
     decisions.extend(
         [
             ModuleDecision(
@@ -396,8 +441,8 @@ def run_generic_teaching_turn(
     orchestration_trace = OrchestrationTrace(
         decisions=decisions,
         shadow_mode=True,
-        active_plan=active_plan,
-        shadow_plan=planner_result.plan,
+        active_plan=active_plan.model_copy(deep=True),
+        shadow_plan=planner_result.plan.model_copy(deep=True),
         fallback_reasons=fallback_reasons,
     )
     orchestration_trace.llm_call_count = sum(

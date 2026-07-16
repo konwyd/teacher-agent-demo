@@ -58,5 +58,57 @@ def test_deepseek_client_construction_failure_falls_back(monkeypatch) -> None:
     )
 
     assert result.plan.action is TeachingAction.FOCUS
+    assert result.used_llm is False
+    assert result.reason == "planner_call_failed"
+
+
+def test_chat_json_failure_counts_as_an_llm_call() -> None:
+    class FailingChatClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat_json(self, **kwargs):
+            self.calls += 1
+            raise DeepSeekError("planner transport failed")
+
+    client = FailingChatClient()
+    result = TeachingPlanner(client=client).plan(
+        _input([TeachingAction.FOCUS, TeachingAction.SCAFFOLD])
+    )
+
+    assert client.calls == 1
     assert result.used_llm is True
     assert result.reason == "planner_call_failed"
+
+
+def test_validated_plan_is_deep_copied_across_shadow_boundary() -> None:
+    proposed = TeachingActionPlan(action=TeachingAction.FOCUS)
+
+    result = TeachingPlanner().validate_or_fallback(
+        proposed,
+        _input([TeachingAction.FOCUS, TeachingAction.SCAFFOLD]),
+    )
+
+    assert result.plan is not proposed
+    result.plan.action = TeachingAction.EXPLAIN
+    assert proposed.action is TeachingAction.FOCUS
+
+
+def test_plan_without_required_student_response_is_rejected() -> None:
+    result = TeachingPlanner().validate_or_fallback(
+        TeachingActionPlan(
+            action=TeachingAction.SCAFFOLD,
+            scaffold_level=1,
+            requires_student_response=False,
+        ),
+        _input(
+            [TeachingAction.FOCUS, TeachingAction.SCAFFOLD],
+            constraints=SafetyConstraints(
+                allowed_actions=[TeachingAction.FOCUS, TeachingAction.SCAFFOLD],
+                student_response_required=True,
+            ),
+        ),
+    )
+
+    assert result.plan.action is TeachingAction.FOCUS
+    assert result.reason == "planner_output_rejected"

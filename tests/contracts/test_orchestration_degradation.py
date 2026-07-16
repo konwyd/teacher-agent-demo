@@ -1,11 +1,13 @@
 import pytest
 
+from app.agent.generic_math_reasoning import GenericMathReasoner
 from app.agent.state import (
     GraphContext,
     VerificationResult,
     VerificationStatus,
 )
 from app.agent.teaching_harness import run_generic_teaching_turn
+from app.llm.deepseek_client import DeepSeekError
 from app.memory.schemas import EpisodeState
 
 
@@ -61,6 +63,11 @@ class UnexpectedReasoner:
 class BrokenReasoner:
     def analyze(self, message, problem_context, analysis):
         raise RuntimeError("reasoner unavailable")
+
+
+class FailingReasoningClient:
+    def chat_json(self, **kwargs):
+        raise DeepSeekError("reasoner transport failed")
 
 
 def _decision(state, module):
@@ -128,4 +135,21 @@ def test_reasoner_failure_degrades_to_clarification_with_exact_reason() -> None:
     assert state.math_reasoning.needs_clarification is True
     assert "reasoner_failed" in state.orchestration_trace.fallback_reasons
     assert _decision(state, "reasoner").reason == "reasoner_failed"
+    assert state.response.count("？") == 1
+
+
+def test_default_reasoner_error_return_is_recorded_as_reasoner_failed() -> None:
+    state = run_generic_teaching_turn(
+        "default-reasoner-failure-student",
+        "三角形内角和为什么是180度？",
+        reasoner=GenericMathReasoner(client=FailingReasoningClient()),
+        analysis_allow_llm=False,
+    )
+
+    decision = _decision(state, "reasoner")
+    assert state.math_reasoning.needs_clarification is True
+    assert "reasoner_failed" in state.orchestration_trace.fallback_reasons
+    assert decision.called is True
+    assert decision.reason == "reasoner_failed"
+    assert decision.llm_calls == 1
     assert state.response.count("？") == 1

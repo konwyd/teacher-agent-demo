@@ -73,6 +73,18 @@ def _action_is_valid(action: TeachingAction, planner_input: PlannerInput) -> boo
     return True
 
 
+def _plan_is_valid(
+    plan: TeachingActionPlan,
+    planner_input: PlannerInput,
+) -> bool:
+    if not _action_is_valid(plan.action, planner_input):
+        return False
+    return not (
+        planner_input.constraints.student_response_required
+        and not plan.requires_student_response
+    )
+
+
 def _default_plan(action: TeachingAction) -> TeachingActionPlan:
     if action is TeachingAction.SCAFFOLD:
         return TeachingActionPlan(action=action, scaffold_level=1)
@@ -112,9 +124,9 @@ class TeachingPlanner:
         *,
         used_llm: bool = False,
     ) -> PlannerResult:
-        if _action_is_valid(proposed_plan.action, planner_input):
+        if _plan_is_valid(proposed_plan, planner_input):
             return PlannerResult(
-                plan=proposed_plan,
+                plan=proposed_plan.model_copy(deep=True),
                 used_llm=used_llm,
                 reason="planner_selected_action",
             )
@@ -143,6 +155,14 @@ class TeachingPlanner:
 
         try:
             client = self._client or DeepSeekClient()
+        except (DeepSeekError, ValueError, ValidationError):
+            return PlannerResult(
+                plan=_default_plan(candidates[0]),
+                used_llm=False,
+                reason="planner_call_failed",
+            )
+
+        try:
             proposed = client.chat_json(
                 system=(
                     "你是教学动作规划器。只能从 allowed_actions 中选择动作，并严格遵守"

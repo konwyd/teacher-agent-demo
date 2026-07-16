@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from app.agent.state import TeachingState
@@ -78,6 +79,7 @@ def generate_response(
     state: TeachingState,
     *,
     client: _ResponseClient | None = None,
+    on_llm_call: Callable[[], None] | None = None,
 ) -> str:
     """Generate from policy-approved facts or return a one-question safe fallback."""
 
@@ -87,8 +89,14 @@ def generate_response(
     if client is None and not is_configured():
         return fallback
 
-    active_client = client or DeepSeekClient()
     try:
+        active_client = client or DeepSeekClient()
+    except (DeepSeekError, ValueError):
+        return fallback
+
+    try:
+        if on_llm_call is not None:
+            on_llm_call()
         response = active_client.chat(
             system=(
                 "你是初中数学老师。只能使用输入中的获准事实，围绕原题给一个可执行的下一步。"
