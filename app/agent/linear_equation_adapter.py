@@ -1756,6 +1756,12 @@ _LEGACY_CONCEPT_REQUEST_MARKERS = (
 )
 
 
+def is_legacy_concept_request(message: str) -> bool:
+    """Recognize retained concept requests at the compatibility boundary."""
+
+    return any(marker in message for marker in _LEGACY_CONCEPT_REQUEST_MARKERS)
+
+
 def supports_legacy_equation_turn(
     student_id: str,
     message: str,
@@ -1772,7 +1778,7 @@ def supports_legacy_equation_turn(
         return True
     if episode and episode.problem_context:
         return False
-    if any(marker in message for marker in _LEGACY_CONCEPT_REQUEST_MARKERS):
+    if is_legacy_concept_request(message):
         return True
     return len(mc.find_equations(message)) == 1
 

@@ -10,13 +10,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.agent import linear_equation_adapter as _legacy
+from app.agent import math_checker as mc
+from app.agent.optional_verifier import LinearEquationVerifier
+from app.agent.runtime_router import RuntimePath, resolve_runtime_path
 from app.agent.state import (
     TeacherState,
     TeachingState,
     project_teacher_state,
     project_teaching_state_to_teacher_state,
 )
+from app.agent.teaching_actions import TeachingAction
+from app.agent.teaching_brief import TeachingBrief
 from app.agent.teaching_harness import run_generic_teaching_turn
+from app.memory.episode_state import get_episode_store
 from app.retrieval.graph_retriever import get_retriever as _legacy_graph_retriever
 
 
@@ -26,14 +32,12 @@ class TeachingTurnResult:
     teaching_state: TeachingState
 
 
-def _run_legacy_turn_if_supported(
-    student_id: str,
-    message: str,
-    conversation_id: str | None,
-) -> TeacherState | None:
-    if not _legacy.supports_legacy_equation_turn(student_id, message, conversation_id):
-        return None
-    return _legacy.run_legacy_equation_turn(student_id, message, conversation_id)
+def linear_grounding_guard(response: str, brief: TeachingBrief) -> bool:
+    introduced_example = mc.uses_new_example(response, brief.problem_context)
+    return not introduced_example or brief.action_plan.action in {
+        TeachingAction.MODEL,
+        TeachingAction.PRACTICE,
+    }
 
 
 def execute_turn(
@@ -43,11 +47,33 @@ def execute_turn(
     **generic_dependencies,
 ) -> TeachingTurnResult:
     """Execute one route once while retaining legacy and unified views."""
-    legacy_state = _run_legacy_turn_if_supported(student_id, message, conversation_id)
-    if legacy_state is not None:
+    episode_store = get_episode_store()
+    episode = episode_store.find(student_id, conversation_id)
+    route = resolve_runtime_path(
+        student_id,
+        message,
+        conversation_id,
+        episode=episode,
+    )
+    active_episode = episode or episode_store.get(student_id, conversation_id)
+    active_episode.orchestration_path = route.value
+    episode_store.save(active_episode)
+
+    if route is RuntimePath.LEGACY_EQUATION:
+        legacy_state = _legacy.run_legacy_equation_turn(
+            student_id,
+            message,
+            conversation_id,
+        )
         return TeachingTurnResult(
             teacher_state=legacy_state,
             teaching_state=project_teacher_state(legacy_state),
+        )
+    if route is RuntimePath.UNIFIED_LINEAR_SLICE:
+        generic_dependencies.update(
+            verifier=LinearEquationVerifier(),
+            activate_planner=True,
+            grounding_guard=linear_grounding_guard,
         )
     teaching_state = run_generic_teaching_turn(
         student_id,

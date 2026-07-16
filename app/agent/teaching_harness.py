@@ -80,6 +80,7 @@ def run_generic_teaching_turn(
     response_client=None,
     analysis_allow_llm: bool = True,
     activate_planner: bool = False,
+    grounding_guard: response_generation.GroundingGuard | None = None,
     episode_store=None,
 ) -> TeachingState:
     """Run the neutral teaching pipeline with stable episode problem context."""
@@ -428,9 +429,14 @@ def run_generic_teaching_turn(
         )
     )
 
-    # Task 6 is shadow-only. ``activate_planner`` is accepted for forward
-    # compatibility but cannot change the active compatibility policy yet.
-    _ = activate_planner
+    if activate_planner:
+        planner_result = TeachingPlanner().validate_or_fallback(
+            planner_result.plan,
+            planner_input,
+            used_llm=planner_result.used_llm,
+        )
+        state.action_plan = planner_result.plan
+        active_plan = state.action_plan
     state.current_phase = state.action_plan.action.value
     state.teaching_brief = TeachingBriefComposer().compose(
         problem_context=problem_context,
@@ -476,6 +482,15 @@ def run_generic_teaching_turn(
         state.teaching_brief,
         client=tracked_response_client,
     )
+    if not response_generation.ResponseGuard.validate(
+        state.response,
+        state.teaching_brief,
+        grounding_guard=grounding_guard,
+    ):
+        state.response = response_generation.generate_response(
+            state.teaching_brief,
+            client=_UnavailableResponseClient(),
+        )
     decisions.extend(
         [
             ModuleDecision(
@@ -495,9 +510,13 @@ def run_generic_teaching_turn(
 
     orchestration_trace = OrchestrationTrace(
         decisions=decisions,
-        shadow_mode=True,
+        shadow_mode=not activate_planner,
         active_plan=active_plan.model_copy(deep=True),
-        shadow_plan=planner_result.plan.model_copy(deep=True),
+        shadow_plan=(
+            None
+            if activate_planner
+            else planner_result.plan.model_copy(deep=True)
+        ),
         fallback_reasons=fallback_reasons,
     )
     orchestration_trace.llm_call_count = sum(

@@ -64,7 +64,8 @@ class LinearEquationVerifier:
     name = "linear_equation_fraction_checker"
 
     def supports(self, request: VerificationRequest) -> bool:
-        return mc.extract_equation(request.problem_context) is not None
+        equations = mc.find_equations(request.problem_context)
+        return len(equations) == 1 and mc.extract_equation(request.problem_context) is not None
 
     def verify(self, request: VerificationRequest) -> VerificationResult:
         target_equation = mc.extract_equation(request.problem_context)
@@ -87,9 +88,11 @@ class LinearEquationVerifier:
             StepValidity.NOT_A_STEP: VerificationStatus.UNABLE_TO_VERIFY,
             StepValidity.UNPARSEABLE: VerificationStatus.UNABLE_TO_VERIFY,
         }[result.validity]
-        evidence = [result.explanation] if result.explanation else []
+        evidence = []
         if result.student_equation:
             evidence.append(result.student_equation)
+        if result.explanation:
+            evidence.append(result.explanation)
         return VerificationResult(
             status=status,
             summary=result.validity.value,

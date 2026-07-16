@@ -69,6 +69,7 @@ class EpisodeState(BaseModel):
     original_problem: str | None = None
     problem_context: str | None = None
     target_equation: str | None = None
+    orchestration_path: str = ""
     current_phase: str = "problem_setup"
     current_solution_state: str | None = None
     solved_steps: list[str] = Field(default_factory=list)
