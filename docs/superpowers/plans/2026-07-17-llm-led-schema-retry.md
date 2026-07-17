@@ -68,4 +68,3 @@ Expected: all commands exit 0; no real API is used.
 git add docs/superpowers/specs/2026-07-17-llm-led-schema-retry-design.md docs/superpowers/plans/2026-07-17-llm-led-schema-retry.md prototypes/llm_led_teacher/logic.py tests/prototypes/test_llm_led_turn_contract.py
 git commit -m "fix: retry invalid prototype teaching schemas"
 ```
-

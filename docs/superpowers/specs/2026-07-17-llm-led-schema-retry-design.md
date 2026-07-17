@@ -23,4 +23,3 @@ DeepSeek 可能生成合法 JSON，但把一个枚举值放入错误字段。例
 - 第二次调用明确收到字段错误和合法字段含义。
 - `DeepSeekError` 等非结构错误不重试。
 - 不调用真实 API 的目标测试、完整 pytest 和 `scripts/run_eval.py` 全部通过。
-
