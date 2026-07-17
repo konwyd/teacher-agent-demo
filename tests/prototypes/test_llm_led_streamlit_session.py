@@ -85,4 +85,4 @@ def test_streamlit_resets_a_stale_episode_after_schema_change(monkeypatch) -> No
     runpy.run_path(str(app_path), run_name="llm_led_streamlit_session_test")
 
     assert fake_streamlit.session_state.prototype_episode.turns == []
-    assert fake_streamlit.session_state.prototype_session_schema_version == 2
+    assert fake_streamlit.session_state.prototype_session_schema_version == 3
