@@ -11,7 +11,7 @@ import json
 from enum import Enum
 from typing import Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
@@ -345,6 +345,48 @@ def _evidence_level(
     return "unverified"
 
 
+def _chat_teaching_turn(
+    client: StructuredTeacherClient,
+    system: str,
+    user: str,
+    *,
+    temperature: float,
+    max_tokens: int,
+) -> LLMTeachingTurn:
+    try:
+        return client.chat_json(
+            system,
+            user,
+            schema=LLMTeachingTurn,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except ValidationError as exc:
+        schema_retry_system = (
+            system
+            + "\n你上一次输出的 JSON 字段没有通过 LLMTeachingTurn Schema 校验。"
+            "请根据下面的具体错误重新生成完整 JSON，只修正结构和字段归属。"
+            "特别注意：direct_fact 只能用于 task_shape；disclosure_reason 必须从其自身枚举中选择。"
+            "只输出修正后的 JSON 对象，不要解释错误。"
+        )
+        schema_retry_payload = json.dumps(
+            {
+                "original_request": json.loads(user),
+                "schema_validation_errors": exc.errors(include_url=False),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )
+        return client.chat_json(
+            schema_retry_system,
+            schema_retry_payload,
+            schema=LLMTeachingTurn,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+
 def _repair(
     client: StructuredTeacherClient,
     payload: str,
@@ -365,10 +407,10 @@ def _repair(
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    return client.chat_json(
+    return _chat_teaching_turn(
+        client,
         repair_system,
         repair_payload,
-        schema=LLMTeachingTurn,
         temperature=0.2,
         max_tokens=900,
     )
@@ -404,10 +446,10 @@ def run_turn(
 
     active_client = client or DeepSeekClient()
     payload = _teacher_payload(episode, clean_message, verification)
-    output = active_client.chat_json(
+    output = _chat_teaching_turn(
+        active_client,
         _SYSTEM_PROMPT,
         payload,
-        schema=LLMTeachingTurn,
         temperature=0.4,
         max_tokens=900,
     )
