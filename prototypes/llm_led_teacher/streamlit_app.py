@@ -13,9 +13,15 @@ from app.llm.deepseek_client import DeepSeekError, is_configured
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, run_turn
 
 
+_SESSION_SCHEMA_VERSION = 2
+
+
 st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
 
-if "prototype_episode" not in st.session_state:
+if st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION:
+    st.session_state.prototype_episode = PrototypeEpisode()
+    st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+elif "prototype_episode" not in st.session_state:
     st.session_state.prototype_episode = PrototypeEpisode()
 
 episode: PrototypeEpisode = st.session_state.prototype_episode
@@ -31,6 +37,7 @@ with st.sidebar:
     st.write("- 掌握度流程控制")
     if st.button("新建对话", use_container_width=True):
         st.session_state.prototype_episode = PrototypeEpisode()
+        st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
         st.rerun()
     st.divider()
     st.write("**稳定原题**")
