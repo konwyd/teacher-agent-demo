@@ -13,7 +13,7 @@ from app.llm.deepseek_client import DeepSeekError, is_configured
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, run_turn
 
 
-_SESSION_SCHEMA_VERSION = 3
+_SESSION_SCHEMA_VERSION = 4
 
 
 st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
@@ -27,7 +27,7 @@ elif "prototype_episode" not in st.session_state:
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
 st.title("🧪 LLM 主导 Teacher Prototype")
-st.caption("DeepSeek 纯文本教学 · Agent 能验证则验证，不能验证也不阻断")
+st.caption("LLM 回合观察 + DeepSeek 纯文本教学 · 验证缺失不阻断")
 
 with st.sidebar:
     st.subheader("本原型刻意绕过")
@@ -40,7 +40,7 @@ with st.sidebar:
         st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
         st.rerun()
     st.divider()
-    st.write("**稳定原题**")
+    st.write("**当前 active problem**")
     st.write(episode.problem_context or "尚未开始")
     st.write("**回合数**", len(episode.turns))
 
@@ -56,6 +56,11 @@ for turn in episode.turns:
     with st.chat_message("assistant"):
         st.markdown(turn.teacher_output.response)
         with st.expander("验证详情"):
+            st.write("**观察器：是否新题**", turn.turn_guidance.starts_new_problem)
+            st.write("**观察器：讲解节奏**", turn.turn_guidance.pacing.value)
+            st.write("**观察器理由**", turn.turn_guidance.reason or "无")
+            if turn.observer_error:
+                st.warning(f"观察器已降级，但主回答未被阻断：{turn.observer_error}")
             st.write("**证据等级**", turn.evidence_level)
             if turn.evidence_level == "unverified":
                 st.info("当前没有可用的确定性验证证据；教师回答仍正常展示。")

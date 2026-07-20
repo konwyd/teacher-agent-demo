@@ -8,6 +8,7 @@ preserves context and audits mathematical claims?
 from __future__ import annotations
 
 import json
+from enum import Enum
 from typing import Protocol
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,17 @@ from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
 from app.agent.state import VerificationResult, VerificationStatus
 from app.llm.deepseek_client import DeepSeekClient
+
+
+class PacingMode(str, Enum):
+    SINGLE_MOVE = "single_move"
+    COMPLETE_RESPONSE = "complete_response"
+
+
+class TurnGuidance(BaseModel):
+    starts_new_problem: bool = False
+    pacing: PacingMode = PacingMode.COMPLETE_RESPONSE
+    reason: str = ""
 
 
 class TeacherResponse(BaseModel):
@@ -35,6 +47,8 @@ class PrototypeTurnRecord(BaseModel):
     teacher_output: TeacherResponse
     student_verification: VerificationResult
     evidence_level: str
+    turn_guidance: TurnGuidance = Field(default_factory=TurnGuidance)
+    observer_error: str = ""
     extracted_equations: list[str] = Field(default_factory=list)
     claim_audits: list[ClaimAudit] = Field(default_factory=list)
     repair_reasons: list[str] = Field(default_factory=list)
@@ -56,6 +70,15 @@ class StructuredTeacherClient(Protocol):
         max_tokens: int | None = None,
     ) -> str: ...
 
+    def chat_json(
+        self,
+        system: str,
+        user: str,
+        schema: type[TurnGuidance],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> TurnGuidance: ...
+
 
 _SYSTEM_PROMPT = """你是一名中文初中数学老师，由你自主完成整轮教学。
 
@@ -74,6 +97,18 @@ _SYSTEM_PROMPT = """你是一名中文初中数学老师，由你自主完成整
 9. direct_fact 可以直接回答；conceptual 可以完整解释概念，不要为了拆步骤而故意回避结论。
 10. 由你判断是否披露局部结果或最终答案；学生明确说不要答案时不得给最终答案。
 11. 只输出直接面向学生的自然语言教师回复，不要输出 JSON、字段名、分类标签、置信度或内部理由。
+12. 输入中的 turn_guidance 是独立观察器给出的节奏提示：single_move 时本轮只能推进一个产生新结果的步骤；complete_response 时可以完整回答概念、原因或直接事实。
+"""
+
+
+_OBSERVER_PROMPT = """你是教学回合观察器，不负责解题，也不生成教师回复。
+只判断当前学生消息是否开启了一道与 active_problem 不同的新题，以及本轮需要什么讲解节奏。
+
+规则：
+1. 学生提出新的、自包含题目时 starts_new_problem=true；对当前题的步骤、答案、追问或“为什么”保持 false。
+2. 多步骤求解且学生未明确索要完整解答时 pacing=single_move。
+3. 概念解释、原因说明、直接事实或明确索要完整答案时 pacing=complete_response。
+4. 不判断数学正误，不改写学生题目，不输出教学内容。
 """
 
 
@@ -137,10 +172,64 @@ def _history_payload(episode: PrototypeEpisode) -> list[dict[str, object]]:
     ]
 
 
+def _fallback_guidance(
+    episode: PrototypeEpisode,
+    message: str,
+) -> TurnGuidance:
+    equation = mc.extract_equation(message)
+    explicit_problem_request = any(
+        marker in message for marker in ("怎么解", "解方程", "求解", "请解", "老师")
+    )
+    starts_new_problem = not episode.problem_context or bool(
+        equation is not None and explicit_problem_request
+    )
+    active_problem = message if starts_new_problem else episode.problem_context
+    asks_why = "为什么" in message or "为啥" in message
+    if _explicitly_requests_full_solution(message) or asks_why:
+        pacing = PacingMode.COMPLETE_RESPONSE
+    elif mc.extract_equation(active_problem) is not None:
+        pacing = PacingMode.SINGLE_MOVE
+    else:
+        pacing = PacingMode.COMPLETE_RESPONSE
+    return TurnGuidance(
+        starts_new_problem=starts_new_problem,
+        pacing=pacing,
+        reason="observer unavailable; deterministic fallback",
+    )
+
+
+def _observe_turn(
+    client: StructuredTeacherClient,
+    episode: PrototypeEpisode,
+    message: str,
+) -> tuple[TurnGuidance, str]:
+    payload = json.dumps(
+        {
+            "active_problem": episode.problem_context,
+            "current_student_message": message,
+            "conversation_history": _history_payload(episode),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    try:
+        guidance = client.chat_json(
+            _OBSERVER_PROMPT,
+            payload,
+            schema=TurnGuidance,
+            temperature=0.0,
+            max_tokens=180,
+        )
+    except Exception as exc:  # noqa: BLE001 - observer must never block teaching
+        return _fallback_guidance(episode, message), f"{type(exc).__name__}: {exc}"
+    return guidance, ""
+
+
 def _teacher_payload(
     episode: PrototypeEpisode,
     message: str,
     verification: VerificationResult,
+    guidance: TurnGuidance,
 ) -> str:
     return json.dumps(
         {
@@ -150,6 +239,7 @@ def _teacher_payload(
             "conversation_history": _history_payload(episode),
             "deterministic_verification": verification.model_dump(mode="json"),
             "previous_verified_step": episode.previous_verified_step,
+            "turn_guidance": guidance.model_dump(mode="json"),
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -195,6 +285,7 @@ def _collect_warnings(
     episode: PrototypeEpisode,
     message: str,
     verification: VerificationResult,
+    guidance: TurnGuidance,
     response: str,
     claim_audits: list[ClaimAudit],
     *,
@@ -222,7 +313,8 @@ def _collect_warnings(
         warnings.append("学生明确不要答案，但回复出现了可验证的最终形式。")
 
     if (
-        not episode.turns
+        guidance.pacing is PacingMode.SINGLE_MOVE
+        and (guidance.starts_new_problem or not episode.turns)
         and mc.extract_equation(episode.problem_context) is not None
         and has_verified_final
         and not _explicitly_requests_full_solution(message)
@@ -307,14 +399,20 @@ def run_turn(
     clean_message = message.strip()
     if not clean_message:
         raise ValueError("student message must not be empty")
-    is_first_turn = not episode.turns
-    if not episode.problem_context:
-        episode.problem_context = clean_message
 
-    if is_first_turn:
+    active_client = client or DeepSeekClient()
+    guidance, observer_error = _observe_turn(active_client, episode, clean_message)
+    if not episode.problem_context and not guidance.starts_new_problem:
+        guidance = guidance.model_copy(update={"starts_new_problem": True})
+    starts_new_problem = guidance.starts_new_problem or not episode.problem_context
+    if starts_new_problem:
+        episode.problem_context = clean_message
+        episode.previous_verified_step = ""
+
+    if starts_new_problem:
         verification = VerificationResult(
             status=VerificationStatus.UNABLE_TO_VERIFY,
-            summary="首轮消息作为稳定原题，不把题目本身当作学生步骤判定。",
+            summary="当前消息开启新的 active problem，不把题目本身当作学生步骤判定。",
             verifier_name="none",
         )
     else:
@@ -324,8 +422,7 @@ def run_turn(
             episode.previous_verified_step,
         )
 
-    active_client = client or DeepSeekClient()
-    payload = _teacher_payload(episode, clean_message, verification)
+    payload = _teacher_payload(episode, clean_message, verification, guidance)
     output = _chat_teaching_turn(
         active_client,
         _SYSTEM_PROMPT,
@@ -343,6 +440,7 @@ def run_turn(
         episode,
         clean_message,
         verification,
+        guidance,
         output.response,
         claim_audits,
         include_advisory=False,
@@ -360,6 +458,7 @@ def run_turn(
         episode,
         clean_message,
         verification,
+        guidance,
         output.response,
         claim_audits,
     )
@@ -369,6 +468,8 @@ def run_turn(
         teacher_output=output,
         student_verification=verification,
         evidence_level=_evidence_level(verification, claim_audits),
+        turn_guidance=guidance,
+        observer_error=observer_error,
         extracted_equations=extracted_equations,
         claim_audits=claim_audits,
         repair_reasons=repair_reasons,

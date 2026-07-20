@@ -15,6 +15,12 @@ The Agent extracts parseable equations with the existing `math_checker` and
 audits those equations. Unsupported prose claims remain `unverified` and are
 still shown to the student; missing verification never blocks the response.
 
+An experimental non-blocking LLM observer runs before teaching to detect a new
+active problem and choose `single_move` or `complete_response` pacing. Normal
+turns therefore use two API calls; a hard-audit repair may use a third. Observer
+schema or transport failures fall back locally and never block the plain-text
+teacher response.
+
 Run from the worktree root:
 
 ```powershell

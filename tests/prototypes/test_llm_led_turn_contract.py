@@ -22,6 +22,20 @@ class _TextClient:
         return result
 
 
+class _ObservedTextClient(_TextClient):
+    def __init__(self, guidances, *responses: str | Exception) -> None:
+        super().__init__(*responses)
+        self.guidances = list(guidances)
+        self.guidance_calls = 0
+
+    def chat_json(self, system, user, schema, temperature=0.0, max_tokens=None):
+        result = self.guidances[self.guidance_calls]
+        self.guidance_calls += 1
+        if isinstance(result, Exception):
+            raise result
+        return schema.model_validate(result)
+
+
 def test_unsupported_opposite_number_response_is_returned_unverified() -> None:
     client = _TextClient("3的相反数是-3。")
 
@@ -150,3 +164,57 @@ def test_transport_error_is_not_retried() -> None:
         )
 
     assert client.calls == 1
+
+
+def test_observer_switches_from_probability_to_incremental_equation() -> None:
+    client = _ObservedTextClient(
+        [
+            {
+                "starts_new_problem": True,
+                "pacing": "complete_response",
+                "reason": "直接概率事实题",
+            },
+            {
+                "starts_new_problem": True,
+                "pacing": "single_move",
+                "reason": "学生提出了新的多步骤方程",
+            },
+        ],
+        "公平硬币出现正面的概率是二分之一。",
+        "先两边加5得到3x=15，再除以3得到x=5。",
+        "先观察-5这一项。你觉得两边同时做什么能消去它？",
+    )
+    episode = PrototypeEpisode()
+
+    run_turn(episode, "老师，抛一枚硬币出现正面的概率是多少？", client=client)
+    record = run_turn(episode, "老师，3x-5=10怎么解？", client=client)
+
+    assert client.guidance_calls == 2
+    assert client.calls == 3
+    assert episode.problem_context == "老师，3x-5=10怎么解？"
+    assert record.turn_guidance.starts_new_problem is True
+    assert record.turn_guidance.pacing.value == "single_move"
+    assert record.repair_reasons == [
+        "多步题的普通求助不是完整解答请求；本轮应只推进一个有意义的步骤。"
+    ]
+    assert "x=5" not in record.teacher_output.response
+    assert '"pacing":"single_move"' in client.user_payloads[1]
+
+
+def test_observer_failure_does_not_block_plain_text_teaching() -> None:
+    client = _ObservedTextClient(
+        [DeepSeekError("simulated observer failure")],
+        "3的相反数是-3。",
+    )
+
+    record = run_turn(
+        PrototypeEpisode(),
+        "老师，3的相反数是什么？",
+        client=client,
+    )
+
+    assert client.guidance_calls == 1
+    assert client.calls == 1
+    assert record.teacher_output.response == "3的相反数是-3。"
+    assert record.evidence_level == "unverified"
+    assert "simulated observer failure" in record.observer_error
