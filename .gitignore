@@ -4,7 +4,21 @@ __pycache__/
 .egg-info/
 *.egg
 .pytest_cache/
+.venv-molscribe/
+*.molscribe-cache.jsonl
+*.molscribe-report.json
+*.molecular-structures.jsonl
 logs/
 *.log
-.env.example
-# 保留 .env 模板但排除真实密钥
+.env
+!.env.example
+
+# 本地运行状态与生成产物
+data/runtime/*
+!data/runtime/.gitkeep
+llm-test/results/
+teacher_agent.egg-info/
+
+# Codex / Superpowers 临时工作区
+.worktrees/
+.superpowers/

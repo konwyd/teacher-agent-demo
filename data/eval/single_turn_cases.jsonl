@@ -1,0 +1,6 @@
+{"case_id": "st_001_linear_help", "message": "我不会解 2x+3=7", "expected_concept": "一元一次方程", "expected_intent": "problem_solving", "expected_action": "give_hint_level_1", "forbidden_patterns": ["3x=9", "我们来看一道新题"]}
+{"case_id": "st_002_concept_move", "message": "什么是移项？", "expected_concept": "移项", "expected_intent": "concept_question", "expected_action": "explain_concept", "forbidden_patterns": []}
+{"case_id": "st_003_bracket_error", "message": "去括号的时候总是错", "expected_concept": "去括号", "expected_intent": "unknown|problem_solving", "expected_action": "give_hint_level_2", "forbidden_patterns": []}
+{"case_id": "st_004_review", "message": "我想复习一元一次方程", "expected_concept": "一元一次方程", "expected_intent": "review", "expected_action": "schedule_review", "forbidden_patterns": []}
+{"case_id": "st_005_frac", "message": "x/2 - 1 = x/3 这道题怎么做", "expected_concept": "分数系数方程", "expected_intent": "problem_solving", "expected_action": "give_hint_level_1", "forbidden_patterns": ["2x+3=7"]}
+{"case_id": "st_006_bracket_solve", "message": "帮我解方程 3(x-2)=9", "expected_concept": "去括号", "expected_intent": "problem_solving", "expected_action": "give_hint_level_1", "forbidden_patterns": ["2x+3=7"]}

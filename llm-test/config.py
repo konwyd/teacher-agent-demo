@@ -3,12 +3,14 @@
 填入你的 API 信息即可使用
 """
 
+import os
+
 # ============================================================
 # 教师模型配置（负责答题）
 # ============================================================
 TEACHER_MODEL = {
     "base_url": "https://api.deepseek.com",        # API 地址，v4 必须加 /v1
-    "api_key": "sk-4c95f7195d33496fb08605c529c154e0",         # API 密钥
+    "api_key": os.environ.get("DEEPSEEK_API_KEY", ""),         # API 密钥
     "model_name": "deepseek-chat",      # 模型名称（推理模型）
     "temperature": 0.3,    # 答题时适当降低随机性
     "max_tokens": 32768,   # 推理模型需要更大 token 数（思考+答案）
@@ -19,7 +21,7 @@ TEACHER_MODEL = {
 # ============================================================
 JUDGE_MODEL = {
     "base_url": "https://api.deepseek.com/v1",        # API 地址，v4 必须加 /v1
-    "api_key": "sk-4c95f7195d33496fb08605c529c154e0",         # API 密钥
+    "api_key": os.environ.get("DEEPSEEK_API_KEY", ""),         # API 密钥
     "model_name": "deepseek-v4-flash",      # 模型名称（推理模型）
     "temperature": 0.0,    # 评阅需要严格一致，温度设0
     "max_tokens": 16384,   # 评分输出较长，增大上限
@@ -51,7 +53,7 @@ RAG_CONFIG = {
 ONLINE_RAG = {
     "mode": "auto",                 # "off"(只用本地) / "auto"(阈值触发联网) / "online"(只用联网)
     "local_threshold": 0.65,        # 本地相似度 ≥ 此值才算有效命中；有效命中数 < topk 时触发联网（仅 auto 模式生效）
-    "tavily_api_key": "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",           # Tavily API key，https://app.tavily.com 注册获取
+    "tavily_api_key": os.environ.get("TAVILY_API_KEY", ""),           # Tavily API key，https://app.tavily.com 注册获取
     "search_topk": 5,               # 联网搜索返回条数
     "max_context_chars": 2400,      # 注入 prompt 的联网上下文最大字符数
 }
@@ -95,4 +97,6 @@ JUDGE_SYSTEM_PROMPT = """你是一位严格、公正的裁判。你的任务是�
 - 解答题：按步骤给分，先判断每个子问题的最终答案是否与参考答案一致，最终答案错误则该项不得满分；即使最终答案错误，步骤正确也应给步骤分
 - 作文：严格按照评分标准表的各维度给分
 - 如果教师答案为空或明显乱答，给0分"""
+
+GRADER_SYSTEM_PROMPT = JUDGE_SYSTEM_PROMPT
 
