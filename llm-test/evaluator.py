@@ -13,10 +13,25 @@ from tqdm import tqdm
 
 from config import PAPER_DIR, KEY_DIR, SUBJECT_MAP, GRADER_SYSTEM_PROMPT
 from llm_client import make_student_client, make_grader_client, make_local_student_client
-from rag_retriever import retrieve_for_exam, is_rag_available
+from rag_retriever import retrieve_for_exam_questionwise, is_rag_available
 
 # 全卷测评专属输出目录（与 config.py 的 OUTPUT_DIR 区分）
 PAPER_OUTPUT_DIR = "results/paper"
+
+
+def _strip_boilerplate(text: str) -> str:
+    """去掉试卷中的注意事项等锅炉板文字，减少 RAG 检索噪音"""
+    # 去掉注意事项段：从"注意事项"开始到第一个非注意事项编号行结束
+    # 注意事项通常是 1. 2. 3. 这样的编号列表，下一段是 # 或 ## 或非编号文字
+    text = re.sub(
+        r'注意事项[：:]\s*\n(?:\d+[\.、]\s*[^\n]*\n?)+',
+        '', text,
+    )
+    # 去掉试卷头部标题行（"# 河南省 2026 年..."），减少跨试卷匹配
+    text = re.sub(r'^#\s*.+?年.+?试卷.*?\n', '', text, count=1)
+    # 去掉末尾无关文字（"祝考试顺利"等）
+    text = re.sub(r'\n(?:祝考试顺利[!！]?|END)\s*$', '', text)
+    return text
 
 
 def find_paper_key_pairs() -> list[dict]:
@@ -58,11 +73,12 @@ def build_student_prompt(paper_content: str, rag_context: str = "") -> list[dict
         system_content = (
             "你是一位参加2026年河南省中考的考生。请认真阅读以下试卷，"
             "按照试卷要求逐题作答。\n\n"
-            "以下是从题库中检索到的参考题目（含题干、答案和解析），请仔细对比：\n"
-            "如果参考题目与当前试卷题目高度相似或几乎一模一样，"
-            "请优先参考题库中给出的答案和解题过程，"
-            "在其基础上理解并作答，不要忽略已有的正确答案而自行重新计算。\n"
-            "如果参考题目只是知识点相关而非同一道题，则作为知识点参考。\n\n"
+            "以下是从知识库中检索到的参考资料，可能包含与试卷直接相关或间接相关的内容。"
+            "请自行判断每条资料的相关性：\n"
+            "- 如果某条资料与试卷题目高度相似或完全一致（如同一张试卷的真题+答案），"
+            "请直接参考其答案和解题过程作答。\n"
+            "- 如果某条资料只是知识点相关或背景信息，可选择性参考。\n"
+            "- 如果某条资料与题目无关，请忽略它。\n\n"
             f"{rag_context}\n\n"
             "---\n\n"
             "作答要求：\n"
@@ -70,8 +86,7 @@ def build_student_prompt(paper_content: str, rag_context: str = "") -> list[dict
             "2. 填空题请写出答案\n"
             "3. 解答题请写出完整的解题步骤\n"
             "4. 作文题请写完整的作文\n"
-            "5. 不会做的题请写「不会」，不要留空\n"
-            "6. 请按题号顺序作答，格式为「题号. 答案」"
+            "5. 请按题号顺序作答，格式为「题号. 答案」"
         )
     else:
         system_content = (
@@ -82,8 +97,7 @@ def build_student_prompt(paper_content: str, rag_context: str = "") -> list[dict
             "2. 填空题请写出答案\n"
             "3. 解答题请写出完整的解题步骤\n"
             "4. 作文题请写完整的作文\n"
-            "5. 不会做的题请写「不会」，不要留空\n"
-            "6. 请按题号顺序作答，格式为「题号. 答案」"
+            "5. 请按题号顺序作答，格式为「题号. 答案」"
         )
 
     system = {"role": "system", "content": system_content}
@@ -124,7 +138,11 @@ def build_grader_prompt(student_answer: str, key_content: str) -> list[dict]:
 
 def extract_score(grading_result: str) -> str:
     """从评分结果中提取得分"""
-    total_match = re.search(r'得分\s*\|?\s*(\d+)', grading_result)
+    # 优先解析“总分统计”后的得分，避免把第一道小题的“得分2”当成总分。
+    total_section = grading_result[grading_result.find("总分统计"):]
+    total_match = re.search(r'得分\s*\|?\s*(\d+)', total_section)
+    if not total_match:
+        total_match = re.search(r'得分\s*\|?\s*(\d+)', grading_result)
     if not total_match:
         # 尝试另一种格式：得分: XX
         total_match = re.search(r'得分[：:]\s*(\d+)', grading_result)
@@ -146,6 +164,7 @@ def evaluate_one(
     save_raw: bool = True,
     use_rag: bool = False,
     online_mode: str | None = None,
+    rag_profile: str = "standard",
     subject_pbar: tqdm = None,
     verbose: bool = False,
 ) -> dict:
@@ -163,13 +182,16 @@ def evaluate_one(
     if use_rag:
         if subject_pbar:
             subject_pbar.set_description(f"🔍 {subject} RAG检索中")
-        rag_context, rag_refs, _ = retrieve_for_exam(
-            paper, subject, online_mode=online_mode, verbose=verbose,
+        # 用剥离锅炉板后的内容做检索 query，避免"注意事项"等噪音吃掉检索名额
+        paper_for_rag = _strip_boilerplate(paper)
+        rag_context, rag_refs, used_online = retrieve_for_exam_questionwise(
+            paper_for_rag, subject, online_mode=online_mode, verbose=verbose,
+            profile=rag_profile,
+            target_source_file=os.path.splitext(os.path.basename(pair["paper_path"]))[0],
+            answer_content=key if rag_profile == "oracle" else "",
         )
         if rag_context:
-            # 判断是本地还是联网结果
-            is_online = any("🌐" in r for r in rag_refs)
-            rag_source = "🌐 联网搜索" if is_online else "📚 本地教材"
+            rag_source = "🌐 联网搜索" if used_online else "📚 本地教材"
             tqdm.write(f"  {rag_source} {subject} 检索到 {len(rag_refs)} 条参考")
         else:
             tqdm.write(f"  ⚠️ {subject} RAG 不可用，降级为无教材模式")
@@ -195,10 +217,19 @@ def evaluate_one(
         "grading_result": grading_result,
         "timestamp": datetime.now().isoformat(),
         "rag_enabled": use_rag,
+        "rag_profile": rag_profile if use_rag else "none",
         "rag_refs": rag_refs,
         "rag_source": rag_source,
         "rag_context_full": rag_context,
         "rag_is_online": "🌐" in rag_source,
+        "web_exact_paper_hit": bool(
+            used_online and re.search(rf"2026.*{re.escape(subject)}|{re.escape(subject)}.*2026",
+                                      "\n".join(rag_refs), re.IGNORECASE)
+        ),
+        "web_answer_hit": bool(
+            used_online and re.search(r"参考答案|试题答案|答案解析|详解|标准答案",
+                                      "\n".join(rag_refs) + "\n" + rag_context)
+        ),
     }
 
     # 5. 保存结果
@@ -225,7 +256,8 @@ def save_result(result: dict, subject: str, rag_mode: bool = False):
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_subject = subject.replace("/", "_")
-    mode_suffix = "_rag" if rag_mode else ""
+    profile = result.get("rag_profile", "standard")
+    mode_suffix = f"_{profile}" if rag_mode and profile != "standard" else ("_rag" if rag_mode else "")
 
     # 保存完整结果 JSON
     json_path = os.path.join(out_dir, f"{safe_subject}{mode_suffix}_{timestamp}.json")
@@ -292,7 +324,8 @@ def _init_clients(local_student: bool = False):
 
 
 def _run_batch(pairs: list[dict], student, grader, use_rag: bool,
-               desc: str, online_mode: str | None = None, verbose: bool = False) -> list[dict]:
+               desc: str, online_mode: str | None = None, verbose: bool = False,
+               rag_profile: str = "standard") -> list[dict]:
     """批量运行测评"""
     num = len(pairs)
     rag_label = " [RAG]" if use_rag else ""
@@ -302,7 +335,7 @@ def _run_batch(pairs: list[dict], student, grader, use_rag: bool,
         for pair in pairs:
             result = evaluate_one(pair, student, grader, use_rag=use_rag,
                                   online_mode=online_mode, subject_pbar=pbar,
-                                  verbose=verbose)
+                                  verbose=verbose, rag_profile=rag_profile)
             results.append(result)
     return results
 
@@ -485,7 +518,8 @@ def run_all(use_rag: bool = False, local_student: bool = False,
 
 
 def run_one(subject: str, use_rag: bool = False, local_student: bool = False,
-            online_mode: str | None = None, verbose: bool = False):
+            online_mode: str | None = None, verbose: bool = False,
+            rag_profile: str = "standard"):
     """运行单科测评，如 run_one('数学')"""
     pairs = find_paper_key_pairs()
     target = None
@@ -513,7 +547,8 @@ def run_one(subject: str, use_rag: bool = False, local_student: bool = False,
     with tqdm(total=1, desc=f"📋 {target['subject']}{rag_label}{online_tag} 测评", unit="科",
               bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]") as pbar:
         evaluate_one(target, student, grader, use_rag=use_rag,
-                     online_mode=online_mode, subject_pbar=pbar, verbose=verbose)
+                     online_mode=online_mode, subject_pbar=pbar, verbose=verbose,
+                     rag_profile=rag_profile)
 
 
 def print_usage():
@@ -531,13 +566,16 @@ def print_usage():
     print("  python evaluator.py 历史 --rag --online-rag auto    阈值触发联网")
     print("  python evaluator.py 历史 --rag --online-rag online  强制全程联网")
     print("  python evaluator.py --compare --online-rag auto     对比模式 + 联网回退")
+    print("  python evaluator.py 物理 --local --rag --rag-profile local_clean")
+    print("  python evaluator.py 物理 --local --rag --rag-profile oracle")
+    print("  python evaluator.py 物理 --local --rag --rag-profile web  本地不足时不受限联网")
     print("")
     print("  详细 RAG 检索过程:")
     print("  python evaluator.py 数学 --rag --verbose             打印完整 RAG 检索过程")
     print("  python evaluator.py --compare --verbose              对比模式 + 详细检索日志")
     print("")
     print("  默认考生模型:  deepseek-chat (API)")
-    print("  --local 后:    DeepSeek-R1-Distill-Qwen-7B (本地GPU)")
+    print("  --local 后:    使用 LOCAL_LLM_BASE_URL 指定的本地 OpenAI 兼容模型")
     print("  阅卷模型始终:  deepseek-v4-flash (API，保证评分一致性)")
 
 
@@ -549,6 +587,16 @@ if __name__ == "__main__":
     use_local = "--local" in args
     use_compare = "--compare" in args
     use_verbose = "--verbose" in args
+
+    rag_profile = "standard"
+    for i, a in enumerate(args):
+        if a == "--rag-profile" and i + 1 < len(args):
+            rag_profile = args[i + 1]
+            break
+    if rag_profile not in {"standard", "local_clean", "oracle", "web"}:
+        raise SystemExit(f"不支持的 --rag-profile: {rag_profile}")
+    if rag_profile != "standard":
+        use_rag = True
 
     # 提取 --online-rag 的值
     online_mode = None
@@ -569,7 +617,7 @@ if __name__ == "__main__":
             continue
         if a.startswith("--"):
             # 如果这个标志有后续值参数
-            if a == "--online-rag" and len(args) > args.index(a) + 1 and not args[args.index(a) + 1].startswith("--"):
+            if a in {"--online-rag", "--rag-profile"} and len(args) > args.index(a) + 1 and not args[args.index(a) + 1].startswith("--"):
                 skip_next = True
             continue
         subjects.append(a)
@@ -577,6 +625,8 @@ if __name__ == "__main__":
     # 仅联网 RAG，不带 --rag 时自动启用 RAG
     if online_mode and not use_rag:
         use_rag = True
+    if rag_profile == "web":
+        online_mode = "auto"
 
     if not args:
         run_all(use_rag=False)
@@ -592,7 +642,7 @@ if __name__ == "__main__":
     elif use_rag:
         if subjects:
             run_one(subjects[0], use_rag=True, local_student=use_local, online_mode=online_mode,
-                    verbose=use_verbose)
+                    verbose=use_verbose, rag_profile=rag_profile)
         else:
             run_all(use_rag=True, local_student=use_local, online_mode=online_mode,
                     verbose=use_verbose)

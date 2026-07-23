@@ -1,5 +1,6 @@
 """
 RAG 检索器：对接 Chroma Server + bge-m3 向量库，支持多集合检索
+支持 BM25（关键词）+ bge-m3（语义）双路混合检索 + RRF 融合排序
 严格按照 RAG_DEPLOYMENT_GUIDE.md 规范实现
 """
 
@@ -11,20 +12,27 @@ import os
 from functools import lru_cache
 from typing import Any
 
+import numpy as np
+import jieba
+
+from rag_device import resolve_rag_device
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
 # 默认路径（与 teacher-agent-demo 共用同一份向量库）
 # ============================================================
 DEFAULT_VECTORDB_PATH = "/data/education/data/china_textbook_k9_vectordb"
-DEFAULT_EMBED_MODEL = "/home/lizhaoyuan/.cache/modelscope/BAAI/bge-m3"
+DEFAULT_EMBED_MODEL = "/home/dockerContainerSave/.cache/modelscope/BAAI/bge-m3"
 DEFAULT_COLLECTION = "k9_textbook"
 DEFAULT_EXERCISE_COLLECTION = "k9_exercises"
 DEFAULT_TOPK = 5
-DEFAULT_MAX_CONTEXT_CHARS = 2400
+FINAL_TOPK = 10         # 最大注入候选数
+EXERCISE_TOPK = 5        # 题库检索数
+MIN_SIM_THRESHOLD = 0.50 # 本地/联网统一注入阈值
 
 # Chroma Server 地址（从配置读取，默认 127.0.0.1:8002）
-_CHROMA_SERVER = os.environ.get("CHROMA_SERVER", "").strip()
+_CHROMA_SERVER = os.environ.get("CHROMA_SERVER", "127.0.0.1:8002").strip()
 
 
 def _strip_latex(text: str) -> str:
@@ -45,10 +53,215 @@ def _strip_latex(text: str) -> str:
 def _extract_keywords(text: str, max_len: int = 200) -> str:
     """从题目中提取关键语义信息用于检索 query"""
     clean = _strip_latex(text)
+    # 跳过"注意事项"等模板化前缀，直接从题目内容开始提取
+    m = re.search(r'(一[、，.]\s*(?:选择题|单项选择|积累与运用|基础知识)|第[ⅠI一二]卷)', clean)
+    if m:
+        clean = clean[m.start():]
     # 去掉纯数字/符号噪音，保留中文词和≥2字的英文词
     tokens = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]{2,}', clean)
     return ' '.join(tokens)[:max_len]
 
+
+def _is_near_duplicate(question: str, candidate: str, threshold: float = 0.72) -> bool:
+    """检测题库候选是否复述当前题目；只用于 clean profile 排除近重复题。"""
+    normalize = lambda s: re.sub(r'[^\u4e00-\u9fffa-zA-Z0-9]', '', _strip_latex(s)).lower()
+    q = normalize(question)
+    c = normalize(candidate)
+    if len(q) < 16 or len(c) < 16:
+        return False
+    if q in c:
+        return True
+    width = 4
+    qgrams = {q[i:i + width] for i in range(len(q) - width + 1)}
+    cgrams = {c[i:i + width] for i in range(len(c) - width + 1)}
+    if not qgrams:
+        return False
+    # 使用题目覆盖率；候选可能是包含该题的长试卷，不能用对称 Jaccard。
+    return len(qgrams & cgrams) / len(qgrams) >= threshold
+
+
+# ============================================================
+# 混合检索：BM25（关键词）+ bge-m3（语义）+ RRF 融合
+# ============================================================
+
+def _tokenize(text: str) -> list[str]:
+    """jieba 分词，用于 BM25"""
+    return [w.strip() for w in jieba.cut(text) if w.strip()]
+
+
+def _rrf_fusion(
+    dense_results: list[dict[str, Any]],
+    sparse_results: list[dict[str, Any]],
+    k: int = 60,
+    alpha: float = 0.5,
+) -> list[dict[str, Any]]:
+    """RRF (Reciprocal Rank Fusion) 融合双路检索结果。
+
+    不依赖绝对分值，只看排名。对 BM25 和向量相似度的量纲差异不敏感。
+
+    Args:
+        dense_results: bge-m3 语义检索结果（含 _rank 和 sim）
+        sparse_results: BM25 关键词检索结果（含 _rank 和 bm25_score）
+        k: RRF 平滑参数，默认 60
+        alpha: dense 权重，0.5 表示两路等权
+
+    Returns:
+        融合后按 rrf_score 降序排列的结果
+    """
+    rrf_scores: dict[str, float] = {}
+
+    for r in dense_results:
+        doc_id = r.get("_doc_id", r.get("text", "")[:80])
+        rank = r.get("_rank", 100) + 1
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + alpha / (k + rank)
+
+    for r in sparse_results:
+        doc_id = r.get("_doc_id", r.get("text", "")[:80])
+        rank = r.get("_rank", 100) + 1
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + (1 - alpha) / (k + rank)
+
+    # 按 RRF 分数排序
+    all_results = {r.get("_doc_id", r.get("text", "")[:80]): r for r in dense_results + sparse_results}
+    for r in all_results.values():
+        doc_id = r.get("_doc_id", r.get("text", "")[:80])
+        r["rrf_score"] = rrf_scores.get(doc_id, 0)
+
+    merged = sorted(all_results.values(), key=lambda x: x.get("rrf_score", 0), reverse=True)
+    return merged
+
+
+def _build_bm25_index(documents: list[str]) -> Any:
+    """构建 BM25 索引"""
+    from rank_bm25 import BM25Okapi
+    tokenized = [_tokenize(doc) for doc in documents]
+    return BM25Okapi(tokenized)
+
+
+def _bm25_search(query: str, bm25_index: Any, documents: list[dict[str, Any]], topk: int = 30) -> list[dict[str, Any]]:
+    """BM25 关键词检索"""
+    tokenized_query = _tokenize(query)
+    scores = bm25_index.get_scores(tokenized_query)
+    ranked = np.argsort(scores)[::-1][:topk]
+    results = []
+    for rank, idx in enumerate(ranked):
+        if scores[idx] <= 0:
+            continue
+        r = dict(documents[idx])
+        r["bm25_score"] = float(scores[idx])
+        r["_rank"] = rank
+        r["_doc_id"] = r.get("text", "")[:80]
+        results.append(r)
+    return results
+
+
+def hybrid_retrieve(
+    query: str,
+    coll: Any,
+    emb_fn: Any,
+    topk: int = 5,
+    where: dict | None = None,
+    recall_topk: int = 30,
+) -> list[dict[str, Any]]:
+    """双路混合检索：BM25 + bge-m3，RRF 融合。
+
+    流程：
+      1. 从 ChromaDB 拉取候选集（用 metadata 过滤后的全部文档，或向量粗筛 top-recall_topk）
+      2. BM25 关键词检索 → top-recall_topk
+      3. bge-m3 语义检索 → top-recall_topk
+      4. RRF 融合 → top-k
+
+    Args:
+        query: 检索 query
+        coll: ChromaDB collection
+        emb_fn: embedding function
+        topk: 最终返回条数
+        where: metadata 过滤条件
+        recall_topk: 粗筛召回数（BM25 和向量各取这么多）
+
+    Returns:
+        [{"text","meta","distance","source","sim","rrf_score"}, ...]
+    """
+    # Step 1: 向量粗筛 → 拉取候选文档集（不拉全量，避免 SQLite too many SQL variables）
+    candidate_docs: list[str] = []
+    candidate_metas: list[dict] = []
+    try:
+        vec_kwargs: dict[str, Any] = {
+            "query_texts": [query],
+            "n_results": min(recall_topk * 5, 500),
+            "include": ["documents", "metadatas"],
+        }
+        if where:
+            vec_kwargs["where"] = where
+        vec_res = coll.query(**vec_kwargs)
+        candidate_docs = vec_res.get("documents", [[]])[0]
+        candidate_metas = vec_res.get("metadatas", [[]])[0]
+    except Exception:
+        logger.warning("hybrid_retrieve: 向量粗筛失败", exc_info=True)
+        return []
+
+    if not candidate_docs:
+        return []
+
+    logger.info("hybrid_retrieve: 向量粗筛 → %d 条 (where=%s)", len(candidate_docs), where)
+
+    # Step 2: 构建 BM25 索引 + 检索
+    candidate_list = [
+        {"text": doc, "meta": meta}
+        for doc, meta in zip(candidate_docs, candidate_metas)
+    ]
+    bm25_index = _build_bm25_index([d["text"] for d in candidate_list])
+    sparse_results = _bm25_search(query, bm25_index, candidate_list, topk=recall_topk)
+    logger.info("BM25 检索: %d 条命中", len(sparse_results))
+
+    # Step 3: bge-m3 向量检索
+    dense_results: list[dict[str, Any]] = []
+    try:
+        vec_kwargs: dict[str, Any] = {"query_texts": [query], "n_results": min(recall_topk, len(candidate_docs))}
+        if where:
+            vec_kwargs["where"] = where
+        vec_res = coll.query(**vec_kwargs)
+        vec_docs = vec_res.get("documents", [[]])[0]
+        vec_metas = vec_res.get("metadatas", [[]])[0]
+        vec_dists = vec_res.get("distances", [[]])[0]
+        for rank, (doc, meta, dist) in enumerate(zip(vec_docs, vec_metas, vec_dists)):
+            sim = 1.0 - dist if dist < 2 else 0.0
+            dense_results.append({
+                "text": doc, "meta": meta, "distance": dist, "source": "hybrid",
+                "sim": sim, "_rank": rank, "_doc_id": doc[:80],
+            })
+    except Exception:
+        logger.warning("bge-m3 向量检索失败", exc_info=True)
+    logger.info("bge-m3 检索: %d 条命中", len(dense_results))
+
+    # Step 4: RRF 融合
+    merged = _rrf_fusion(dense_results, sparse_results)
+
+    # 取 top-k，统一字段
+    final = []
+    for r in merged[:topk]:
+        rrf = r.get("rrf_score", 0)
+        vec_sim = r.get("sim", 0)
+        bm25 = r.get("bm25_score", 0)
+        # 两路权重 alpha + (1-alpha) = 1，因此理论最大值是 1/(k+1)。
+        # 旧代码误用了 2/(k+1)，会把所有 RRF 综合分数压低一半。
+        rrf_max = 1.0 / (60 + 1)
+        rrf_normalized = min(rrf / rrf_max, 1.0) if rrf_max > 0 else 0.0
+        # RRF 只表示相对名次，单独使用时第一名即使不相关也会接近 1。
+        # 融合分保留语义相似度的绝对信息，才可以用于 0.65 这类触发阈值。
+        fusion_sim = max(0.0, min(1.0, 0.7 * vec_sim + 0.3 * rrf_normalized))
+        final.append({
+            "text": r["text"],
+            "meta": r.get("meta", {}),
+            "distance": 1.0 - fusion_sim,
+            "source": r.get("source", "hybrid"),
+            "sim": fusion_sim,
+            "rrf_score": rrf,
+            "rrf_normalized": rrf_normalized,
+            "vec_sim": vec_sim,
+            "bm25_score": bm25,
+        })
+
+    return final
 
 def get_chroma_client() -> Any:
     """获取 chromadb client：优先 HttpClient（Server 模式），fallback PersistentClient。
@@ -116,6 +329,27 @@ def ensure_chroma_compat() -> None:
         pass
 
 
+def _create_embedding_function(embed_model: str):
+    from chromadb.utils import embedding_functions
+
+    device = resolve_rag_device()
+    try:
+        return embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=embed_model,
+            device=device,
+            normalize_embeddings=True,
+        )
+    except Exception:
+        if device == "cpu":
+            raise
+        logger.warning("RAG embedding init failed on %s; falling back to CPU", device)
+        return embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=embed_model,
+            device="cpu",
+            normalize_embeddings=True,
+        )
+
+
 # ============================================================
 # 教材检索器（k9_textbook 集合）
 # ============================================================
@@ -129,16 +363,12 @@ class TextbookRAG:
         collection_name: str = DEFAULT_COLLECTION,
     ) -> None:
         import chromadb
-        from chromadb.utils import embedding_functions
 
         ensure_chroma_compat()
         logger.info("初始化 TextbookRAG: collection=%s model=%s", collection_name, embed_model)
 
         self._client = get_chroma_client()
-        self._emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=embed_model,
-            normalize_embeddings=True,
-        )
+        self._emb_fn = _create_embedding_function(embed_model)
         self._coll = self._client.get_collection(
             name=collection_name, embedding_function=self._emb_fn
         )
@@ -151,36 +381,27 @@ class TextbookRAG:
         subject: str | None = None,
         stage: str | None = None,
     ) -> list[dict[str, Any]]:
-        """检索教材片段
+        """检索教材片段（双路混合检索：BM25 + bge-m3 + RRF 融合）
 
         支持多维度元数据过滤：subject（学科）、stage（学段：小学/初中）
         """
-        # 多条件过滤需要用 $and
+        # 构造 where 条件
         conditions: list[dict[str, str]] = []
         if subject:
             conditions.append({"subject": subject})
         if stage:
             conditions.append({"stage": stage})
 
-        kwargs: dict[str, Any] = {"query_texts": [query], "n_results": topk}
+        where: dict | None = None
         if len(conditions) == 1:
-            kwargs["where"] = conditions[0]
+            where = conditions[0]
         elif len(conditions) > 1:
-            kwargs["where"] = {"$and": conditions}
+            where = {"$and": conditions}
 
-        try:
-            res = self._coll.query(**kwargs)
-        except Exception:
-            logger.warning("TextbookRAG 检索失败", exc_info=True)
-            return []
-
-        docs = res.get("documents", [[]])[0]
-        metas = res.get("metadatas", [[]])[0]
-        dists = res.get("distances", [[]])[0]
-        return [
-            {"text": doc, "meta": meta, "distance": dist, "source": "textbook"}
-            for doc, meta, dist in zip(docs, metas, dists)
-        ]
+        results = hybrid_retrieve(query, self._coll, self._emb_fn, topk=topk, where=where)
+        for r in results:
+            r["source"] = "textbook"
+        return results
 
     def format_header(self, meta: dict[str, Any], i: int = 1) -> str:
         """格式化单条结果的标题行"""
@@ -206,15 +427,11 @@ class ExerciseRAG:
         collection_name: str = DEFAULT_EXERCISE_COLLECTION,
     ) -> None:
         import chromadb
-        from chromadb.utils import embedding_functions
 
         logger.info("初始化 ExerciseRAG: collection=%s", collection_name)
 
         self._client = get_chroma_client()
-        self._emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=embed_model,
-            normalize_embeddings=True,
-        )
+        self._emb_fn = _create_embedding_function(embed_model)
         self._coll = self._client.get_collection(
             name=collection_name, embedding_function=self._emb_fn
         )
@@ -225,29 +442,24 @@ class ExerciseRAG:
         query: str,
         topk: int = 3,
         subject: str | None = None,
+        exclude_source_file: str | None = None,
     ) -> list[dict[str, Any]]:
-        """检索相关练习题"""
-        filt: dict[str, str] | None = None
+        """检索相关练习题（双路混合检索：BM25 + bge-m3 + RRF 融合）"""
+        where: dict | None = None
+        conditions: list[dict[str, Any]] = []
         if subject:
-            filt = {"subject": subject}
+            conditions.append({"subject": subject})
+        if exclude_source_file:
+            conditions.append({"source_file": {"$ne": exclude_source_file}})
+        if len(conditions) == 1:
+            where = conditions[0]
+        elif conditions:
+            where = {"$and": conditions}
 
-        kwargs: dict[str, Any] = {"query_texts": [query], "n_results": topk}
-        if filt:
-            kwargs["where"] = filt
-
-        try:
-            res = self._coll.query(**kwargs)
-        except Exception:
-            logger.warning("ExerciseRAG 检索失败", exc_info=True)
-            return []
-
-        docs = res.get("documents", [[]])[0]
-        metas = res.get("metadatas", [[]])[0]
-        dists = res.get("distances", [[]])[0]
-        return [
-            {"text": doc, "meta": meta, "distance": dist, "source": "exercise"}
-            for doc, meta, dist in zip(docs, metas, dists)
-        ]
+        results = hybrid_retrieve(query, self._coll, self._emb_fn, topk=topk, where=where)
+        for r in results:
+            r["source"] = "exercise"
+        return results
 
     def format_header(self, meta: dict[str, Any], i: int = 1) -> str:
         """格式化单条结果的标题行"""
@@ -261,55 +473,55 @@ class ExerciseRAG:
 
 
 # ============================================================
+# 自适应截断：长文档不截断，短文档正常截断
+# ============================================================
+
+LONG_CHUNK_THRESHOLD = 2000  # 超过此字符数的 chunk 视为长文档（如完整试卷）
+
+
+# ============================================================
 # 格式化工具
 # ============================================================
 
 def format_context(
     hits: list[dict[str, Any]],
-    max_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
     textbook_rag: TextbookRAG | None = None,
     exercise_rag: ExerciseRAG | None = None,
 ) -> str:
-    """把命中片段格式化为可注入 prompt 的上下文，支持截断（不跳过后续结果）"""
+    """把命中片段格式化为可注入 prompt 的上下文。
+
+    保持融合排序顺序输出，不因文档长度改变相关性排名。
+    """
+    ordered = hits
+
     parts: list[str] = []
-    used = 0
-    for i, h in enumerate(hits, 1):
+    idx = 0
+
+    def _format_header(h: dict[str, Any], i: int) -> str:
         m = h.get("meta", {}) or {}
         source = h.get("source", "textbook")
-
-        # 用对应的 formatter
         if source == "online":
             src_name = m.get("source", "在线来源")
             url = m.get("url", "")
             ci = m.get("chunk_index")
             ct = m.get("chunk_total")
-            if ci is not None and ct is not None:
-                header = f"[网络参考{i}] {src_name} 片段{ci+1}/{ct}"
-            else:
-                header = f"[网络参考{i}] {src_name}"
+            tag = f" 片段{ci+1}/{ct}" if ci is not None and ct is not None else ""
+            hdr = f"[网络参考{i}] {src_name}{tag}"
             if url:
-                header += f" ({url})"
+                hdr += f" ({url})"
+            return hdr
         elif source == "exercise" and exercise_rag is not None:
-            header = exercise_rag.format_header(m, i)
+            return exercise_rag.format_header(m, i)
         elif textbook_rag is not None:
-            header = textbook_rag.format_header(m, i)
+            return textbook_rag.format_header(m, i)
         else:
-            header = f"[参考{i}] {m.get('chapter', m.get('knowledges', ''))}"
+            return f"[参考{i}] {m.get('chapter', m.get('knowledges', ''))}"
 
+    for h in ordered:
+        idx += 1
+        header = _format_header(h, idx)
         text = h.get("text", "")
-
-        remaining = max_chars - used
-        header_len = len(header) + 2
-        if remaining < header_len + 20:
-            break
-
-        max_text_len = remaining - header_len
-        if len(text) > max_text_len:
-            text = text[: max_text_len - 3] + "..."
-
-        block = f"{header}\n{text}"
-        parts.append(block)
-        used += len(block)
+        parts.append(f"{header}\n{text}")
 
     return "\n\n".join(parts)
 
@@ -392,6 +604,10 @@ def retrieve_for_exam(
     topk: int = DEFAULT_TOPK,
     online_mode: str | None = None,
     verbose: bool = False,
+    exclude_source_file: str | None = None,
+    exclude_near_duplicates: bool = False,
+    textbook_only: bool = False,
+    min_sim_threshold: float | None = None,
 ) -> tuple[str, list[str]]:
     """为题目检索教材+题库上下文，支持阈值触发联网。
 
@@ -454,10 +670,25 @@ def retrieve_for_exam(
             print(f"📚 本地教材检索: 无匹配结果\n")
 
     # ---- 本地题库检索 ----
-    exercise_rag = _get_exercise_rag()
+    exercise_rag = None if textbook_only else _get_exercise_rag()
     exercise_hits: list = []
     if exercise_rag is not None and mode != "online":
-        exercise_hits = exercise_rag.retrieve(query, topk=3, subject=_subject_clean)
+        # 学科名映射：中文→英文（向量库中不同数据源的 subject 格式不统一）
+        _subject_en = {
+            "数学": "Math", "物理": "Physics", "化学": "Chemistry",
+            "英语": "English", "语文": "Chinese", "历史": "History",
+            "道法": "Politics", "生物": "Biology", "地理": "Geography",
+        }.get(_subject_clean, _subject_clean)
+        # 统一走混合检索（BM25 + bge-m3 + RRF），按学科过滤
+        exercise_hits = exercise_rag.retrieve(
+            query, topk=EXERCISE_TOPK, subject=_subject_en,
+            exclude_source_file=exclude_source_file,
+        )
+        if exclude_near_duplicates:
+            exercise_hits = [
+                h for h in exercise_hits
+                if not _is_near_duplicate(paper_content, h.get("text", ""))
+            ]
         if exercise_hits:
             ex_top_score = 1.0 - min(h.get("distance", 999) for h in exercise_hits)
             logger.info("本地题库 top-1 相似度: %.3f", ex_top_score)
@@ -559,25 +790,26 @@ def retrieve_for_exam(
             print(f"❌ 无任何命中结果\n")
         return "", [], False
 
-    # 按 sim 降序排序，取 topk
+    # 本地 RRF 分数和联网 bge-m3 重排分数均归一化到 0~1，统一按 sim
+    # 排序并应用同一注入阈值；来源不会改变优先级。
     all_hits.sort(key=lambda h: h.get("sim", 0), reverse=True)
-    all_hits = all_hits[:topk]
+    effective_min_sim = MIN_SIM_THRESHOLD if min_sim_threshold is None else min_sim_threshold
+    all_hits = [h for h in all_hits if h.get("sim", 0) >= effective_min_sim][:FINAL_TOPK]
 
     if verbose and online_hits and local_all:
         local_in_final = sum(1 for h in all_hits if h.get("source") not in ("online",))
         online_in_final = sum(1 for h in all_hits if h.get("source") == "online")
-        print(f"\n📊 合并排序后 top-{topk}: 本地 {local_in_final} 条 + 联网 {online_in_final} 条")
+        print(f"\n📊 合并排序后 top-{len(all_hits)} (sim≥{effective_min_sim}): 本地 {local_in_final} 条 + 联网 {online_in_final} 条")
         for i, h in enumerate(all_hits, 1):
             src_tag = "🌐" if h.get("source") == "online" else "📚"
             print(f"   [{i}] {src_tag} sim={h.get('sim', 0):.4f}")
 
-    max_chars = RAG_CONFIG.get("max_context_chars", DEFAULT_MAX_CONTEXT_CHARS)
-    context = format_context(all_hits, max_chars=max_chars,
-                             textbook_rag=textbook_rag, exercise_rag=exercise_rag)
-    refs = format_refs(all_hits, max_refs=5)
+    # 不截断，全量注入，让 LLM 自己判断相关性（对标 GPT-4/Gemini/Claude）
+    context = format_context(all_hits, textbook_rag=textbook_rag, exercise_rag=exercise_rag)
+    refs = format_refs(all_hits, max_refs=10)
 
     if verbose:
-        print(f"\n📤 最终注入上下文 ({len(context)} 字符):")
+        print(f"\n📤 最终注入上下文 ({len(context)} 字符，全量不截断):")
         for r in refs:
             print(f"   {r}")
         print(f"━━━━━━ RAG 检索结束 ━━━━━━\n")
@@ -589,3 +821,105 @@ def is_rag_available() -> bool:
     """检查 RAG 是否可用"""
     rag = _get_textbook_rag()
     return rag is not None
+
+
+def _split_exam_questions(paper_content: str) -> list[str]:
+    """按行首题号切分整卷，(1)/(2) 小问不会被单独切出。"""
+    lines = paper_content.splitlines()
+    section_starts = [i for i, line in enumerate(lines)
+                      if re.match(r"^\s*(?:#{0,3}\s*)?[一二三四五六七八九十]+[、.]\s*\S", line)]
+    if section_starts:
+        lines = lines[min(section_starts):]
+    starts = [i for i, line in enumerate(lines)
+              if re.match(r"^\s*\d{1,3}\s*[\.、]\s*\S", line)]
+    questions: list[str] = []
+    for pos, start in enumerate(starts):
+        end = starts[pos + 1] if pos + 1 < len(starts) else len(lines)
+        text = "\n".join(lines[start:end]).strip()
+        if text:
+            questions.append(text)
+    return questions
+
+
+def _split_numbered_answer_hints(answer_content: str) -> dict[int, str]:
+    """从答案文件提取题号片段，仅用于 Oracle 的检索 query，不会注入模型。"""
+    marker = re.compile(r'(?<![\d.])(1[0-9]|2[01]|[1-9])\s*[.、]\s*')
+    matches = list(marker.finditer(answer_content))
+    hints: dict[int, str] = {}
+    for pos, match in enumerate(matches):
+        number = int(match.group(1))
+        end = matches[pos + 1].start() if pos + 1 < len(matches) else len(answer_content)
+        text = answer_content[match.end():end].strip()
+        if number not in hints and text:
+            hints[number] = text[:600]
+    return hints
+
+
+def retrieve_for_exam_questionwise(
+    paper_content: str,
+    subject: str,
+    topk: int = DEFAULT_TOPK,
+    online_mode: str | None = None,
+    verbose: bool = False,
+    profile: str = "standard",
+    target_source_file: str | None = None,
+    answer_content: str = "",
+) -> tuple[str, list[str], bool]:
+    """逐题检索并去重；auto 模式下每题按本地阈值决定是否联网。"""
+    questions = _split_exam_questions(paper_content)
+    if not questions:
+        return retrieve_for_exam(paper_content, subject, topk=topk,
+                                  online_mode=online_mode, verbose=verbose)
+
+    contexts: list[str] = []
+    refs: list[str] = []
+    seen_contexts: set[str] = set()
+    seen_refs: set[str] = set()
+    mode = online_mode if online_mode is not None else "off"
+    used_online = False
+    answer_hints = _split_numbered_answer_hints(answer_content) if profile == "oracle" else {}
+
+    for i, question in enumerate(questions, 1):
+        query = question
+        if profile == "oracle" and answer_hints.get(i):
+            query = f"{question}\n用于定位教材知识点的正确结论：{answer_hints[i]}"
+        context, question_refs, _ = retrieve_for_exam(
+            query, subject, topk=1,
+            # web profile 在逐题本地检索后统一做一次不受限联网，避免一张试卷触发 21 次 Tavily。
+            online_mode="off" if profile in ("oracle", "web") else mode,
+            verbose=verbose,
+            exclude_source_file=target_source_file if profile in ("local_clean", "web") else None,
+            exclude_near_duplicates=profile in ("local_clean", "web"),
+            textbook_only=profile == "oracle",
+            min_sim_threshold=0.0 if profile == "oracle" else None,
+        )
+        if context and context not in seen_contexts:
+            contexts.append(context)
+            seen_contexts.add(context)
+        for ref in question_refs:
+            used_online = used_online or "🌐" in ref
+            if ref not in seen_refs:
+                refs.append(ref)
+                seen_refs.add(ref)
+        if verbose:
+            print(f"逐题 RAG [{i}/{len(questions)}] 命中 {len(question_refs)} 条")
+
+    if profile == "web":
+        # 不受限联网明确表达“找原卷答案”的意图；这是开卷搜索能力，不是教材增强。
+        compact_query = (
+            f"2026年河南省中考{subject}试卷 含答案及解析 参考答案\n"
+            + "\n".join(questions[: min(len(questions), 5)])
+        )
+        online_context, online_refs, _ = retrieve_for_exam(
+            compact_query, subject, topk=DEFAULT_TOPK, online_mode="online", verbose=verbose,
+        )
+        if online_context and online_context not in seen_contexts:
+            contexts.append(online_context)
+            seen_contexts.add(online_context)
+        for ref in online_refs:
+            used_online = used_online or "🌐" in ref
+            if ref not in seen_refs:
+                refs.append(ref)
+                seen_refs.add(ref)
+
+    return "\n\n".join(contexts)[:16000], refs[:10], used_online

@@ -15,6 +15,8 @@ from typing import Any
 
 import numpy as np
 
+from rag_device import resolve_rag_device
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 _embed_model: Any = None
-DEFAULT_EMBED_MODEL = "/home/lizhaoyuan/.cache/modelscope/BAAI/bge-m3"
+DEFAULT_EMBED_MODEL = "/home/dockerContainerSave/.cache/modelscope/BAAI/bge-m3"
 
 
 def _get_embed_model() -> Any:
@@ -31,7 +33,14 @@ def _get_embed_model() -> Any:
     if _embed_model is not None:
         return _embed_model
     from sentence_transformers import SentenceTransformer
-    _embed_model = SentenceTransformer(DEFAULT_EMBED_MODEL, device="cpu")
+    device = resolve_rag_device()
+    try:
+        _embed_model = SentenceTransformer(DEFAULT_EMBED_MODEL, device=device)
+    except Exception:
+        if device == "cpu":
+            raise
+        logger.warning("Online RAG embedding init failed on %s; falling back to CPU", device)
+        _embed_model = SentenceTransformer(DEFAULT_EMBED_MODEL, device="cpu")
     _embed_model.encode(["warmup"], normalize_embeddings=True)
     logger.info("bge-m3 嵌入模型已加载（联网重排序）")
     return _embed_model
@@ -119,6 +128,22 @@ def rerank_chunks(
     if not chunks:
         return []
 
+    # 长答案页可能切出数百个片段。先用字符 2-gram 覆盖率和 Tavily 原始分
+    # 做轻量预筛，再交给 bge-m3 精排，避免 CPU 对全部片段编码数分钟。
+    max_embed_candidates = 96
+    if len(chunks) > max_embed_candidates:
+        clean_query = re.sub(r'\s+', '', query)
+        query_grams = {clean_query[i:i + 2] for i in range(max(0, len(clean_query) - 1))}
+
+        def pre_score(chunk: dict[str, Any]) -> float:
+            text = re.sub(r'\s+', '', chunk.get("text", ""))
+            text_grams = {text[i:i + 2] for i in range(max(0, len(text) - 1))}
+            overlap = len(query_grams & text_grams) / max(len(query_grams), 1)
+            return overlap + 0.15 * float(chunk.get("score", 0))
+
+        chunks = sorted(chunks, key=pre_score, reverse=True)[:max_embed_candidates]
+        logger.info("联网预筛: 候选片段压缩至 %d 条", len(chunks))
+
     model = _get_embed_model()
     chunk_texts = [c["text"] for c in chunks]
 
@@ -184,8 +209,13 @@ class OnlineRAG:
         if not api_key:
             raise ValueError("Tavily API key 未配置")
 
+        import requests
         from tavily import TavilyClient
-        self._client = TavilyClient(api_key=api_key)
+        # 本机开发代理可能能建立 CONNECT，却在 Tavily TLS 握手时提前断流。
+        # Tavily 已验证可以直连，因此只让该客户端绕过环境代理。
+        session = requests.Session()
+        session.trust_env = False
+        self._client = TavilyClient(api_key=api_key, session=session)
         self._max_results = max_results
         logger.info("OnlineRAG 就绪 (Tavily, max_results=%d)", max_results)
 
