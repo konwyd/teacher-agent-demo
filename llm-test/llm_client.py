@@ -3,6 +3,7 @@ LLM 客户端封装（OpenAI 兼容接口 + 本地 llama-cpp 模型）
 """
 
 import json
+import os
 import time
 import re
 from openai import OpenAI
@@ -158,11 +159,25 @@ class LocalLLMClient:
         return ""
 
 
-def make_local_teacher_client() -> LocalLLMClient:
-    """创建本地模型教师客户端"""
+def make_local_teacher_client() -> LLMClient | LocalLLMClient:
+    """创建本地模型教师客户端；可连接 llama.cpp OpenAI 兼容服务。"""
+    server_url = os.environ.get("LOCAL_LLM_BASE_URL", "").strip()
+    if server_url:
+        return LLMClient(
+            base_url=server_url,
+            api_key=os.environ.get("LOCAL_LLM_API_KEY", "local"),
+            model_name=os.environ.get("LOCAL_LLM_MODEL", "deepseek-v4-flash"),
+            temperature=float(os.environ.get("LOCAL_LLM_TEMPERATURE", "0.3")),
+            max_tokens=int(os.environ.get("LOCAL_LLM_MAX_TOKENS", "8192")),
+        )
+
     from config import LOCAL_MODEL
     return LocalLLMClient(
         model_path=LOCAL_MODEL["model_path"],
         n_ctx=LOCAL_MODEL.get("n_ctx", 16384),
         n_threads=LOCAL_MODEL.get("n_threads", 32),
     )
+
+make_student_client = make_teacher_client
+make_grader_client = make_judge_client
+make_local_student_client = make_local_teacher_client

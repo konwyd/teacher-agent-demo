@@ -1,217 +1,246 @@
-# Teacher Agent — RAG 知识增强型 AI 教师
+# LLM-led Teacher — 中文初中数学教师原型
 
-> 一个基于 DeepSeek 的中文 K9 数学教师 Agent，搭载 **28.8 万条多模态 RAG 知识库**（教材原文、题库、课程标准、教师资格证），支持图文混合检索。
+这是一个面向中文初中数学的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：DeepSeek 负责自然语言教学，Agent 只在关键边界维护题目上下文、控制教学节奏，并用确定性数学检查器审计可验证的步骤。
 
----
+项目关注的不是让模型一次性给出答案，而是让它在普通求助场景中每轮只推进一个有意义步骤。
 
-## 🚀 快速开始
+## 当前主版本
 
-### 环境要求
+- 网页入口：`http://localhost:8502`
+- 一键启动：`python3 scripts/run_llm_led_teacher.py`
+- 教师模型：本地 DeepSeek-V4 Flash GGUF（llama.cpp OpenAI-compatible 服务）
+- 本地检索：bge-m3 + Chroma Server + BM25 + RRF
+- 教学防线：observer 软判断 + 本地节奏规范化 + math_checker 后置审计/修正
+- 展示方式：先完成审计，再将最终安全回答逐字符显示
+
+旧的结构化 Teacher Agent 仍保留为研究 baseline，入口为 Streamlit `8501` 和 FastAPI `8000`，但它不是当前默认演示。
+
+## 单轮处理流程
+
+```text
+学生消息
+  ↓
+observer 判断是否换题及建议本轮节奏
+  ↓
+本地规则规范化有效 guidance
+  ↓
+RAG 检索教材/题库参考
+  ↓
+DeepSeek 生成教师初稿
+  ↓
+math_checker / verifier 提取并核验方程
+  ↓
+节奏审计；必要时让模型修正一次
+  ↓
+只把审计后的回答逐字符展示给学生
+```
+
+observer 是软判断来源，不是最终裁决者。对于新题中的普通“怎么解”“不会”“帮我”等请求，如果确定性检查能确认它是需要多步变形的方程，错误的 `complete_response` 会被规范化为 `single_move`。即使 observer 判断失误，后置审计仍会阻止首轮直接泄露最终形式。
+
+学生明确要求“完整步骤和答案”时可以完整回答；概念题、直接事实题或缺少确定性 verifier 的题型不会被错误阻断。
+
+## RAG 的实际工作方式
+
+RAG 在服务端运行，用户浏览器不需要下载向量库或嵌入模型。
+
+```text
+学生题目
+  ├─ bge-m3：在应用进程生成查询向量，可使用 GPU
+  ├─ Chroma Server：通过服务器内部 HTTP API 查询本地 HNSW 索引
+  ├─ BM25：关键词召回
+  ├─ RRF：融合语义与关键词排序
+  └─ 本地有效命中不足时：按原项目策略尝试 Tavily 联网搜索
+```
+
+- `bge-m3` 是本地 embedding 模型，不是 Chroma 自带模型，也不是付费 embedding API。
+- Chroma 既是 Python 包，也能作为独立服务运行。本项目由启动脚本执行 `chroma run`，应用再通过 `chromadb.HttpClient` 访问它。
+- Chroma 的 HNSW 检索当前主要使用 CPU；GPU 用于加速 bge-m3 查询向量和联网结果重排。
+- 本地策略复用 `llm-test/rag_retriever.py`：教材库与题库检索、BM25、bge-m3、RRF、`0.65` 有效命中阈值、联网回退以及 `0.44` 最终过滤。
+- 自动联网不是只看“最高相似度低于 65%”，而是有效命中数量少于 `topk` 时触发；没有有效 Tavily 配置时会无阻断降级为本地结果。
+
+RAG 是有边界的参考数据：它只进入教师生成请求，不进入 observer 请求，不能覆盖 `turn_guidance`，也不能替换当前 `active problem`。检索内容与题目无关时，教师可以忽略。
+
+## 化学分子结构图增强（MolScribe + RDKit）
+
+现有 OCR/RAG 数据中的 `metadata.images` 和图片存储保持不变。可选的数据预处理命令只对化学块中命中“结构式/结构简式/分子结构/化学式/分子式/电子式/分子模型/球棍模型”等上下文的图片运行 MolScribe，并把经 RDKit 校验后的规范 SMILES、分子式和官能团描述追加到文本中。它不处理实验装置图、曲线图或普通插图，也不会覆盖原始 OCR。
+
+MolScribe 1.1.1 要求 `torch<2.0`，与当前本地模型环境的 PyTorch 2.x 不兼容，因此必须使用隔离环境：
+
+```bash
+cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
+bash scripts/install_molscribe_env.sh
+```
+
+图片根目录和历史 `source_md` 路径映射需要按实际挂载位置填写。默认 `keyword` 模式较安全；确认希望尝试所有化学块图片时才使用 `--candidate-mode all`：
+
+```bash
+.venv-molscribe/bin/python scripts/enrich_molecular_structures.py \
+  data/china_textbook_k9_chunks/chunks.jsonl \
+  data/china_textbook_k9_chunks/chunks.molscribe.jsonl \
+  --image-root /实际的图片存储根目录 \
+  --path-map /data/wyd-workspace/education=/home/dockerContainerSave/data/wyd-workspace/education \
+  --device cuda:0
+```
+
+输出包括增强后的 JSONL、结构明细 JSONL、预测缓存和统计报告。增强后的文本可以按原有流程重新写入 Chroma；原始 `chunks.jsonl` 不会被原地覆盖。若只想处理人工确认的图片，可准备每行一个图片文件名的 allowlist，并使用 `--candidate-mode allowlist --allowlist images.txt`。
+
+MolScribe 结果只作为机器生成证据保留：SMILES 经 RDKit 解析失败、原子数不足或置信度低于 `0.80` 时会被丢弃。低置信度图片仍保留在原 `metadata.images` 中，便于人工复核。
+
+## 环境要求
 
 - Python 3.10+
-- 内存 ≥ 16 GB（bge-m3 模型 + ChromaDB 共需约 6 GB）
-- 磁盘 ≥ 10 GB
+- 本地存在 bge-m3 模型和 Chroma 向量库
+- 本地存在 DeepSeek-V4 GGUF、CUDA 版 llama.cpp 和现有 8-GPU 启动脚本
+- 8×RTX 4080 或能够容纳当前权重与 KV cache 的等效环境
+- 使用 GPU embedding 时需要可用的 CUDA/PyTorch 环境
 
-### 1. 安装依赖
-
-```bash
-cd teacher-agent-demo
-pip install -e ".[dev,ui,rag]"
-pip install chromadb==1.5.9 sentence-transformers>=2.7
-```
-
-### 2. 下载嵌入模型
+安装示例：
 
 ```bash
-pip install modelscope
-python3 -c "
-from modelscope import snapshot_download
-snapshot_download('BAAI/bge-m3', cache_dir='/home/YOUR_USER/.cache/modelscope')
-"
+cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
+pip install -e ".[dev,ui]"
+pip install -r llm-test/requirements.txt
+pip install jieba rank-bm25
 ```
 
-### 3. 配置
+当前一键启动不需要 DeepSeek API key。启动器会只在 Teacher 子进程中强制使用本地 `8080/v1` 服务，覆盖 `.env` 中可能残留的付费 API 地址、模型名和密钥，避免意外回退。
 
-编辑 `teacher-agent-demo/.env`：
+联网检索是可选能力，继续复用 `llm-test/config.py` 中的原项目 Tavily 配置。正式部署时应通过安全的服务端配置提供凭据，不要把真实密钥写进 README、前端或公开仓库。
+
+## 一键启动当前原型
 
 ```bash
-# DeepSeek API（必需）
-DEEPSEEK_API_KEY=sk-your-key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-
-# RAG 知识库
-TEACHER_RAG_ENABLED=1
-TEACHER_RAG_VECTORDB_PATH=/data/education/data/china_textbook_k9_vectordb
-TEACHER_RAG_EMBED_MODEL=/home/YOUR_USER/.cache/modelscope/BAAI/bge-m3
-TEACHER_RAG_COLLECTION=k9_textbook
-TEACHER_RAG_TOPK=5
-TEACHER_RAG_SUBJECT_FILTER=数学
-
-# Chroma Server（先启动）
-CHROMA_SERVER=127.0.0.1:8002
-
-# 多模态图片访问
-TEACHER_IMAGE_BASE_URL=http://YOUR_IP:8000/images
+cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
+python3 scripts/run_llm_led_teacher.py
 ```
 
-### 4. 启动服务
+脚本会：
+
+1. 在 `8080` 启动本地 DeepSeek-V4，或复用模型别名匹配的健康服务；
+2. 等待 `/health` 和 `/v1/models` 均验证通过；
+3. 在 `8002` 启动或复用 Chroma Server；
+4. 在应用进程中预热 bge-m3；
+5. 在 `8502` 启动 LLM-led Teacher 页面；
+6. 退出时关闭由本脚本启动的模型、Chroma 和网页子进程。
+
+启动成功后只需访问 `http://localhost:8502`。默认向量库路径为 `data/china_textbook_k9_vectordb`。
+
+模型默认使用单会话 `524288` 上下文、K=`q8_0`、V=`q4_0`。首次加载可能需要数分钟，启动器最多等待 900 秒。模型端口被未知或不健康服务占用、模型提前退出或健康检查超时时，整套启动直接失败，不会调用 DeepSeek 付费 API。
+
+## 端口与对外访问
+
+| 端口 | 服务 | 是否需要公开 |
+|---:|---|---|
+| `8502` | 当前 LLM-led Teacher 网页 | 是，用户只访问这个端口 |
+| `8002` | Chroma 内部 HTTP API | 否，只供服务器上的应用访问 |
+| `8080` | 本地 llama.cpp OpenAI-compatible API | 否，只供服务器上的 Teacher 访问 |
+| `8501` | 旧结构化 Agent Streamlit | 否，除非专门展示 baseline |
+| `8000` | 旧结构化 Agent FastAPI | 否，除非有独立调用方 |
+
+通过 VS Code 端口转发或反向代理发布时，只需公开 `8502`。浏览器不会直接访问 `8002` 或 `8080`；网页服务在服务器内部调用 Chroma 和本地模型。正式对外使用时应采用稳定域名、HTTPS、反向代理和访问控制，开发隧道只适合临时演示。
+
+可覆盖的一键启动参数：
 
 ```bash
-# 终端 1：Chroma Server（向量检索）
-chroma run --path data/china_textbook_k9_vectordb --port 8002 --host 127.0.0.1 &
-
-# 终端 2：FastAPI 后端
-cd teacher-agent-demo
-python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000 &
-
-# 终端 3：Streamlit 前端
-streamlit run teacher-agent-demo/app/ui/streamlit_app.py --server.port 8501 &
+python3 scripts/run_llm_led_teacher.py \
+  --app-port 8502 \
+  --rag-port 8002 \
+  --model-port 8080 \
+  --model-startup-timeout 900 \
+  --llm-request-timeout 300 \
+  --db-path data/china_textbook_k9_vectordb
 ```
 
-打开浏览器访问 `http://YOUR_IP:8501` 即可开始教学对话。
+关键默认配置：
 
----
+| 配置 | 默认值 | 用途 |
+|---|---|---|
+| 模型别名 | `deepseek-v4-flash` | 由 `/v1/models` 健康检查验证 |
+| 模型地址 | `http://127.0.0.1:8080/v1` | 教师、observer 和修正请求 |
+| `DEEPSEEK_TIMEOUT_SECONDS` | `300` | 单次本地模型请求超时 |
+| `TEACHER_RAG_DEVICE` | `cpu` | 512K 本地模型占满 GPU 时避免 bge-m3 OOM；显式环境变量优先 |
+| `TEACHER_RAG_CPU_THREADS` | `4` | RAG 相关 CPU 线程数 |
+| `CHROMA_SERVER` | `127.0.0.1:8002` | 原检索器访问的 Chroma Server |
 
-## 📊 RAG 知识库总览
+需要查看全部覆盖项时运行 `python3 scripts/run_llm_led_teacher.py --help`。只有确认某张 GPU 留有足够模型权重和推理峰值之外的余量时，才应显式设置 `TEACHER_RAG_DEVICE=cuda:N`。
 
-| 集合 | 记录数 | 内容 | 来源 |
-|------|:---:|------|------|
-| `k9_textbook` | 62,772 | K9 全科教材（19 学科），55.9% 含图片 | 130 本人教版 PDF |
-| `k9_exercises` | 225,760 | 全题型题库（选择+填空+解答+应用） | M3KE + TAL-SCQ5K + APE210K + 中考真题 |
-| `curriculum_std` | 18 | 义务教育数学课程标准（2022） | 课标 MD |
-| `teacher_cert` | 50 | 教师资格证考试资料 | 教资 MD |
-| **合计** | **288,600** | — | — |
+## 回答速度与流式展示
 
-### 题库明细
+一次普通回合通常包括 observer、RAG 和教师生成；触发安全修正时还会多一次模型调用。页面会显示“判断节奏、检索、生成、审计、修正”等阶段状态。
 
-| 数据源 | 题目数 | 题型 | 来源机构 |
-|--------|:---:|------|------|
-| M3KE | 20,122 | 选择题（71 学科） | 天津大学 NLP + 华为 |
-| TAL-SCQ5K | 5,000 | 选择题（含解题步骤） | 好未来（学而思）MIT |
-| APE210K | 200,488 | 应用题 | 开源 |
-| 河南中考真题 | 150 | 全题型 | 官方真题 |
+回答生成期间，展开的状态框会实时追加每个后台阶段正在做的工作，并在阶段结束时显示耗时；完成后还会追加 Observer、RAG 和审计摘要。
 
-### 多模态能力
+最终回答采用安全流式展示：初稿不会直接发给学生，必须先完成审计和必要修正，随后安全版本才逐字符显示。它改善等待体验，但不会缩短上游模型和检索本身的耗时。
 
-- **图文混合检索**：文本向量匹配 → 从 metadata 提取关联图片 → 返回图片 URL
-- **图片规模**：53,957 张教材插图
-- **实现**：`app/retrieval/multimodal_rag.py`
+## 验证
 
----
-
-## 🧪 评测系统
-
-`llm-test/` 目录包含完整的 A/B 对比评测框架：
+所有自动化测试都使用 fake client/mock LLM，不调用真实付费 API：
 
 ```bash
-cd llm-test
-
-# 配置 config.py 中的 API key
-
-# 纯模型（无 RAG）
-python evaluator.py 数学
-
-# 挂载 RAG（开卷考试）
-python evaluator.py --rag 数学
-
-# 全科对比（无 RAG vs 有 RAG）
-python evaluator.py --compare-all
-
-# 导出中考题 JSON（供测试同学使用）
-# 已导出至 results/zhongkao_export/
+python -m pytest tests/prototypes/test_llm_led_turn_contract.py -q
+python -m pytest tests/prototypes/test_llm_led_streaming.py -q
+python -m pytest
+python scripts/run_eval.py
 ```
 
----
+重点保护的教学不变式：
 
-## 📁 项目结构
+- 多步骤方程的普通首轮求助最终使用 `single_move`；
+- 教师收到规范化后的 `turn_guidance`；
+- 初稿泄露最终形式时触发修正；
+- 修正后最多推进一个有意义步骤，且最多一个结尾问题；
+- 明确索要完整答案和直接事实题仍可使用 `complete_response`；
+- observer 异常或缺少 verifier 时，学生回答仍正常显示；
+- RAG 不进入 observer payload，也不改变 active problem。
 
-```
-education/
-├── README.md                       # 本文档
-├── teacher-agent-demo/             # 主项目
-│   ├── app/
-│   │   ├── agent/                  # Agent 工作流（六节点状态机）
-│   │   │   ├── workflow.py         # 诊断→检索→策略→教学→记忆→日志
-│   │   │   └── math_checker.py     # 数学步骤检查器
-│   │   ├── retrieval/
-│   │   │   ├── textbook_rag.py     # 教材 RAG 检索器
-│   │   │   ├── multimodal_rag.py   # 多模态图文混合检索
-│   │   │   ├── kb_manager.py       # 多集合管理器（题库/课标/教资）
-│   │   │   └── chroma_compat.py    # ChromaDB 兼容层
-│   │   ├── api/main.py             # FastAPI 接口
-│   │   ├── ui/streamlit_app.py     # Streamlit 前端
-│   │   └── llm/deepseek_client.py  # DeepSeek API 客户端
-│   ├── docs/                       # 文档
-│   │   └── RAG_DEPLOYMENT_GUIDE.md # RAG 部署对接手册
-│   ├── scripts/                    # 建库脚本
-│   ├── .env                        # 配置（需填入 API key）
-│   └── pyproject.toml
-├── llm-test/                       # 评测系统
-│   ├── evaluator.py                # 主评测逻辑
-│   ├── rag_retriever.py            # RAG 检索器
-│   ├── config.py                   # 配置
-│   ├── testmd/paper/               # 中考题 MD
-│   ├── testmd/key/                 # 答案 MD
-│   └── results/zhongkao_export/    # 导出 JSON 题库
-└── data/                           # 数据文件
-    ├── china_textbook_k9_vectordb/ # ★ 向量库（2.2 GB，运行时必须）
-    ├── china_textbook_k9_chunks/   # 教材分块（83 MB，重建时需要）
-    ├── k9_exercises_source/        # 题库源数据（88 MB）
-    └── teacher_kb_source/          # 课标/教资源 MD（72 KB）
+## 旧结构化 Agent baseline
+
+旧版用于研究 Agent workflow、student memory、math_checker、evaluation 和 Pedagogical Graph RAG，仍可单独运行：
+
+```bash
+python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+streamlit run app/ui/streamlit_app.py --server.port 8501
 ```
 
----
+当前 LLM-led Prototype 刻意绕过 TeachingPlanner、掌握度控制和 Pedagogical Graph RAG，不要把两个入口混为同一实现。
 
-## 🔍 RAG 检索原理
+## 本地 DeepSeek-V4 运行参数
 
-```
-学生提问 "2x+3=7 怎么解"
-    ↓
-bge-m3 编码为 1024 维向量
-    ↓
-ChromaDB HNSW 近似最近邻搜索（cosine 相似度）
-    ↓
-返回 top-5 教材 chunk（原文 + 图片 URL）+ top-3 题库 + top-2 课标 + top-2 教资
-    ↓
-注入 DeepSeek prompt → 生成教师回复
+当前网页默认使用 `DeepSeek-V4-Flash-GGUF-IQ3_XXS`。一键脚本复用现有 8-GPU 模型启动脚本，并自动传入已经验证的 512K 单会话与混合量化 KV cache 配置：
+
+```bash
+python3 scripts/run_llm_led_teacher.py
 ```
 
-- **嵌入模型**：BAAI/bge-m3（1024 维，中文语义检索强）
-- **相似度**：cosine（向量归一化后内积）
-- **索引**：HNSW 近似最近邻
+当前配置下 DeepSeek 分片已占用全部 8 张 GPU；GPU7 再加载 bge-m3 后实测只剩约 52 MiB，并在检索峰值触发过 `OutOfMemoryError`。因此一键启动默认让 RAG embedding 使用 CPU。增加并发、改变 tensor split、扩大上下文或重新启用 GPU RAG 前，需要重新验证显存与延迟。
 
----
+## 项目结构
 
-## 🔧 故障排查
+```text
+app/
+  agent/                         旧结构化 Agent、策略与 math_checker
+  api/                           旧 baseline FastAPI
+  llm/deepseek_client.py         DeepSeek OpenAI-compatible 统一客户端
+prototypes/llm_led_teacher/
+  logic.py                       LLM-led 编排、规范化与审计
+  rag_hook.py                    原 RAG 策略适配层
+  streaming.py                   审计后逐字符展示
+  streamlit_app.py               当前 8502 页面
+scripts/
+  run_llm_led_teacher.py         本地模型 + Chroma + 当前网页一键启动
+  run_warmed_streamlit.py        RAG 预热后启动 Streamlit
+tests/prototypes/                Prototype 离线回归测试
+llm-test/                        原混合 RAG、联网搜索和试卷评测
+data/china_textbook_k9_vectordb/ 本地 Chroma 向量库
+```
 
-| 问题 | 解决 |
-|------|------|
-| Chroma Server 无法启动 | 检查端口占用：`lsof -i:8002` |
-| RAG 检索返回空 | 检查 `.env` 中 `TEACHER_RAG_ENABLED=1` 且 Chroma Server 可达 |
-| 首次检索很慢 | bge-m3 首次加载 10-30 秒，后续复用 |
-| 图片无法显示 | 检查 `TEACHER_IMAGE_BASE_URL` 配置 |
+## 开发约束
 
----
+- 先阅读 [`AGENTS.md`](AGENTS.md)、[`CLAUDE.md`](CLAUDE.md)、[`CODEX_HANDOFF.md`](CODEX_HANDOFF.md) 和 [`prototypes/llm_led_teacher/README.md`](prototypes/llm_led_teacher/README.md)。
+- 修改行为必须先写失败测试，所有测试使用 fake client/mock LLM。
+- 学生步骤对错由确定性 checker/verifier 裁决，不由 LLM 自行宣判。
+- observer 和 RAG 都不能覆盖核心教学节奏或原题上下文。
+- 不通过无限加长 system prompt 代替可测试的节奏不变式。
+- `.env`、API key 和其他凭据不得提交或打印。
 
-## 📄 许可证
-
-本项目代码基于 MIT 许可。知识库数据来源：
-
-| 数据 | 许可证 |
-|------|--------|
-| M3KE | CC BY-NC-SA 4.0 |
-| TAL-SCQ5K | MIT |
-| APE210K | 开源 |
-| 人教版教材 | 教育用途 |
-| 课标/教资 | 公开文件 |
-
----
-
-## 🙏 致谢
-
-- [M3KE](https://github.com/tjunlp-lab/M3KE) — 天津大学 NLP + 华为
-- [TAL-SCQ5K](https://huggingface.co/datasets/math-eval/TAL-SCQ5K) — 好未来
-- [APE210K](https://github.com/Chenny0808/ape210k) — 开源数学应用题
-- [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) — 嵌入模型
-- [ChromaDB](https://www.trychroma.com/) — 向量数据库
+更详细的设计与交接信息见 [`CODEX_HANDOFF.md`](CODEX_HANDOFF.md)。
