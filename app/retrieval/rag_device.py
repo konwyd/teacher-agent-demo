@@ -51,4 +51,3 @@ def configure_cpu_threads(
     if runtime is not None:
         runtime.set_num_threads(threads)
     return threads
-

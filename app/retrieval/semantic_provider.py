@@ -90,4 +90,3 @@ def safe_retrieve(
             query=request.problem_context,
             error_code="provider_failed",
         )
-

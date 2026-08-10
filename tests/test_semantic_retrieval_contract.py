@@ -86,4 +86,3 @@ def test_retrieval_hit_rejects_out_of_range_similarity(similarity: float) -> Non
             text="invalid",
             similarity=similarity,
         )
-

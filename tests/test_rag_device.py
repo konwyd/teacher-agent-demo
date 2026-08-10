@@ -71,4 +71,3 @@ def test_invalid_cpu_thread_count_falls_back_to_four(monkeypatch) -> None:
 
     assert configure_cpu_threads(torch_module=fake_torch) == 4
     assert fake_torch.thread_calls == [4]
-
