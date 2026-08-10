@@ -17,6 +17,7 @@ from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
 from app.agent.state import VerificationResult, VerificationStatus
 from app.llm.deepseek_client import DeepSeekClient
+from app.retrieval.semantic_provider import SemanticRetrievalResult
 
 
 class PacingMode(str, Enum):
@@ -60,6 +61,9 @@ class PrototypeEpisode(BaseModel):
     problem_context: str = ""
     previous_verified_step: str = ""
     turns: list[PrototypeTurnRecord] = Field(default_factory=list)
+    active_retrieval: SemanticRetrievalResult | None = None
+    active_retrieval_problem: str = ""
+    active_retrieval_allows_examples: bool = False
 
 
 class StructuredTeacherClient(Protocol):
