@@ -142,6 +142,43 @@ def test_chat_json_forwards_optional_max_tokens() -> None:
     assert completions.calls[-1]["max_tokens"] == 450
 
 
+def test_chat_records_reasoning_usage_without_retaining_raw_reasoning() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    class Completions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="stop",
+                        message=SimpleNamespace(
+                            content="面向学生的回答",
+                            reasoning_content="不应保存或展示的内部逐字推理",
+                        ),
+                    )
+                ],
+                usage=SimpleNamespace(
+                    completion_tokens=321,
+                    completion_tokens_details=SimpleNamespace(reasoning_tokens=180),
+                ),
+            )
+
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=Completions())
+    )
+
+    assert client.chat("system", "user", max_tokens=None) == "面向学生的回答"
+    assert client.last_chat_metadata == {
+        "finish_reason": "stop",
+        "completion_tokens": 321,
+        "reasoning_tokens": 180,
+        "reasoning_characters": len("不应保存或展示的内部逐字推理"),
+        "reasoning_available": True,
+    }
+    assert "不应保存" not in repr(client.last_chat_metadata)
+
+
 def test_client_can_disable_transport_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.llm import deepseek_client
 

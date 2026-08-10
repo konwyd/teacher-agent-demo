@@ -61,6 +61,12 @@ class PrototypeTurnRecord(BaseModel):
     rag_refs: list[str] = Field(default_factory=list)
     rag_exact_match: bool = False
     rag_hits: list[dict] = Field(default_factory=list)
+    rag_online_triggered: bool = False
+    rag_online_status: str = "not_triggered"
+    rag_online_reason: str = ""
+    rag_local_threshold: float = 0.0
+    rag_local_top_score: float = 0.0
+    model_generation_metadata: dict[str, object] = Field(default_factory=dict)
     stage_timings_seconds: dict[str, float] = Field(default_factory=dict)
     backend_total_seconds: float = 0.0
     display_seconds: float = 0.0
@@ -416,7 +422,7 @@ def _chat_teaching_turn(
     user: str,
     *,
     temperature: float,
-    max_tokens: int,
+    max_tokens: int | None,
 ) -> TeacherResponse:
     response = client.chat(
         system,
@@ -454,7 +460,7 @@ def _repair(
         repair_system,
         repair_payload,
         temperature=0.2,
-        max_tokens=900,
+        max_tokens=None,
     )
 
 
@@ -523,8 +529,9 @@ def run_turn(
         _SYSTEM_PROMPT,
         payload,
         temperature=0.4,
-        max_tokens=900,
+        max_tokens=None,
     )
+    model_generation_metadata = dict(getattr(active_client, "last_chat_metadata", {}) or {})
     draft_character_count = len(output.response)
     enter_stage("auditing")
     extracted_equations = mc.find_equations(output.response)
@@ -545,6 +552,9 @@ def run_turn(
     if repair_reasons:
         enter_stage("repairing")
         output = _repair(active_client, payload, output, repair_reasons)
+        model_generation_metadata = dict(
+            getattr(active_client, "last_chat_metadata", {}) or {}
+        )
         extracted_equations = mc.find_equations(output.response)
         claim_audits = _audit_claims(
             episode.problem_context,
@@ -582,6 +592,12 @@ def run_turn(
         rag_exact_match=rag.is_exact_match,
         rag_hits=rag.hits,
         stage_timings_seconds=stage_timings,
+        rag_online_triggered=rag.online_triggered,
+        rag_online_status=rag.online_status,
+        rag_online_reason=rag.online_reason,
+        rag_local_threshold=rag.local_threshold,
+        rag_local_top_score=rag.local_top_score,
+        model_generation_metadata=model_generation_metadata,
         backend_total_seconds=backend_total_seconds,
         repair_performed=bool(repair_reasons),
         draft_character_count=draft_character_count,

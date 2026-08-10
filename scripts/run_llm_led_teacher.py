@@ -12,6 +12,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+from dotenv import dotenv_values
 from typing import Callable
 from urllib.request import Request, urlopen as _urlopen
 
@@ -26,6 +28,19 @@ DEFAULT_MODEL_NAME = "deepseek-v4-flash"
 
 class ModelStartupError(RuntimeError):
     """The required local model could not be safely started or reused."""
+
+
+def load_service_base_env(
+    base: dict[str, str],
+    *,
+    env_file: Path = ROOT / ".env",
+) -> dict[str, str]:
+    """Load local service secrets before RAG warmup; explicit shell values win."""
+    env = dict(base)
+    for name, value in dotenv_values(env_file).items():
+        if value is not None:
+            env.setdefault(name, value)
+    return env
 
 
 def port_open(host: str, port: int) -> bool:
@@ -273,7 +288,7 @@ def main() -> int:
         print(f"复用已有 Chroma：127.0.0.1:{args.rag_port}")
 
     env = build_service_env(
-        os.environ.copy(),
+        load_service_base_env(os.environ.copy()),
         rag_host="127.0.0.1",
         rag_port=args.rag_port,
         model_host=args.model_host,

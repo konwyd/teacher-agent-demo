@@ -106,3 +106,13 @@ def test_streamlit_uses_expanded_live_progress_trace():
     assert "live_trace = LiveProgressTrace(progress_status)" in source
     assert "live_trace.update(stage)" in source
     assert "progress_status.write(" in source
+
+
+def test_streamlit_shows_generation_and_online_fallback_metadata_not_raw_thoughts():
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+
+    assert "model_generation_metadata" in source
+    assert "online_status" in source
+    assert "online_reason" in source
+    assert "原始逐字思维链不会展示" in source
+    assert "reasoning_content" not in source

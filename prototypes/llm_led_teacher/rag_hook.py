@@ -83,12 +83,22 @@ class RagContext:
         is_exact_match: bool = False,
         source: str = "none",
         hits: list[dict] | None = None,
+        online_triggered: bool = False,
+        online_status: str = "not_triggered",
+        online_reason: str = "",
+        local_threshold: float = LOCAL_SIMILARITY_THRESHOLD,
+        local_top_score: float = 0.0,
     ) -> None:
         self.text = text
         self.refs: list[str] = refs or []
         self.is_exact_match = is_exact_match
         self.source = source
         self.hits: list[dict] = hits or []
+        self.online_triggered = online_triggered
+        self.online_status = online_status
+        self.online_reason = online_reason
+        self.local_threshold = local_threshold
+        self.local_top_score = local_top_score
 
 
 @lru_cache(maxsize=1)
@@ -213,6 +223,7 @@ def retrieve_context(
     """复用 llm-test 的统一 RAG 策略，适配 Prototype 的上下文结构。"""
     if not problem.strip():
         return RagContext(source="empty_problem")
+    diagnostics: dict[str, object] = {}
     try:
         context, refs, exact_match = _original_retrieve_for_exam(
             problem,
@@ -220,11 +231,26 @@ def retrieve_context(
             topk=topk,
             online_mode=online_mode,
             verbose=False,
+            diagnostics=diagnostics,
         )
     except Exception as exc:  # noqa: BLE001 - RAG 失败不阻断教学
-        return RagContext(source=f"retrieval_error: {type(exc).__name__}")
+        return RagContext(
+            source=f"retrieval_error: {type(exc).__name__}",
+            online_triggered=bool(diagnostics.get("online_triggered", False)),
+            online_status=str(diagnostics.get("online_status", "error")),
+            online_reason=str(diagnostics.get("online_reason", "")),
+            local_threshold=float(diagnostics.get("local_threshold", LOCAL_SIMILARITY_THRESHOLD)),
+            local_top_score=float(diagnostics.get("local_top_score", 0.0)),
+        )
     if not context.strip() or not refs:
-        return RagContext(source="retrieval_error")
+        return RagContext(
+            source="retrieval_error",
+            online_triggered=bool(diagnostics.get("online_triggered", False)),
+            online_status=str(diagnostics.get("online_status", "no_results")),
+            online_reason=str(diagnostics.get("online_reason", "")),
+            local_threshold=float(diagnostics.get("local_threshold", LOCAL_SIMILARITY_THRESHOLD)),
+            local_top_score=float(diagnostics.get("local_top_score", 0.0)),
+        )
 
     source = "hybrid" if any("🌐" in ref for ref in refs) else "local"
     hits: list[dict] = []
@@ -243,4 +269,9 @@ def retrieve_context(
         is_exact_match=exact_match,
         source=source,
         hits=hits,
+        online_triggered=bool(diagnostics.get("online_triggered", False)),
+        online_status=str(diagnostics.get("online_status", "not_triggered")),
+        online_reason=str(diagnostics.get("online_reason", "")),
+        local_threshold=float(diagnostics.get("local_threshold", LOCAL_SIMILARITY_THRESHOLD)),
+        local_top_score=float(diagnostics.get("local_top_score", 0.0)),
     )

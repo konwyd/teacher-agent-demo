@@ -187,6 +187,60 @@ def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
     assert not hasattr(turn, "chain_of_thought")
 
 
+def test_teacher_generation_and_repair_have_no_hard_token_cap(monkeypatch):
+    _no_rag(monkeypatch)
+
+    class RecordingClient(_ScriptedClient):
+        def __init__(self):
+            super().__init__(
+                TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+                [
+                    "两边减9得到2x=5，再除以2得到x=5/2。你会验算吗？",
+                    "先在等式两边同时减去9，得到2x=5。下一步该怎么做？",
+                ],
+            )
+            self.teacher_token_limits = []
+
+        def chat(self, system, user, temperature=0.0, max_tokens=None):
+            self.teacher_token_limits.append(max_tokens)
+            return super().chat(system, user, temperature, max_tokens)
+
+    client = RecordingClient()
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+    )
+
+    assert turn.repair_performed is True
+    assert client.teacher_token_limits == [None, None]
+
+
+def test_turn_records_safe_generation_metadata_without_raw_reasoning(monkeypatch):
+    _no_rag(monkeypatch)
+
+    class MetadataClient(_ScriptedClient):
+        last_chat_metadata = {
+            "finish_reason": "stop",
+            "completion_tokens": 321,
+            "reasoning_tokens": 180,
+            "reasoning_characters": 760,
+            "reasoning_available": True,
+        }
+
+    client = MetadataClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
+    )
+
+    turn = run_turn(PrototypeEpisode(), "2x+9=14，这道题怎么解", client=client)
+
+    assert turn.model_generation_metadata == MetadataClient.last_chat_metadata
+    assert "reasoning_content" not in turn.model_generation_metadata
+    assert "chain_of_thought" not in turn.model_dump()
+
+
 def test_progress_callback_failure_does_not_block_teacher_response(monkeypatch):
     _no_rag(monkeypatch)
     client = _ScriptedClient(
@@ -331,8 +385,17 @@ def test_rag_auto_uses_original_retriever_auto_mode(monkeypatch):
 
     calls = []
 
-    def fake_original(problem, subject, topk, online_mode, verbose):
+    def fake_original(problem, subject, topk, online_mode, verbose, diagnostics):
         calls.append((problem, subject, topk, online_mode, verbose))
+        diagnostics.update(
+            {
+                "online_triggered": True,
+                "online_status": "used",
+                "online_reason": "本地最高相似度 0.56 低于阈值 0.65",
+                "local_threshold": 0.65,
+                "local_top_score": 0.56,
+            }
+        )
         return (
             "[🌐 online] 欧拉-麦克劳林公式联网材料",
             ["🌐 数学参考 (相似度 0.82)"],
@@ -346,3 +409,6 @@ def test_rag_auto_uses_original_retriever_auto_mode(monkeypatch):
     assert result.source == "hybrid"
     assert result.hits[0]["similarity"] == 0.82
 
+    assert result.online_triggered is True
+    assert result.online_status == "used"
+    assert result.local_top_score == 0.56

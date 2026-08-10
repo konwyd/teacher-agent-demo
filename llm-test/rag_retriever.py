@@ -608,6 +608,7 @@ def retrieve_for_exam(
     exclude_near_duplicates: bool = False,
     textbook_only: bool = False,
     min_sim_threshold: float | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> tuple[str, list[str]]:
     """为题目检索教材+题库上下文，支持阈值触发联网。
 
@@ -629,6 +630,16 @@ def retrieve_for_exam(
 
     mode = online_mode if online_mode is not None else "off"
     threshold = ONLINE_RAG.get("local_threshold", 0.5)
+    if diagnostics is not None:
+        diagnostics.update({
+            "online_triggered": False,
+            "online_status": "not_triggered",
+            "online_reason": "",
+            "online_hit_count": 0,
+            "local_threshold": threshold,
+            "local_top_score": 0.0,
+            "local_good_count": 0,
+        })
 
     # 归一化学科名（"初中数学" → "数学"，向量库 metadata 存的是纯学科名）
     _subject_clean = subject.removeprefix("初中").removeprefix("小学").strip()
@@ -740,6 +751,14 @@ def retrieve_for_exam(
         else:
             logger.info("本地满足阈值 %.3f 的命中 %d ≥ topk(%d)，使用本地结果",
                         threshold, local_good_count, topk)
+    if diagnostics is not None:
+        diagnostics.update({
+            "online_triggered": need_online,
+            "online_reason": online_reason,
+            "local_threshold": threshold,
+            "local_top_score": local_top_score,
+            "local_good_count": local_good_count,
+        })
 
     if verbose:
         if need_online:
@@ -756,6 +775,8 @@ def retrieve_for_exam(
         from online_rag import get_online_rag, _strip_latex as _strip_tex_online
         online = get_online_rag()
         if online:
+            if diagnostics is not None:
+                diagnostics["online_status"] = "requested"
             clean = _strip_tex_online(paper_content)
             prefix = f"{subject} 中考 知识点 考点 "
             max_query = 380 - len(prefix)
@@ -763,6 +784,9 @@ def retrieve_for_exam(
             if verbose:
                 print(f"   🔍 联网Query: {online_query[:200]}")
             online_hits = online.search_with_rerank(online_query, max_results=topk)
+            if diagnostics is not None:
+                diagnostics["online_hit_count"] = len(online_hits)
+                diagnostics["online_status"] = "used" if online_hits else "no_results"
             if online_hits and verbose:
                 print(f"   ✅ 联网命中 {len(online_hits)} 条（已重排序）:")
                 for i, h in enumerate(online_hits, 1):
@@ -773,8 +797,15 @@ def retrieve_for_exam(
                     print(f"      [{i}] score={h.get('score', 0):.4f} │ {m.get('source', '?')}{tag}")
             elif verbose:
                 print(f"   ⚠️  联网搜索无结果")
-        elif verbose:
-            print(f"   ❌ 联网RAG不可用")
+        else:
+            if diagnostics is not None:
+                diagnostics["online_status"] = (
+                    "unavailable_missing_key"
+                    if not ONLINE_RAG.get("tavily_api_key")
+                    else "unavailable"
+                )
+            if verbose:
+                print(f"   ❌ 联网RAG不可用")
 
     # ---- 合并本地 + 联网，按相似度统一排序，取 top-k ----
     all_hits: list[dict[str, Any]] = list(local_all)  # 本地（已有 sim）

@@ -123,10 +123,60 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 "是否触发修正": turn.repair_performed,
             },
         )
+        st.markdown("#### 模型处理摘要")
+        st.caption(
+            "原始逐字思维链不会展示；下面展示可复核的处理步骤、运行状态与 token 统计。"
+        )
+        model_generation_metadata = turn.model_generation_metadata
+        processing_steps = [
+            f"识别请求并确定节奏：{turn.turn_guidance.pacing.value}",
+            f"检索参考：{turn.rag_source or 'none'}，命中 {len(turn.rag_hits)} 条",
+            f"审计回答：提取 {len(turn.extracted_equations)} 个方程，"
+            f"{'执行过修正' if turn.repair_performed else '无需修正'}",
+        ]
+        for step in processing_steps:
+            st.markdown(f"- {step}")
+        if model_generation_metadata:
+            st.write(
+                "**生成运行信息**",
+                {
+                    "生成硬上限": "未设置",
+                    "结束原因": model_generation_metadata.get("finish_reason") or "未提供",
+                    "输出 token": model_generation_metadata.get("completion_tokens", 0),
+                    "推理 token": model_generation_metadata.get("reasoning_tokens", 0),
+                    "模型提供了推理通道": bool(
+                        model_generation_metadata.get("reasoning_available", False)
+                    ),
+                },
+            )
+        else:
+            st.caption("当前模型接口没有返回 token 使用量或结束原因。")
+
 
         # RAG 信息：用指标 + 命中卡片呈现，保留相似度和可读的 Markdown/LaTeX。
         st.divider()
         st.markdown("### 📚 RAG 检索")
+        if turn.rag_online_triggered:
+            online_status = turn.rag_online_status
+            if online_status == "used":
+                st.success("🌐 本地命中不足，已触发并使用联网搜索")
+            elif online_status == "unavailable_missing_key":
+                st.warning(
+                    "🌐 已触发联网搜索，但当前进程未配置 TAVILY_API_KEY，因此只保留本地结果。"
+                )
+            elif online_status == "no_results":
+                st.warning("🌐 已触发联网搜索，但没有返回可用结果。")
+            else:
+                st.warning(f"🌐 已触发联网搜索，当前状态：{online_status}")
+            if turn.rag_online_reason:
+                st.caption(f"触发原因：{turn.rag_online_reason}")
+        else:
+            st.caption("本轮未触发联网搜索。")
+        if turn.rag_local_threshold > 0:
+            st.caption(
+                f"本地最高相似度 {turn.rag_local_top_score:.0%}；"
+                f"联网判定阈值 {turn.rag_local_threshold:.0%}。"
+            )
         if turn.rag_hits:
             best_similarity = max(float(hit.get("similarity", 0.0)) for hit in turn.rag_hits)
             c1, c2, c3 = st.columns(3)

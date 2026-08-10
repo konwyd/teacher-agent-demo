@@ -46,6 +46,22 @@ def test_service_environment_forces_local_model_and_preserves_explicit_rag_devic
     assert env["CHROMA_SERVER"] == "127.0.0.1:8002"
 
 
+def test_service_base_env_loads_dotenv_before_rag_warmup(tmp_path):
+    from scripts.run_llm_led_teacher import load_service_base_env
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("TAVILY_API_KEY=from-file\nKEEP=file\nONLY_FILE=loaded\n")
+
+    env = load_service_base_env(
+        {"TAVILY_API_KEY": "from-shell", "KEEP": "shell"},
+        env_file=env_file,
+    )
+
+    assert env["TAVILY_API_KEY"] == "from-shell"
+    assert env["KEEP"] == "shell"
+
+    assert env["ONLY_FILE"] == "loaded"
+
 def test_model_environment_contains_verified_large_context_defaults():
     from scripts.run_llm_led_teacher import build_model_env
 

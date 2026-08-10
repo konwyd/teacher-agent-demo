@@ -221,7 +221,7 @@ JUDGE_MODEL = {
 ONLINE_RAG = {
     "mode": "auto",
     "local_threshold": 0.65,
-    "tavily_api_key": "tvly-dev-xxxxxxxx",
+    "tavily_api_key": "${TAVILY_API_KEY}",
     "search_topk": 5,
     "max_context_chars": 2400,
 }

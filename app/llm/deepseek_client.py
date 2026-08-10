@@ -67,6 +67,7 @@ class DeepSeekClient:
         max_retries: int = 1,
     ) -> None:
         self.settings = settings or DeepSeekSettings()
+        self.last_chat_metadata: dict[str, object] = {}
         if not self.settings.deepseek_api_key:
             raise DeepSeekError(
                 "DEEPSEEK_API_KEY 未设置。请复制 .env.example 为 .env 并填写 key。"
@@ -107,7 +108,19 @@ class DeepSeekClient:
                 f"base_url={self.settings.deepseek_base_url}）："
                 f"{type(exc).__name__}: {exc}"
             ) from exc
-        return resp.choices[0].message.content or ""
+        choice = resp.choices[0]
+        message = choice.message
+        reasoning = getattr(message, "reasoning_content", None) or ""
+        usage = getattr(resp, "usage", None)
+        completion_details = getattr(usage, "completion_tokens_details", None)
+        self.last_chat_metadata = {
+            "finish_reason": getattr(choice, "finish_reason", "") or "",
+            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+            "reasoning_tokens": getattr(completion_details, "reasoning_tokens", 0) or 0,
+            "reasoning_characters": len(reasoning),
+            "reasoning_available": bool(reasoning),
+        }
+        return message.content or ""
 
     def chat_json(
         self,
