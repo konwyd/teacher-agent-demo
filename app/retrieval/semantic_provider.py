@@ -75,6 +75,24 @@ class DisabledSemanticRetrievalProvider:
         )
 
 
+class UnavailableSemanticRetrievalProvider:
+    name = "unavailable"
+
+    def __init__(self, error_code: str) -> None:
+        self.error_code = error_code
+
+    def retrieve(
+        self,
+        request: SemanticRetrievalRequest,
+    ) -> SemanticRetrievalResult:
+        return SemanticRetrievalResult(
+            status=RetrievalStatus.ERROR,
+            provider=self.name,
+            query=request.problem_context,
+            error_code=self.error_code,
+        )
+
+
 def safe_retrieve(
     provider: SemanticRetrievalProvider,
     request: SemanticRetrievalRequest,
