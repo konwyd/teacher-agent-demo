@@ -84,6 +84,20 @@ def test_build_retrieval_query_preserves_math_notation() -> None:
     assert query == r"已知 $x+1=2$，计算 \frac{1}{2}x + \sqrt{3}。 请解释这个概念"
 
 
+def test_public_environment_variable_names_are_loaded(monkeypatch) -> None:
+    monkeypatch.setenv("TEACHER_RAG_ENABLED", "true")
+    monkeypatch.setenv("TEACHER_RAG_TOPK", "3")
+    monkeypatch.setenv("TEACHER_RAG_MIN_SIMILARITY", "0.72")
+    monkeypatch.setenv("CHROMA_SERVER", "chroma.internal:8002")
+
+    settings = SemanticRagSettings(_env_file=None)
+
+    assert settings.enabled is True
+    assert settings.top_k == 3
+    assert settings.minimum_similarity == 0.72
+    assert settings.chroma_server == "chroma.internal:8002"
+
+
 def test_reference_only_request_does_not_query_exercise_collection() -> None:
     collections = {
         "k9_textbook": _FakeCollection(

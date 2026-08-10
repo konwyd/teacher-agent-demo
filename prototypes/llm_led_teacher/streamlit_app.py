@@ -1,4 +1,4 @@
-"""Standalone Streamlit UI for the throwaway LLM-led teacher prototype."""
+"""Streamlit UI for the autonomous LLM-led Teacher Agent."""
 
 from __future__ import annotations
 
@@ -10,13 +10,14 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.llm.deepseek_client import DeepSeekError, is_configured
+from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, run_turn
 
 
-_SESSION_SCHEMA_VERSION = 4
+_SESSION_SCHEMA_VERSION = 5
 
 
-st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="LLM-led Teacher Agent", page_icon="🧪", layout="wide")
 
 if st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION:
     st.session_state.prototype_episode = PrototypeEpisode()
@@ -26,15 +27,15 @@ elif "prototype_episode" not in st.session_state:
 
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
-st.title("🧪 LLM 主导 Teacher Prototype")
-st.caption("LLM 回合观察 + DeepSeek 纯文本教学 · 验证缺失不阻断")
+st.title("🧪 LLM 主导 Teacher Agent")
+st.caption("LLM 自主教学 · 可选软约束 RAG · 确定性数学审计")
 
 with st.sidebar:
-    st.subheader("本原型刻意绕过")
+    st.subheader("自主教学边界")
     st.write("- TeachingPlanner")
     st.write("- 策略族 / StrategyRegistry")
-    st.write("- Pedagogical RAG")
-    st.write("- 掌握度流程控制")
+    st.write("- 掌握度硬流程控制")
+    st.write("- RAG 只提供软参考，不决定教学动作或数学正误")
     if st.button("新建对话", use_container_width=True):
         st.session_state.prototype_episode = PrototypeEpisode()
         st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
@@ -88,12 +89,38 @@ for turn in episode.turns:
                 )
             st.write("**触发的修正**", turn.repair_reasons or [])
             st.write("**修正后仍有警告**", turn.remaining_warnings or [])
+            st.divider()
+            st.write("**RAG 状态**", turn.retrieval_status.value)
+            st.write("**RAG provider**", turn.retrieval_provider or "none")
+            st.write("**RAG query**", turn.retrieval_query or "无")
+            st.write("**本轮允许例题**", turn.retrieval_examples_allowed)
+            st.write("**RAG 耗时（秒）**", turn.retrieval_elapsed_seconds)
+            if turn.retrieval_hits:
+                st.write(
+                    "**RAG 来源**",
+                    [
+                        {
+                            "reference_id": hit.reference_id,
+                            "source": hit.source_label,
+                            "collection": hit.collection,
+                            "kind": hit.content_kind.value,
+                            "similarity": hit.similarity,
+                        }
+                        for hit in turn.retrieval_hits
+                    ],
+                )
+            if turn.retrieval_error_code:
+                st.warning(f"RAG 已安全降级：{turn.retrieval_error_code}")
+            st.write("**阶段耗时（秒）**", turn.stage_timings_seconds)
+            st.write("**后端总耗时（秒）**", turn.backend_total_seconds)
 
 message = st.chat_input("输入一道初中数学题或继续回答……", disabled=not is_configured())
 if message:
     try:
-        with st.spinner("DeepSeek 正在自主组织教学，Agent 正在核验……"):
-            run_turn(episode, message)
+        with st.status("正在完成教学回合……", expanded=True) as status_box:
+            progress = LiveProgressTrace(status_box)
+            run_turn(episode, message, progress_callback=progress.update)
+            status_box.update(label="教学回合已完成", state="complete", expanded=False)
     except (DeepSeekError, ValueError) as exc:
         st.error(str(exc))
     else:

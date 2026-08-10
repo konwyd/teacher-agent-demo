@@ -29,8 +29,18 @@ class SemanticRagSettings(BaseSettings):
     embed_model: str = "BAAI/bge-m3"
     reference_collections: str = "k9_textbook,curriculum_std"
     exercise_collections: str = "k9_exercises"
-    top_k: int = Field(default=5, ge=1, le=50)
-    minimum_similarity: float = Field(default=0.44, ge=0.0, le=1.0)
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        validation_alias="TEACHER_RAG_TOPK",
+    )
+    minimum_similarity: float = Field(
+        default=0.44,
+        ge=0.0,
+        le=1.0,
+        validation_alias="TEACHER_RAG_MIN_SIMILARITY",
+    )
     subject_filter: str = "数学"
     device: str = ""
     cpu_threads: int = Field(default=4, ge=1)
