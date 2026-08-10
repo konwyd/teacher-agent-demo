@@ -2,7 +2,8 @@ import pytest
 
 from app.agent.state import VerificationStatus
 from app.llm.deepseek_client import DeepSeekError
-from prototypes.llm_led_teacher.logic import PrototypeEpisode, run_turn
+from prototypes.llm_led_teacher import logic as llm_logic
+from prototypes.llm_led_teacher.logic import PacingMode, PrototypeEpisode, run_turn
 
 
 class _TextClient:
@@ -34,6 +35,69 @@ class _ObservedTextClient(_TextClient):
         if isinstance(result, Exception):
             raise result
         return schema.model_validate(result)
+
+
+def test_wrong_observer_complete_response_is_normalized_and_final_answer_repaired() -> None:
+    """A soft observer error must not let a first-turn equation leak its final answer."""
+
+    client = _ObservedTextClient(
+        [
+            {
+                "starts_new_problem": True,
+                "pacing": "complete_response",
+                "reason": "observer misclassified an ordinary help request",
+            }
+        ],
+        "两边减9得到2x=5，再除以2得到x=5/2。你会验算吗？",
+        "两边先同时减9，得到2x=5。你能写出这一步吗？",
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+    )
+
+    assert turn.observer_raw_guidance.pacing is PacingMode.COMPLETE_RESPONSE
+    assert turn.turn_guidance.pacing is PacingMode.SINGLE_MOVE
+    assert client.calls == 2
+    assert "2x=5" in turn.teacher_output.response
+    assert "x=5/2" not in turn.teacher_output.response
+
+
+def test_post_audit_blocks_final_answer_even_if_effective_guidance_is_wrong(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The final-answer audit must not depend on an upstream pacing decision."""
+
+    monkeypatch.setattr(
+        llm_logic,
+        "_normalize_guidance",
+        lambda episode, message, guidance: guidance,
+    )
+    client = _ObservedTextClient(
+        [
+            {
+                "starts_new_problem": True,
+                "pacing": "complete_response",
+                "reason": "simulated upstream pacing defect",
+            }
+        ],
+        "两边减9得到2x=5，再除以2得到x=5/2。",
+        "两边先同时减9，得到2x=5。你能写出这一步吗？",
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+    )
+
+    assert turn.turn_guidance.pacing is PacingMode.COMPLETE_RESPONSE
+    assert client.calls == 2
+    assert turn.repair_reasons
+    assert "2x=5" in turn.teacher_output.response
+    assert "x=5/2" not in turn.teacher_output.response
 
 
 def test_unsupported_opposite_number_response_is_returned_unverified() -> None:

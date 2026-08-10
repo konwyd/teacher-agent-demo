@@ -47,6 +47,7 @@ class PrototypeTurnRecord(BaseModel):
     teacher_output: TeacherResponse
     student_verification: VerificationResult
     evidence_level: str
+    observer_raw_guidance: TurnGuidance = Field(default_factory=TurnGuidance)
     turn_guidance: TurnGuidance = Field(default_factory=TurnGuidance)
     observer_error: str = ""
     extracted_equations: list[str] = Field(default_factory=list)
@@ -225,6 +226,43 @@ def _observe_turn(
     return guidance, ""
 
 
+def _is_supported_transform_problem(problem_context: str) -> bool:
+    """Return whether the verifier supports a non-final equation problem."""
+
+    request = VerificationRequest(problem_context=problem_context)
+    if not LinearEquationVerifier().supports(request):
+        return False
+    equation_text = mc.extract_equation(problem_context)
+    equation = mc.parse_equation(equation_text) if equation_text is not None else None
+    return equation is not None and not mc.is_final_form(equation)
+
+
+def _normalize_guidance(
+    episode: PrototypeEpisode,
+    message: str,
+    guidance: TurnGuidance,
+) -> TurnGuidance:
+    """Apply deterministic pacing without replacing the observer's soft opinion."""
+
+    active_problem = (
+        message
+        if guidance.starts_new_problem or not episode.problem_context
+        else episode.problem_context
+    )
+    ordinary_help = any(
+        marker in message for marker in ("怎么解", "不会", "帮我", "求解", "解方程")
+    )
+    if (
+        (guidance.starts_new_problem or not episode.problem_context or ordinary_help)
+        and not _explicitly_requests_full_solution(message)
+        and "为什么" not in message
+        and "为啥" not in message
+        and _is_supported_transform_problem(active_problem)
+    ):
+        return guidance.model_copy(update={"pacing": PacingMode.SINGLE_MOVE})
+    return guidance
+
+
 def _teacher_payload(
     episode: PrototypeEpisode,
     message: str,
@@ -313,9 +351,8 @@ def _collect_warnings(
         warnings.append("学生明确不要答案，但回复出现了可验证的最终形式。")
 
     if (
-        guidance.pacing is PacingMode.SINGLE_MOVE
-        and (guidance.starts_new_problem or not episode.turns)
-        and mc.extract_equation(episode.problem_context) is not None
+        (guidance.starts_new_problem or not episode.turns)
+        and _is_supported_transform_problem(episode.problem_context)
         and has_verified_final
         and not _explicitly_requests_full_solution(message)
     ):
@@ -401,9 +438,11 @@ def run_turn(
         raise ValueError("student message must not be empty")
 
     active_client = client or DeepSeekClient()
-    guidance, observer_error = _observe_turn(active_client, episode, clean_message)
+    raw_guidance, observer_error = _observe_turn(active_client, episode, clean_message)
+    guidance = raw_guidance
     if not episode.problem_context and not guidance.starts_new_problem:
         guidance = guidance.model_copy(update={"starts_new_problem": True})
+    guidance = _normalize_guidance(episode, clean_message, guidance)
     starts_new_problem = guidance.starts_new_problem or not episode.problem_context
     if starts_new_problem:
         episode.problem_context = clean_message
@@ -468,6 +507,7 @@ def run_turn(
         teacher_output=output,
         student_verification=verification,
         evidence_level=_evidence_level(verification, claim_audits),
+        observer_raw_guidance=raw_guidance,
         turn_guidance=guidance,
         observer_error=observer_error,
         extracted_equations=extracted_equations,
