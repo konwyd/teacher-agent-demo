@@ -216,6 +216,11 @@ class ChromaSemanticRetrievalProvider:
             return self._error(query, "embedding_failed", started_at)
 
         candidates: dict[str, RetrievalHit] = {}
+        effective_top_k = min(request.top_k, self.settings.top_k)
+        effective_minimum_similarity = max(
+            request.minimum_similarity,
+            self.settings.minimum_similarity,
+        )
         try:
             for collection_name, content_kind in self._collection_plan(
                 self.settings,
@@ -224,7 +229,7 @@ class ChromaSemanticRetrievalProvider:
                 collection = client.get_collection(name=collection_name)
                 query_args: dict[str, Any] = {
                     "query_embeddings": [query_embedding],
-                    "n_results": request.top_k,
+                    "n_results": effective_top_k,
                 }
                 if self.settings.subject_filter:
                     query_args["where"] = {"subject": self.settings.subject_filter}
@@ -242,7 +247,7 @@ class ChromaSemanticRetrievalProvider:
                     except (IndexError, TypeError, ValueError):
                         continue
                     similarity = max(0.0, min(1.0, 1.0 - distance))
-                    if similarity < request.minimum_similarity:
+                    if similarity < effective_minimum_similarity:
                         continue
                     metadata = _sanitize_metadata(
                         metadatas[index] if index < len(metadatas) else {}
@@ -278,7 +283,7 @@ class ChromaSemanticRetrievalProvider:
             candidates.values(),
             key=lambda item: item.similarity,
             reverse=True,
-        )[: request.top_k]
+        )[:effective_top_k]
         return SemanticRetrievalResult(
             status=(RetrievalStatus.SUCCESS if hits else RetrievalStatus.EMPTY),
             provider=self.name,

@@ -206,6 +206,33 @@ def test_hits_are_filtered_deduplicated_sorted_and_capped() -> None:
     assert [hit.similarity for hit in result.hits] == [0.95, 0.9]
 
 
+def test_environment_limits_bound_default_request() -> None:
+    collection = _FakeCollection(
+        _result(
+            ids=["below", "accepted"],
+            documents=["低于配置阈值", "达到配置阈值"],
+            distances=[0.15, 0.05],
+        )
+    )
+    client = _FakeClient({"k9_textbook": collection})
+    provider = ChromaSemanticRetrievalProvider(
+        _settings(
+            reference_collections="k9_textbook",
+            top_k=1,
+            minimum_similarity=0.9,
+        ),
+        client_factory=lambda settings: client,
+        embedding_factory=lambda model, device: _FakeEmbedder([0.3]),
+    )
+
+    result = provider.retrieve(
+        SemanticRetrievalRequest(problem_context="等式性质")
+    )
+
+    assert collection.calls[0]["n_results"] == 1
+    assert [hit.text for hit in result.hits] == ["达到配置阈值"]
+
+
 @pytest.mark.parametrize(
     ("client_factory", "embedding_factory", "error_code"),
     [
