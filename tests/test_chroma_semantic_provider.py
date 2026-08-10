@@ -6,6 +6,7 @@ from app.retrieval.chroma_semantic_provider import (
     ChromaSemanticRetrievalProvider,
     SemanticRagSettings,
     build_retrieval_query,
+    get_semantic_retrieval_provider,
 )
 from app.retrieval.semantic_provider import (
     RetrievalContentKind,
@@ -383,3 +384,15 @@ def test_disabled_provider_does_not_initialize_runtime() -> None:
 
     assert result.status is RetrievalStatus.DISABLED
     assert calls == []
+
+
+def test_default_provider_is_reused_within_process(monkeypatch) -> None:
+    get_semantic_retrieval_provider.cache_clear()
+    monkeypatch.setenv("TEACHER_RAG_ENABLED", "true")
+    try:
+        first = get_semantic_retrieval_provider()
+        second = get_semantic_retrieval_provider()
+    finally:
+        get_semantic_retrieval_provider.cache_clear()
+
+    assert first is second

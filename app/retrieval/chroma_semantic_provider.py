@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from time import perf_counter
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -333,6 +334,7 @@ class ChromaSemanticRetrievalProvider:
         )
 
 
+@lru_cache(maxsize=1)
 def get_semantic_retrieval_provider() -> SemanticRetrievalProvider:
     settings = SemanticRagSettings()
     if not settings.enabled:
