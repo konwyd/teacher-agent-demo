@@ -42,6 +42,7 @@ class SemanticRagSettings(BaseSettings):
         validation_alias="TEACHER_RAG_MIN_SIMILARITY",
     )
     subject_filter: str = "数学"
+    exercise_subject_filter: str = "Math"
     device: str = ""
     cpu_threads: int = Field(default=4, ge=1)
 
@@ -103,14 +104,28 @@ def _default_embedding_factory(model_name: str, device: str) -> Any:
     return SentenceTransformer(model_name, device=device)
 
 
+def _safe_source_component(value: str) -> str:
+    normalized = value.replace("\\", "/").rstrip("/")
+    return normalized.split("/")[-1] if "/" in normalized else normalized
+
+
 def _sanitize_metadata(metadata: Any) -> dict[str, str | int | float | bool]:
     if not isinstance(metadata, dict):
         return {}
-    return {
-        str(key): value
-        for key, value in metadata.items()
-        if isinstance(value, (str, int, float, bool))
-    }
+    sanitized: dict[str, str | int | float | bool] = {}
+    for key, value in metadata.items():
+        if not isinstance(value, (str, int, float, bool)):
+            continue
+        normalized_key = str(key)
+        source_key = (
+            normalized_key == "book_title"
+            or normalized_key.endswith("_file")
+            or "path" in normalized_key.lower()
+        )
+        if source_key and isinstance(value, str):
+            value = _safe_source_component(value)
+        sanitized[normalized_key] = value
+    return sanitized
 
 
 def _first_row(result: dict[str, Any], key: str) -> list[Any]:
@@ -211,11 +226,16 @@ class ChromaSemanticRetrievalProvider:
         started_at = perf_counter()
         try:
             client = self._ensure_client()
-            embedder = self._ensure_embedder()
         except ImportError:
             return self._error(query, "dependency_unavailable", started_at)
         except Exception:  # noqa: BLE001 - initialization is an optional boundary
             return self._error(query, "backend_unavailable", started_at)
+        try:
+            embedder = self._ensure_embedder()
+        except ImportError:
+            return self._error(query, "dependency_unavailable", started_at)
+        except Exception:  # noqa: BLE001 - model initialization is optional
+            return self._error(query, "embedding_failed", started_at)
 
         try:
             vector = embedder.encode(query, normalize_embeddings=True)
@@ -231,18 +251,22 @@ class ChromaSemanticRetrievalProvider:
             request.minimum_similarity,
             self.settings.minimum_similarity,
         )
-        try:
-            for collection_name, content_kind in self._collection_plan(
-                self.settings,
-                request,
-            ):
+        collection_plan = self._collection_plan(self.settings, request)
+        failed_collections = 0
+        for collection_name, content_kind in collection_plan:
+            try:
                 collection = client.get_collection(name=collection_name)
                 query_args: dict[str, Any] = {
                     "query_embeddings": [query_embedding],
                     "n_results": effective_top_k,
                 }
-                if self.settings.subject_filter:
-                    query_args["where"] = {"subject": self.settings.subject_filter}
+                subject_filter = (
+                    self.settings.exercise_subject_filter
+                    if content_kind is RetrievalContentKind.EXAMPLE
+                    else self.settings.subject_filter
+                )
+                if subject_filter:
+                    query_args["where"] = {"subject": subject_filter}
                 raw = collection.query(**query_args)
                 ids = _first_row(raw, "ids")
                 documents = _first_row(raw, "documents")
@@ -268,7 +292,9 @@ class ChromaSemanticRetrievalProvider:
                         or collection_name
                     )
                     hit = RetrievalHit(
-                        reference_id=f"{collection_name}:{item_id}",
+                        reference_id=(
+                            f"{collection_name}:{_safe_source_component(str(item_id))}"
+                        ),
                         source_label=source_label,
                         collection=collection_name,
                         content_kind=content_kind,
@@ -284,9 +310,13 @@ class ChromaSemanticRetrievalProvider:
                     )
                     if key not in candidates or candidates[key].similarity < similarity:
                         candidates[key] = hit
-        except ImportError:
-            return self._error(query, "dependency_unavailable", started_at)
-        except Exception:  # noqa: BLE001 - backend failures are a soft degradation
+            except ImportError:
+                return self._error(query, "dependency_unavailable", started_at)
+            except Exception:  # noqa: BLE001 - one optional collection may be absent
+                failed_collections += 1
+                continue
+
+        if failed_collections and not candidates:
             return self._error(query, "backend_unavailable", started_at)
 
         hits = sorted(

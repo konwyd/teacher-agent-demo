@@ -172,6 +172,8 @@ def test_example_enabled_request_queries_exercise_collection() -> None:
         "curriculum_std",
         "k9_exercises",
     ]
+    assert collections["k9_textbook"].calls[0]["where"] == {"subject": "数学"}
+    assert collections["k9_exercises"].calls[0]["where"] == {"subject": "Math"}
     assert result.hits[0].content_kind is RetrievalContentKind.EXAMPLE
 
 
@@ -247,6 +249,71 @@ def test_environment_limits_bound_default_request() -> None:
     assert [hit.text for hit in result.hits] == ["达到配置阈值"]
 
 
+def test_missing_optional_collection_keeps_successful_hits() -> None:
+    client = _FakeClient(
+        {
+            "k9_textbook": _FakeCollection(
+                _result(
+                    ids=["t1"],
+                    documents=["有效教材片段"],
+                    distances=[0.1],
+                )
+            )
+        }
+    )
+    provider = ChromaSemanticRetrievalProvider(
+        _settings(reference_collections="k9_textbook,missing_collection"),
+        client_factory=lambda settings: client,
+        embedding_factory=lambda model, device: _FakeEmbedder([0.3]),
+    )
+
+    result = provider.retrieve(
+        SemanticRetrievalRequest(problem_context="等式性质")
+    )
+
+    assert result.status is RetrievalStatus.SUCCESS
+    assert [hit.text for hit in result.hits] == ["有效教材片段"]
+
+
+def test_absolute_source_path_is_reduced_to_safe_filename() -> None:
+    client = _FakeClient(
+        {
+            "k9_textbook": _FakeCollection(
+                _result(
+                    ids=["/home/private/chunks/t1"],
+                    documents=["教材片段"],
+                    distances=[0.1],
+                    metadatas=[
+                        {
+                            "source_file": "/home/private/textbooks/math.pdf",
+                            "book_title": "C:\\private\\titles\\math-book.pdf",
+                            "local_path": "/srv/private/page-1.png",
+                            "chunk_index": 1,
+                        }
+                    ],
+                )
+            )
+        }
+    )
+    provider = ChromaSemanticRetrievalProvider(
+        _settings(reference_collections="k9_textbook"),
+        client_factory=lambda settings: client,
+        embedding_factory=lambda model, device: _FakeEmbedder([0.3]),
+    )
+
+    result = provider.retrieve(
+        SemanticRetrievalRequest(problem_context="等式性质")
+    )
+
+    assert result.hits[0].reference_id == "k9_textbook:t1"
+    assert result.hits[0].source_label == "math-book.pdf"
+    assert result.hits[0].metadata["source_file"] == "math.pdf"
+    assert result.hits[0].metadata["local_path"] == "page-1.png"
+    assert "/home/private" not in result.model_dump_json()
+    assert "C:\\private" not in result.model_dump_json()
+    assert "/srv/private" not in result.model_dump_json()
+
+
 @pytest.mark.parametrize(
     ("client_factory", "embedding_factory", "error_code"),
     [
@@ -284,6 +351,24 @@ def test_provider_failures_are_sanitized_and_non_throwing(
     assert result.error_code == error_code
     assert "offline" not in result.model_dump_json()
     assert "model failed" not in result.model_dump_json()
+
+
+def test_embedding_initialization_failure_is_classified_correctly() -> None:
+    provider = ChromaSemanticRetrievalProvider(
+        _settings(),
+        client_factory=lambda settings: _FakeClient({}),
+        embedding_factory=lambda model, device: (_ for _ in ()).throw(
+            RuntimeError("private model initialization detail")
+        ),
+    )
+
+    result = provider.retrieve(
+        SemanticRetrievalRequest(problem_context="等式性质")
+    )
+
+    assert result.status is RetrievalStatus.ERROR
+    assert result.error_code == "embedding_failed"
+    assert "private model initialization detail" not in result.model_dump_json()
 
 
 def test_disabled_provider_does_not_initialize_runtime() -> None:

@@ -56,7 +56,10 @@ retrieval, set `TEACHER_RAG_ENABLED=true` and choose one Chroma connection:
 
 `TEACHER_RAG_EMBED_MODEL` accepts a sentence-transformers model ID or a local
 model directory. Use `TEACHER_RAG_DEVICE=cpu` for predictable deployment, or a
-validated `cuda:N` device when available.
+validated `cuda:N` device when available. The default metadata filters match
+the audited databases: `TEACHER_RAG_SUBJECT_FILTER=数学` for reference
+collections and `TEACHER_RAG_EXERCISE_SUBJECT_FILTER=Math` for the exercise
+collection.
 
 ## Run
 
