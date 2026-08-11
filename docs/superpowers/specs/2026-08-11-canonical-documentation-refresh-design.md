@@ -142,11 +142,13 @@ Because this change is documentation-only, verification focuses on consistency:
 3. verify documented commands match current entry points and dependency groups;
 4. inspect Markdown structure and links;
 5. run `git diff --check`;
-6. confirm no runtime source, tests, data, or environment files changed.
+6. confirm no runtime source, tests, data, or environment files changed;
+7. run `python -m pytest`; and
+8. run `python scripts/run_eval.py`.
 
-The full test suite and evaluation are not required to prove prose-only edits,
-but no documentation will claim a fresh test pass unless the commands are
-actually run in this change.
+Although the implementation is prose-only, the repository-wide gates in
+`AGENTS.md` remain mandatory. The handoff will report their actual results and
+will not claim a fresh pass unless both commands complete successfully.
 
 ## Non-goals
 

@@ -1,5 +1,12 @@
 # CLAUDE.md
 
+> **历史规范说明（2026-08-11）**
+>
+> 本文件保留项目最初的 state-machine / mastery / Graph RAG 设想，用于历史追溯，
+> 不再代表当前 canonical runtime。当前主实现是
+> `prototypes/llm_led_teacher` 下的 LLM-led Teacher Agent。
+> 若本文与 `AGENTS.md` 或 `CODEX_HANDOFF.md` 冲突，以后两者为准。
+
 ## Project
 
 This repository is a research demo for a Chinese K9/K12 Teacher Agent.
