@@ -1,0 +1,5 @@
+openai>=1.0.0
+tqdm>=4.64.0
+chromadb>=0.5
+sentence-transformers>=2.7
+tavily-python>=0.3

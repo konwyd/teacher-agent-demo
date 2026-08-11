@@ -1,0 +1,1106 @@
+[
+  {
+    "id": 3,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·1】“十五五”规划纲要强调“深入打好蓝天、碧水、净土保卫战”。下列做法与这一要求相符的是\nA. 积极使用清洁能源 B. 露天焚烧生活垃圾\nC. 过量施用化肥农药 D. 任意排放工业污水",
+    "answer": ""
+  },
+  {
+    "id": 4,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·2】下列选项是我国科学家及其部分研究领域, 其中对我国炼油工业产生重大影响的是\nA. 屠呦呦, 新型抗疟药研究\nB. 徐光宪, 稀土分离技术研究\nC. 张青莲, 相对原子质量的测定\nD. 闵恩泽, 石油化工催化研究",
+    "answer": "A"
+  },
+  {
+    "id": 5,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·3】警示标志能传达安全信息。运输浓硫酸时应张贴的标志是\n\n[图片]\n\n易燃气体\n\nA\n\n[图片]\n\n易燃固体\n\nB\n\n[图片]\n\n腐蚀性物质\n\nC \n\n[图片]\n\n易于自燃的物质\n\nD",
+    "answer": "D"
+  },
+  {
+    "id": 6,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·4】下列我省国家级非物质文化遗产项目的某工序中, 涉及化学变化的是\nA. 钧瓷烧制技艺——刷釉\nB. 唐三彩烧制技艺——彩绘\nC. 宝剑锻制技艺——冶炼\nD. 金镶玉制作技艺——镶嵌",
+    "answer": "C"
+  },
+  {
+    "id": 7,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·5】瘦的乒乓球放入热水中鼓起来了,该过程中球内气体发生改变的是\nA. 分子的大小    B. 分子的数目    C. 分子的种类    D. 分子间的间隔",
+    "answer": "C"
+  },
+  {
+    "id": 8,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·6】厨房中的下列用品,其主要制作材料属于合成材料的是\nA. 陶瓷砂锅 B. 塑料饭盒 C. 实木案板 D. 纯棉围裙",
+    "answer": "D"
+  },
+  {
+    "id": 9,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·7】物质由微观粒子构成。下列物质由分子构成的是\nA. 汞    B. 氨气    C. 氯化钠    D. 硫酸铜",
+    "answer": "B"
+  },
+  {
+    "id": 10,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·8】智慧农业无人喷灌车使用了磷酸铁锂电池。锂元素在元素周期表中的信息如右图所示。下列有关说法不正确的是\nA. 锂属于金属元素    B. 锂原子的质子数为 3\nC. 锂的元素符号为 Li    D. 锂原子的质量为 6.94 g\n\n[图片]",
+    "answer": "B"
+  },
+  {
+    "id": 11,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·9】二氧化钛 $\\left(\\mathrm{TiO}_{2}\\right)$ 可用于生产涂料。 $TiO_{2}$ 中钛元素的化合价为\nA. +4    B. +3    C. +2    D. +1",
+    "answer": "D"
+  },
+  {
+    "id": 12,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·10】物质性质决定用途。下列物质的性质与用途的对应关系不正确的是\nA. 活性炭具有吸附性,可用于净化水\nB. 金刚石硬度大,可用来裁玻璃\nC. 盐酸具有挥发性,可用于去除铁锈\nD. 甲烷具有可燃性,可用作燃料",
+    "answer": "A"
+  },
+  {
+    "id": 13,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·11】某同学做粗盐中难溶性杂质的去除实验时,部分操作如下图所示,其中操作规范的是\n\n[图片]\n\nA. 称量\n\n[图片]\n\nB. 溶解\n\n[图片]\n\nC. 过滤\n\n[图片]\n\nD. 蒸发",
+    "answer": "C"
+  },
+  {
+    "id": 14,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·12】靛蓝类色素是人类所知最古老的色素之一。靛蓝的化学式为 $C_{16}H_{10}N_{2}O_{2}$ ，下列有关靛蓝的说法正确的是\nA. 其中含有一个氧分子 B. 其中氢元素的质量分数最小\nC. 其相对分子质量为 252 D. 其中氮、氧元素的质量比为 1:1",
+    "answer": "D"
+  },
+  {
+    "id": 15,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·13】能区分常见物质是基本的化学实验技能。下列区分物质的方法或试剂不正确的是\nA. 用燃烧的方法区分羊毛纤维、涤纶\nB. 用澄清石灰水区分 CO、CO₂\nC. 通过观察颜色区分木炭粉、氧化铜\nD. 用水区分氢氧化钠、硝酸铵固体",
+    "answer": "B"
+  },
+  {
+    "id": 16,
+    "subject": "Chemistry",
+    "ques_type": "选择题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·14】在 18 世纪, 化学家通过锌、铁等不同金属与酸反应得到了氢气。某同学仿照化学家的实验, 取锌、铁两种金属各 $20 \\mathrm{~g}$ , 分别与足量稀盐酸充分反应, 生成氢气的质量比为 A. $56:65$ B. $56:195$ C. $112:195$ D. $1:1$",
+    "answer": "C"
+  },
+  {
+    "id": 17,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·15】神舟二十三号载人飞船入轨后成功对接中国空间站,空间站舱内维持着与空气成分相近的气体,则舱内气体中含量最高的是____。火箭发射可用液氢、液氧作推进剂,液氧属于____(填“纯净物”或“混合物”)。",
+    "answer": "氮气(或 $\\mathrm{N}_2$ ) 纯净物"
+  },
+  {
+    "id": 18,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·16】2026年我国全民营养周的主题是“营养餐桌 家庭健康”。某家庭的午餐有:红烧鱼、蒜蓉青菜、豆腐汤、大米饭。鱼肉中富含的营养物质是____;做饭时用到加碘盐,碘元素属于人体必需的____(填“常量元素”或“微量元素”)。",
+    "answer": "蛋白质 微量元素"
+  },
+  {
+    "id": 19,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·17】右图为硝酸钾、氯化钠两种物质的溶解度曲线。\n\n(1)两种物质中,溶解度受温度变化影响较大的是____。\n\n(2) $20^{\\circ} \\mathrm{C}$ 时,氯化钠饱和溶液中溶质的质量分数为 (只写计算式)。\n\n(3)为绿萝配制 100 g 溶质质量分数为 0.3% 的硝酸钾营养液，需要质量分数为 3% 的硝酸钾溶液的质量为 ____ g。\n\n[图片]\n\n温度/℃",
+    "answer": "(1) 硝酸钾 (2) $\\frac{36\\mathrm{g}}{36\\mathrm{g} + 100\\mathrm{g}} \\times 100\\%$ (3) 10"
+  },
+  {
+    "id": 20,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·18】我国科学家使用纳米纤维作催化剂,实现了从二氧化碳到甲醇的转化,其反应原理如\n\n右图所示。已知乙为单质，乙的化学式为____；甲、丙、丁中属于氧化物的有____种；参加反应的甲与生成丙的质量比为____。\n\n[图片]",
+    "answer": "$\\mathrm{H}_{2}$ 两 $11:8$"
+  },
+  {
+    "id": 21,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·19】某固体混合物除含氯化钠外,还含纯碱、小苏打中的一种或两种。检测该固体成分及含量的实验如下:取 45.4 g 样品,加热至质量不再减小,冷却后称得剩余固体的质量为 33 g;向剩余固体中加入 300 g 溶质质量分数为 9.8% 的稀硫酸,恰好完全反应。已知:小苏打受热分解生成纯碱、水和二氧化碳,纯碱和氯化钠在该温度下均不分解。(1)实验过程中,加入稀硫酸时发生反应的化学方程式为____。\n\n(2)样品中各成分的含量由高到低的顺序为____。",
+    "answer": "(1) $\\mathrm{Na}_{2} \\mathrm{CO}_{3} + \\mathrm{H}_{2} \\mathrm{SO}_{4} = \\mathrm{Na}_{2} \\mathrm{SO}_{4} + \\mathrm{CO}_{2} \\uparrow + \\mathrm{H}_{2} \\mathrm{O}$"
+  },
+  {
+    "id": 22,
+    "subject": "Chemistry",
+    "ques_type": "填空题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·20】通过化学变化实现物质转化在生产生活中具有广泛应用。甲、乙、丙、丁是初中化学\n\n常见的两种碱和两种盐,均含有三种元素,乙的俗名为烧碱,丁可用作补钙剂。它们之间的转化关系如右图所示(“→”表示反应一步实现,部分物质和反应条件略去)。则 CaO 在生产生活中的一种用途是____;反应③、反应⑤的化学方程式分别为____、____;图中不涉及的化学反应基本类型是____。\n\n[图片]",
+    "answer": "作干燥剂 $\\mathrm{CO}_{2} + 2\\mathrm{NaOH} = \\mathrm{Na}_{2}\\mathrm{CO}_{3} + \\mathrm{H}_{2}\\mathrm{O}$ $\\mathrm{CaCO_3\\xrightarrow{\\text{高温}} CaO + CO_2\\uparrow}$ 置换反应"
+  },
+  {
+    "id": 23,
+    "subject": "Chemistry",
+    "ques_type": "解答题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·21】(2 分) 燃料的燃烧是人类获取能量的重要途径。\n\n(1)酒精 $\\left(\\mathrm{C}_{2}\\mathrm{H}_{5}\\mathrm{OH}\\right)$ 是一种常用燃料,写出酒精完全燃烧的化学方程式。\n\n(2) 柴油车气缸中将柴油喷成雾状可使燃料燃烧更充分, 解释其原因。",
+    "answer": "(1) $\\mathrm{C}_2\\mathrm{H}_5\\mathrm{OH} + 3\\mathrm{O}_2 \\xrightarrow{\\text{点燃}} 2\\mathrm{CO}_2 + 3\\mathrm{H}_2\\mathrm{O}$"
+  },
+  {
+    "id": 24,
+    "subject": "Chemistry",
+    "ques_type": "解答题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·22】(2 分) 右图是探究水的组成的相关实验。\n\n(1) 写出电解水的化学方程式。\n\n(2) 点燃管 a 中的气体, 将干燥的小烧杯罩在火焰上方, 观察到烧杯内壁的实验现象是什么?\n\n[图片]",
+    "answer": "(1) $2H_{2}O\\xlongequal{通电}2H_{2}\\uparrow+O_{2}\\uparrow$ (1分)"
+  },
+  {
+    "id": 25,
+    "subject": "Chemistry",
+    "ques_type": "解答题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·23】(3 分)研究实验室里制取气体的一般思路和方法,有助于指导实践活动。\n\n(1) 实验室里现有高锰酸钾、石灰石、稀硫酸和稀盐酸，以及下图所示仪器。\n\n[图片]\n\n①利用上述试剂,写出一个制取 $O_{2}$ 或 $CO_{2}$ 的化学方程式。\n\n②利用上述仪器和试剂制取一瓶 $O_{2}$ ，选出所需仪器。（用字母表示）\n\n(2)右图为某同学制作的简易供氧器的加湿净化装置,图中有一处错误,改正后能达到安全吸氧的目的,写出改正方法。\n\n[图片]",
+    "answer": "(1)"
+  },
+  {
+    "id": 26,
+    "subject": "Chemistry",
+    "ques_type": "解答题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·24】(3分)实验室研究氢氧化钠溶液与盐酸能发生化学反应。\n\n(1)借助 $\\mathrm{pH}$ 传感器和温度传感器,同时测定稀盐酸滴入氢氧化钠溶液过程中溶液的 $\\mathrm{pH}$ 和温度的变化,测定结果如右图所示。 $①$ 恰好完全反应时,溶液的温度大约是多少? $②$ 写出曲线上 $M$ 点对应溶液中溶质的成分。\n\n[图片]\n\n体积/mL\n\n(2) 再选用一种试剂设计实验方案, 验证稀氢氧化钠溶液与稀盐酸能发生化学反应。(简述实验步骤及现象)",
+    "answer": ""
+  },
+  {
+    "id": 27,
+    "subject": "Chemistry",
+    "ques_type": "解答题",
+    "source_file": "2026化学试卷",
+    "question": "【河南中考·四、综合应用题(共10分)】\n## 四、综合应用题(共10分)\n\n25. 中国高铁发展取得了重大成就。某小组围绕高铁中的金属材料开展实践活动。\n(1) 高铁电路中使用的电线有铜制的, 主要是利用了铜的 ____ (填字母)。\na. 导电性    b. 金属光泽    c. 导热性    d. 硬度大\n\n(2)用化学方法为该活动制作纪念章,操作如下:用蘸有某种溶液的毛笔在打磨过的金属板上绘制图案,充分反应后,经洗涤、干燥,即可制作出一枚纪念章。\n①若用铁板和硫酸铜溶液进行制作,则发生反应的化学方程式为____。\n②用铜板和硝酸银溶液也可制作,而用铜板和硫酸镍 $\\left(\\mathrm{NiSO}_{4}\\right)$ 溶液则不能。由此推测,铜、银、镍三种金属的活动性由强到弱的顺序为____。\n\n(3)钢铁的锈蚀及防护是重要的研究课题。该小组设计实验来探究铁丝生锈的条件及影响生锈快慢的因素，如右图所示，所用热水为煮沸过的蒸馏水。实验中，观察到铁丝a、b、e生锈的时间分别为2分钟、3分钟、7分钟左右，铁丝c、d久置不生锈。\n①通过对比铁丝b、c的实验现象,可说明铁丝生锈的过程需有____参加反应。\n②可证明氯化钠能加快铁丝生锈的实验现象是什么?\n\n[图片]\n\na为浸有NaCl溶液的铁丝  \nb、e为浸有水的铁丝  \nc为干燥的铁丝\n\n③通过该实验探究可知,影响铁丝生锈快慢的因除氯化钠外,还有什么因素?\n\n(4)高铁建设需要大量钢铁。绿色氢能正助力我国冶金行业从“碳冶金”向“氢冶金”\n\n转变。氢能炼钢的主要工艺流程如右图所示。\n\n①将废钢作为原料投入炼钢炉,除能调整钢铁的含碳量外,还对促进社会可持续发展有哪些意义?(写出一条)\n\n②炼铁炉中,高温下氢气与氧化铁发生反应得到铁。若生产560 t铁,则参加反应的氢气的质量是多少?\n\n[图片]\n\n# 河南省 2026 年初中学业水平考试\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《化学》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": ""
+  },
+  {
+    "id": 29,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·一、积累与运用( 共23 分)】\n## 一、积累与运用( 共23 分)\n\n六月，河南又到了麦熟时节。你所在的班级拟制作一期“麦子熟了”主题展板，请你参与筹备。\n\n<table><tr><td colspan=\"3\">“麦子熟了”主题展板设计方案(暂定)</td></tr><tr><td>目的</td><td colspan=\"2\">让同学们了解关于小麦的知识,增强节约粮食的意识,提升对家乡的自豪感</td></tr><tr><td rowspan=\"3\">展板结构及内容</td><td>前言</td><td>以冬小麦的口吻简述其生长过程</td></tr><tr><td>主体</td><td>小麦的结构、小麦的储藏、小麦在河南的种植史等</td></tr><tr><td>结语</td><td>待讨论</td></tr></table>\n\n1. 下面是拟作为展板前言的“冬小麦的自述”，请根据要求完善。(共10分)\n\n我是一株冬小麦。在“ ① ， ② ”(《诗经·蒹葭》)的秋天，我落户于中原大地。这里“ ③ ， ④ ”(陶渊明《桃花源记》)，堪称沃野千里，人烟繁盛，是适宜我生长的地方。寒冬来临，大雪骤降，“⑤ ， ⑥ ”(岑参《白雪歌送武判官归京》)，我在“雪被”下养精蓄锐。到了春天，各类植物欣欣向荣，“ ⑦ ， ⑧ ”(白居易《钱塘湖春行》)，我也趁着大好春光起身拔节。在农民的精心管理下，我喝着智能灌溉装置送来的清水，享用着无人机洒下的“营养餐”，茁壮成长。夏收时节， 。\n\n(1 )在标序号的横线处填写恰当的古诗文名句。(8 分)\n\n(2)下面哪一句作为“自述”的结尾最恰当?请结合语境，推荐一项。(2 分)A. 人们走在丰收的田野上，满眼都是五彩斑斓的景致B. 人们在收获中真切地体会到“粒粒皆辛苦”的深意C. 我用满穗金黄回报哺育我的大地和辛勤付出的人们D. 我熬过艰辛的岁月，就是为了奔赴这一场丰收的盛宴\n\n2. 为帮助同学们认识成熟的小麦，请观察右图，完成相关任务。(共5分)\n\n(1 )根据拼音提示，补全图中 A、B两处应标注的名称。(2 分)\n\n(2)借助箭头提示，为右图配一段文字，简要解说麦穗各部分结构之间的关系。(3 分)\n\n[图片]\n\n3. 下面是关于小麦储藏的资料，有同学对其中古代粮窖监测粮情方法的科学性产生了疑问，请结合链接材料，为其解疑。(5 分)\n\n河南小麦产量连续多年位居全国第一。麦收后，小麦陆续进入国家粮仓。现在的粮仓可借助电子测温、在线监测等高科技手段，实时反馈粮情，保障粮食品质。那么，古代的粮仓是如何保障粮食品质的呢?隋唐时期洛阳的含嘉仓有数百个地下粮窖，这些粮窖可常年保持低温、恒温状态，防止粮食发芽、霉变。为了监测窖内温度是否出现异常，人们会在粮窖顶部覆盖的封土上种树。如果树叶发黄，可能意味着窖内温度升高，他们就立即排查，采取相应措施。",
+    "answer": ""
+  },
+  {
+    "id": 30,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·链接材料】\n## 链接材料\n\n右图所示为种子在萌发过程中能量变化的实验。向两个保温瓶中装入种子，甲瓶中装入萌发的种子，乙瓶中装入煮熟并晾凉的种子，向瓶中各插入一支温度计。一段时间后，观察到甲瓶中的温度比乙瓶中的高。\n\n[图片]\n\n甲\n\n乙\n\n4. 在讨论结语部分安排什么内容时，同学们提出了以下三个建议，你赞成哪一个?请结合展板设计暂定方案及上述已准备内容，简述理由。(3 分)A. 介绍河南小麦为国家粮食安全做出的贡献B. 讲述小麦是如何变成食物走进千家万户的C. 总结搜集资料和制作展板过程中的感受",
+    "answer": ""
+  },
+  {
+    "id": 31,
+    "subject": "Chinese",
+    "ques_type": "综合题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·(一)阅读下文,完成5~ 8 题 。( 共16分)】\n## (一)阅读下文,完成5~ 8 题 。( 共16分)",
+    "answer": ""
+  },
+  {
+    "id": 32,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·月 夜 独 行】\n## 月 夜 独 行\n\n①这天，郑海丰接到生产队队长派的任务，明天去县城拉柴油。来回一百五十里，两天内必须拉回来，庄稼太旱了。\n\n②郑海丰没想到队长会把这么重要的事交给他。傍晚收工一到家，他就把这事跟娘说了。娘说：因为你识字，队长看重你，给你机会长本事，你一定要办得妥妥当当，不能有半点儿差错。娘这么一说，郑海丰似乎也意识到了肩负的责任。他心中暗暗有了个计划，争取在一天内，把一百斤柴油拉回来。\n\n③大半块儿月亮还挂在中天，郑海丰就拉上架子车出了门。街上并不黑，地上洒满了月光。他在走，月亮也在走。郑海丰感觉月亮是静的，天上的月亮越大，人的心里也越静。\n\n④出了村口，往东一拐，就上了通向镇子的土路。有一段路，左侧是高粱，右侧是玉米，高高的庄稼形成夹道之势。郑海丰觉得像是走进了死胡同，心里有些恐惧，庄稼地里会不会突然冒出个啥东西?他想，就算有，也要冲过去，不能耽误拉柴油。好在月亮高高挂在天上，还是那么亮。\n\n⑤从镇上到县城七十多里，有一条用砂礓铺成的公路。公路沿河而建，河水在缓缓流动，月光洒在河面上，似乎与河水融为一体。河边传来此起彼伏的蛙鸣，像催征的战鼓。郑海丰不由得加快了脚步。路上没有风，但车行带风，他觉得有些凉快，心情也有些愉悦。\n\n⑥郑海丰不会忘记，前年秋后，刚初中毕业的他，曾拉着架子车到过邻县。不同的是，上次是给自家卖东西，这次是为队里拉柴油；上次是娘央求堂叔陪着，这次是他一人独行。\n\n⑦郑海丰一口气走了十七八里，天还没亮，月亮还跟着他，月光很白。\n\n⑧又走了二十多里，东边的天渐渐发白。太阳渐渐升起来，阳光一照，天就热了。太阳越升越高，天也越来越热。郑海丰觉得，路面的高温已透过他的鞋底，脚底板有些烫烫的。他看见路两边高粱和玉米的叶子都耷拉下来了，不免想到生产队里的庄稼也急需浇水，他得赶快拉回柴油，让队里的抽水机转起来，让干旱的庄稼得到灌溉。\n\n⑨紧赶慢赶，总算在中午赶到了县城的柴油供应站。没想到，供应站关门了。起个大早，赶个晚集，他苦笑了一下。只能等。不知等了多久，大铁门哗啦一声打开了，郑海丰第一个冲进去。人家把一百斤柴油注进油桶，郑海丰心里好像也加了油。他拉起架子车，从原路返回。\n\n⑩差不多走了一半，南边的天际有黑云翻上来。黑云像铺席子一样，铺展得很快，眨眼的工夫，半边天都铺满了。郑海丰盼望下雨，下了雨，旱情就有可能缓解。可是，他还没到家，下雨会不会影响赶路?不管他怎么想，几声闷雷响过，雨还是下了起来。每颗雨点子都不小，像琉璃弹珠一样砸在地上噗噗响；打在铁皮油桶上，当当当的响声如同戏台用小锣子打出的“急急风”【注】。郑海丰不由得小跑起来。前面恰好是个集市，有的商店建有廊厦，他跑过去时，浑身的衣服还是被淋湿了。中途遇雨，不在郑海丰的预想之内，但大雨来了，他只能接受。\n\n⑪一起躲雨的，有个卖卤肉的。出门时娘给了他钱，要是买点儿肉，就着吃馍，味道一定不错。要不要买点儿?娘给他钱，是让他在路上买茶水喝的。他要是管不住自己，在路上买肉吃，回去怎么跟娘说呢！他转过脸，躲开了那人的目光。廊下没有卖茶水的，他只能啃干馍。时间不长，雨就停了。他拉起架子车，继续赶路。\n\n⑫走着走着，天渐渐地黑了下来。天一黑就黑得很厚实。路上没别的人，只剩下郑海丰一个人。他每前进一步，似乎都有一种冲破感。\n\n⑬走着走着，郑海丰觉得微微有些明了，仰脸一看，是星星出来了。星星的光，说不上明亮，但总比没光强。\n\n⑭走着走着，月亮升起来了，越升越高。路上洒满了月光，明晃晃的，好像铺了一条银光大道。\n\n⑮郑海丰刚走到自家门口，娘就迎了出来。娘说：这孩子说一天赶回来，真的一天赶了回来。一定累",
+    "answer": ""
+  },
+  {
+    "id": 33,
+    "subject": "Chinese",
+    "ques_type": "综合题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·(二)阅读下文,完成9~ 11题 。( 共12分)】\n## (二)阅读下文,完成9~ 11题 。( 共12分)",
+    "answer": ""
+  },
+  {
+    "id": 34,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·Token 正式命名为“词元”】\n## Token 正式命名为“词元”\n\n2026 年春节过后，“词元”火了。国家数据局披露，2024 年初，中国日均词元调用量为1000 亿，而到了今年3 月，这个数字已突破140 万亿，两年增长超千倍。\n\n“词元”的英文单词是 Token。Token是技术圈常用的一个计算单位，今年国家数据局将其正式定名为“词元”。“词元”译得很巧妙，它与人工智能领域的“词云”“词袋”一样，都是二字词，符合中文语言习惯。而且你一看就知道，它大概和“词”有关。那么，“词元”到底是什么?它跟我们平时说的字、词、句，到底是什么关系?\n\n“词元”到底是啥?\n\n很多人一看到“词元”，就会自然地把它理解成“词”。其实词元是 AI(人工智能)大模型为了更高效地处理语言而切分出来的最小计算单位。比如，“我爱中国！”可拆分成“我”“爱”“中国”“!”4 个词元。\n\n词元并不严格等于我们常说的“词”，也不固定对应某个汉字。一个词元可能是一个字符、一个常见词，或一个词的一部分。空格、标点、前后搭配，以及训练语料等的不同，都会影响切分结果。比如，“人工智能”一词可能整体被视为一个词元，但如果大模型词表中没有“人工智能”这个整体词，它也可能会被拆成“人工”“智能”两个词元。同一句话，换一个模型，词元数量可能就变了。\n\n为何要“切一刀”?\n\nAI大模型为什么要对人类语言进行切分呢?原因并不神秘：大模型并不真正认识文字，也不会像人类那样直接读懂一句话，它认识的是数字编号。对我们来说，文字本身携带意义；对大模型来说，文字只是符号，必须先把这些文字符号转换成数字编号，它才能理解。如果把人类语言比作一条项链，词元就像从项链上拆解下来的珠子。你看到的是整条项链，大模型处理的却是每一颗珠子的顺序和关系。\n\nAI大模型是如何与人类对话的呢?当我们和它聊天时，它需要将输入的语言全部切分成词元，然后再给每个词元映射一个数字编号，接着对这些数字编号进行计算推理，生成一串新的词元，最后还原成人类能够理解的语言输出。所以，与大模型交流时，你看到的是自然的对话，感受到的是“它好像懂我”，大模型内部处理的却是“这些词元如何彼此关联”。可以说，在人类与大模型的对话中，将人类语言切分为词元是最关键的一环，不切这一刀，对话就不可能完成。",
+    "answer": ""
+  },
+  {
+    "id": 35,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·理解“词元”有啥意义?】\n## 理解“词元”有啥意义?\n\n说到底，词元让我们看见了 AI大模型的底层逻辑。理解词元，其实是在理解大模型到底怎么“读”你的话——它是在大量词元之间不断计算下一步最可能出现什么。你和大模型聊一次天，会消耗输入词元；大模型给你回一段话，会消耗输出词元。上下文越长，材料越多，任务越复杂，词元消耗往往也越多。理解这一点，会倒逼人们主动优化提示词，用更简洁的语言传递更准确的信息。\n\n国家数据局把词元描述为可计量、可定价、可交易的单位。未来越来越多的AI产品说明书、服务计费、性能指标等，将会不断提到“词元”。它很可能会像曾经的新词“流量”“像素”“带宽”一样，慢慢成为数字生活里必须认识的常用词。\n\n如果用一句话收束全文，可以这样说，词元是AI把人类语言翻译成机器可处理的形式时所使用的基本单位，它就像一座桥梁：一头连着理解，一头连着计算；一头连着技术原理，一头连着千行百业。\n\n(摘编自《科学大观园》2026 年4 月下)\n\n9. 人类输入信息后，AI大模型是如何与人类对话的?请根据文中画线部分，在下图横线处填写适当的内容。(3 分)\n\n[图片]\n\n10. 作者是怎样将“词元”这个说明对象介绍得清楚明白的?请从说明顺序、关键语句、说明方法三个角度中任选两个，结合文本具体分析。(5 分)\n\n11. 将Token译为“词元”有何妙处?请结合文本和下面的链接材料简要分析。(4 分)",
+    "answer": ""
+  },
+  {
+    "id": 36,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·链接材料】\n## 链接材料\n\n词：语言里最小的、可以自由运用的单位。\n\n元：开始的，第一；主要，根本。\n\n元²：我国的本位货币单位。也作圆。\n\n(摘自《现代汉语词典》第7版)",
+    "answer": ""
+  },
+  {
+    "id": 37,
+    "subject": "Chinese",
+    "ques_type": "综合题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·三、古诗文阅读( 共14分)】\n## 三、古诗文阅读( 共14分)\n\n(一)阅读下面两个文段，完成12~ 14题。( 共10分)\n\n【甲】环滁皆山也。其西南诸峰，林壑尤美，望之蔚然而深秀者，琅琊也。山行六七里，渐闻水声潺潺，而泻出于两峰之间者，酿泉也。峰回路转，有亭翼然临于泉上者，醉翁亭也。作亭者谁?山之僧智仙也。名之者谁?太守自谓也。太守与客来饮于此，饮少辄醉，而年又最高，故自号曰醉翁也。醉翁之意不在酒，在乎山水之间也。山水之乐，得之心而寓之酒也。\n\n若夫日出而林霏开，云归而岩穴暝，晦明变化者，山间之朝暮也。野芳发而幽香，佳木秀而繁阴，风霜高洁，水落而石出者，山间之四时也。朝而往，暮而归，四时之景不同，而乐亦无穷也。\n\n(节选自欧阳修《醉翁亭记》)\n\n【乙】堂去溪百余步，溪流至王村，湾环如玦①，豁然山夷而野舒，数十里间峰峦百叠，樵径渔舍，疏数出没②，平列于前。余留此逾六阅月③，凡花木禽鸟之生成无不观，晨凉夕燠之气候无不更，风月④晦明之变态无不穷。时与升⑤高丘，踞磐石，携壶以探远洲，举棹以溯清流。咏归一室之内，高友千世之上，帆影拂于门户，湍声振于枕席，此皆骚人诗客所极力而未能仿佛⑥者。\n\n(节选自程嘉燧《溪堂题画诗引》)\n\n【注释】①玦(jué)：一种环形而有缺口的佩玉。②疏数(cù)出没：疏密有致，时隐时现。③阅指一整月。④风月：泛指风景。⑤升：登上。⑥仿佛：类似。\n\n12. 请根据语境，参考方法提示，推测文中加点词语的意思。(3 分)\n\n<table><tr><td>文言词句</td><td>方法提示</td><td>词语意思</td></tr><tr><td>余留此逾六阅月</td><td>词语推断:逾期逾越</td><td>1逾:_</td></tr><tr><td>晨凉夕燠</td><td>观察对称结构:早出晚归</td><td>2燠:_</td></tr><tr><td>举棹以溯清流</td><td>课内迁移:沿溯阻绝(郦道元《三峡》)</td><td>3溯:_</td></tr></table>\n\n13. 乙文中作者的闲情雅趣体现在哪里?请用自己的话简要概括。(3 分)\n\n14. 甲、乙两文在抒情方式上有何异同?请结合文段内容简要分析。(4 分)\n\n(二)阅读下面这首诗，回答问题。(4 分)",
+    "answer": ""
+  },
+  {
+    "id": 38,
+    "subject": "Chinese",
+    "ques_type": "解答题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·【明】杨继盛】\n## 【明】杨继盛\n\n志欲小天下①，特来登泰山。仰观绝顶上，犹有白云还②。\n\n【注释】①小天下：《孟子•尽心上》有“孔子登东山而小鲁，登泰山而小天下”之言。②还：15. 这首诗情理兼备。它抒发了诗人怎样的情感?蕴含着怎样的哲理?请结合诗句简要分析。(4 分)",
+    "answer": ""
+  },
+  {
+    "id": 39,
+    "subject": "Chinese",
+    "ques_type": "综合题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·四、整本书阅读(5 分)】\n## 四、整本书阅读(5 分)\n\n16. 在整本书阅读中，归类是一种重要的梳理方法。你认为下列备选人物中哪两个可以归为一类?请结合整本书相关内容简述理由。(5 分)备选人物：许云峰(《红岩》) 孙悟空(《西游记》) 简•爱(《简•爱》)",
+    "answer": ""
+  },
+  {
+    "id": 40,
+    "subject": "Chinese",
+    "ques_type": "综合题",
+    "source_file": "2026语文试卷",
+    "question": "【河南中考·五、作文( 50 分)】\n## 五、作文( 50 分)\n\n17. 从下面两个写作任务中任选其一，按要求作文。(50 分)\n\n(1 )小说《月夜独行》结尾，郑海丰要自己把柴油送到机井房，娘也认为这是他的事儿，没有与他争。他们的做法让你想到了哪些人和事?请以“这是 的事儿”为题目，写一篇记叙文。\n\n要求：①在横线处填写一个代词(你、我、他、她、大家……)，将题目补充完整，然后作文；②表达意图明确，内容具体充实；③写真情实感，不要套作，不得抄袭；④600 字左右；⑤不得泄露个人信息。\n\n(2 )习惯是在长时期里逐渐养成的、一时不容易改变的行为、倾向或社会风尚。它常常不易察觉，但又会影响人生。这两句话引发了你怎样的联想和思考?请确立观点，自拟题目，联系现实，写一篇简单的议论文。\n\n要求：①观点明确，有理有据；②不要套作，不得抄袭；③600 字左右；④不得泄露个人信息。\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《语文》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": ""
+  },
+  {
+    "id": 43,
+    "subject": "English",
+    "ques_type": "综合题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·一、听力理解 ( 20 小 题 , 每 小 题 1分 , 共20 分)】\n## 一、听力理解 ( 20 小 题 , 每 小 题 1分 , 共20 分)",
+    "answer": ""
+  },
+  {
+    "id": 44,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·第一节】\n## 第一节\n\n听下面 5 段对话。每段对话后有一个小题，从题中所给的A、B、C三个选项中选出最佳答案。每段对话读两遍。\n\n1. What does the man want to drink? A. Milk. B. Juice. C. Water. \n\n2. How does the girl usually go to school? A. By bus. B. By bike. C. On foot. \n\n3. Who will buy a cake? A. Frank. B. Peter. C. Helen. \n\n4. What will the boy probably do? A. Cook dinner. B. Walk the dog. C. Set the table. \n\n5. What's the possible relationship between the two speakers? A. Classmates. B. Mother and son. C. Doctor and patient.",
+    "answer": ""
+  },
+  {
+    "id": 45,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·第二节】\n## 第二节\n\n听下面几段对话或独白。每段对话或独白后有几个小题，从题中所给的 A、B、C三个选项中选出最佳答案。每段对话或独白读两遍。听下面一段对话，回答第 6 至第 7 两个小题。\n\n6. How is the weather today? A. Hot. B. Cool. C. Warm. \n\n7. Where will the speakers probably go? A. To a park. B. To a cinema. C. To a museum. \n\n听下面一段对话，回答第<sub>8</sub> 至 第<sub>9</sub> 两个小题。\n\n8. What musical instrument can the girl play? A. The erhu. B. The pipa. C. The guzheng. \n\n9. What does the girl want to be?A. A musician. B. A pilot. C. A writer.听下面一段独白，回答第10 至 第12三个小题。\n\n10. What does the speaker think of math? A. Useful. B. Important. C. Interesting. \n\n11. Who helped the speaker with math? A. The speaker's father. B. The speaker's mother. C. The speaker's brother. \n\n12. When did the speaker join the study group?A. Last week. B. Last month. C. Last term.听下面一段对话，回答第13至 第15 三个小题。\n\n13. What is the boy's suggestion for Sally? A. Learning something new. B. Reading books. C. Being a volunteer. \n\n14. How often will the speakers probably go to the library? A. Once a week. B. Twice a week. C. Three times a week. \n\n15. What are the speakers mainly talking about? A. A book fair. B. A holiday plan. C. A personal hobby.",
+    "answer": ""
+  },
+  {
+    "id": 46,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·第三节】\n## 第三节\n\n你将听到一个小组活动汇报。请用你所听到的内容，填写表格中所缺单词，每空限填一个单词或年份。短文读两遍。",
+    "answer": ""
+  },
+  {
+    "id": 47,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·A group's report about robots】\n## A group's report about robots\n\n<table><tr><td rowspan=\"5\"><img src=\"https://cdn-mineru.openxlab.org.cn/result/2026-07-08/953c7a06-e29b-48f5-bfca-18eeea2a92c2/9e087895002a216e43b52f7bb82f47eaa1a6156e14f665db41d860f8cd1c632a.jpg\"/></td><td>For centuries, people have been dreaming of building lifelike machines. In 16 , the world&#x27;s first real robot was put to use.</td></tr><tr><td>Now, there are millions of robots working in 17 in many countries.</td></tr><tr><td>Robots are smart enough to work in hot, 18 , noisy and dangerous conditions.</td></tr><tr><td>Today, they are used to clean houses, fight fires and find out more about 19 .</td></tr><tr><td>Some are larger than trucks, while others are small enough to 20 inside the human body.</td></tr></table>",
+    "answer": ""
+  },
+  {
+    "id": 48,
+    "subject": "English",
+    "ques_type": "综合题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·二、阅读理解(20 小题，每小题2 分，共40 分)】\n## 二、阅读理解(20 小题，每小题2 分，共40 分)\n\n阅读下面四篇语言材料，然后按文后要求做题。",
+    "answer": ""
+  },
+  {
+    "id": 49,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·Redingly Activity Center】\n## Redingly Activity Center\n\nDo you want to keep fit, meet people and have fun? We have different kinds of activities here!",
+    "answer": ""
+  },
+  {
+    "id": 50,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·Activities:】\n## Activities:\n\nTeam sports: basketball, football, volleyball, baseballIndividual (个人的) sports: swimming, climbing, skateboarding",
+    "answer": ""
+  },
+  {
+    "id": 51,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·Indoor facilities(场 所): Outdoor facilities:】\n## Indoor facilities(场 所): Outdoor facilities:\n\nSports hall Climbing wall Swimming pool \n\nOpening hours: 9:00 a. m.-5:30 p. m. Tuesday to Sunday \n\nBaseball field \n\nFootball ground \n\nSkateboarding park \n\nPrices:Morning session(时段): £20/ personAfternoon session:£25/ personFull day session:£40/ person",
+    "answer": ""
+  },
+  {
+    "id": 52,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·Notes:】\n## Notes:\n\n* Children under 12 require a parent. * Food can be bought inside the center. * Remember to warm up to avoid getting hurt. * Top coaches can offer help with skateboarding. * Outdoor activities will be cancelled because of bad weather. \n\nPet Friendly We have a pet area in the center. Address: 66 Redingly Street \n\n根据材料内容选择最佳答案。\n\n21. Which might be Tim's choice if he wants to do an outdoor activity? A. The climbing wall. B. The sports hall. C. The skateboarding park. D. The swimming pool. \n\n22. Which of the following is a proper time to get to the center for an activity? A. Monday 2:30 p. m. B. Tuesday 9:30 a. m. C. Thursday 7:00 a. m. D. Saturday 6:00 p. m. \n\n23. How much should a pair of twins(aged 15) pay for an afternoon session? A. £20. B. £25. C. £40. D. £50. \n\n24. What do we know from the text? A. Pets are allowed into the center. B. The center provides food for free. C. Coaches can help with football. D. The center will be closed when it rains. \n\n25. What is the best slogan(宣 传 语) for the center?A. If you are into it, read into it! B. Come prepared with your love of sports!C. Together, make the world better! D. Unlock the secrets of this beautiful planet!",
+    "answer": ""
+  },
+  {
+    "id": 53,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·B】\n## B\n\n“Why is the sky blue?”“Why do we add sugar to food?”“Why…?” \n\nEveryone knew 10-year-old Ananya as“the question girl”. \n\n“Ananya, stop asking so many questions!” her teacher Mrs. Sharma would say. “Just accept things as they are,” her grandmother told her. “She talks too much,” her classmates avoided her. \n\nAnanya felt lonely. Maybe everyone was right. Maybe asking questions was bad. But Ananya couldn't help it. She wanted to understand everything. \n\nOne day, Mr. Patel, a new science teacher, joined their school. In his first class,Ananya raised her hand, “Why do birds fly south?” The class complained (抱 怨), “Notagain!” But Mr. Patel smiled, “That’ s an excellent question! Who else wants to know why?”Ananya blinked (眨眼) in surprise. No teacher had ever said that before!\n\nAfter class, Mr. Patel called Ananya aside. “Don't ever stop asking questions,” he said.“Do you know what scientists do all day? They ask‘why’. Every scientist was once a curiouschild.” For the first time, Ananya didn't feel annoyed (烦 恼 的). She felt special.\n\nMr. Patel taught Ananya to find answers herself. “When you have a question, first try to find the answer. Read books. Watch carefully. Then, if you still don't understand, ask.” \n\nAnanya started visiting the library. She read books about science and nature. She started a“Question Notebook”.",
+    "answer": ""
+  },
+  {
+    "id": 54,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·• Question Notebook】\n## • Question Notebook\n\n• Questions I had \n\n• What I thought the answer might be \n\n# \n\n• New questions \n\nHer questions became better. Instead of“Why is the sky blue?” she asked“Why does the sky’ s color change during sunrise?” Teachers noticed. Ananya's questions now sparked interesting discussions. \n\nWhen Ananya was twelve, she had a question: “Why do some street dogs sleep on the road at night?” She studied that for three months. Then she created a project showing temperature differences. It won first prize at school, then district, then national level! \n\nToday, Ananya is 24 and studies environmental science. She still asks“why” all the time. She visits schools, talking to children. “Never let anyone make you feel bad for being curious,” she tells them. \n\n根据材料内容选择最佳答案。\n\n26. Why did Ananya's classmates avoid her? A. Because she didn't like to talk with others. B. Because she kept asking so many questions. C. Because she always got into trouble with others. D. Because she couldn't answer teachers' questions. \n\n27. What does the underlined word“curious” mean in the text? A. Dealing with danger with courage. B. Showing a sense of humor. C. Wanting to know about something. D. Enjoying meeting new people. \n\n28. What did Mr. Patel do to help Ananya? A. He taught her some social skills. B. He created a project with her. C. He bought a lot of books for her. D. He encouraged her to ask wisely. \n\n29. Which of the following can be put in # ? A. How I became a good student B. Why I had ",
+    "answer": ""
+  },
+  {
+    "id": 55,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·C】\n## C\n\nDid you notice how nature sometimes repeats itself? Something that repeats is called a pattern. There are many patterns for you to study and learn. \n\nLook around you. Patterns are everywhere. You may see bright and colorful patterns if you look at fish in the sea. In a bee's honeycomb, the six-sided shape is repeated many times. Some leaves always have five points on them. \n\n[图片]\n\nListening carefully, you will find a noisy world. Dogs bark, the rain falls and the wind blows. Are these patterns? Of course! Sounds \n\na honeycomb \n\nthat repeat are patterns. A cricket (蟋 蟀) uses its wings to make repeated chirping (啁啾叫)sounds. Do you know that a cricket's chirp changes with the temperature? The hotter it is, themore chirps a cricket will make.\n\nTry to find out how living things grow around you. Seeds (种 子) grow into plants. Abutterfly begins life as an egg. Each living thing has its own pattern as it grows. When ahuman baby is born, it is small. With time, the baby learns to lift its head and learns to rollover. Finally, the baby learns to stand up and walk. This kind of pattern is called a pattern ofdevelopment.\n\nIf something happens over and over, it, too, forms a pattern. For example, you get up at 7:00 every morning. You get dressed and then eat breakfast at 7:30 a. m. If you repeat this many times, it becomes a pattern. Having a music class every Monday is a pattern. So is going to school five days a week and having Saturday and Sunday off. \n\nIt seems as if the world is",
+    "answer": ""
+  },
+  {
+    "id": 56,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·D】\n## D\n\nHave you ever heard of the word“spring-cleaning”? Humans have been doing this for quite a long time to welcome brighter days with fresh beginnings. \n\n36 Humans are part of nature. When trees grow new leaves and birds build their nests in spring, people feel it is a good time to say goodbye to unwanted things and freshen up their rooms. \n\nSpring-cleaning is good for you in lots of ways. When spring arrives, you naturally havemore energy. Like any exercise, tidying gets you moving and improves your mood (心情).37 Also, cleaning as a family brings everyone closer because you' re working together.When your room is clean, you feel proud of yourself and look forward to having fun in it.\n\n38 Start by clearing one place at a time, like a table, drawer or corner of a room.Put everything into a group, then sort (将……分类) them into smaller groups of things youwant to keep, sell, donate(捐 赠) or throw away. The best way to tidy up is to make it fun.You can turn it into a game by setting a timer and seeing how many things you can put awaybefore it runs out. 39\n\nPeople around the world do spring-cleaning. During the Songkran Festival in Thailand,people clean their homes and splash water in the streets to wash away bad luck. 40 Itis believed that“sweeping the dust(灰尘)” makes way for good luck.\n\n根据材料内容，从下面五个选项中选出能填入文中空缺处的最佳选项，使文章意思通顺、内容完整。\n\nA. But how can you do some spring-cleaning? \n\nB. Putting some music on while cleaning is a way, too. \n\nC. Why do people give everything a good clean in ",
+    "answer": ""
+  },
+  {
+    "id": 57,
+    "subject": "English",
+    "ques_type": "综合题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·三、完形填空 ( 15 小题，每小题1 分 ， 共<sub>15</sub> 分)】\n## 三、完形填空 ( 15 小题，每小题1 分 ， 共<sub>15</sub> 分)\n\n先通读短文，掌握其大意，然后从<sub>A,B,C,D</sub> 四个选项中选出一个可以填入相应空白处的最佳答案。\n\n“Now, children, we' re going to have a class play. It's really a good way to show your 41 ,” said Ms. Lopez. “And everyone needs to join in. You can act, sing and dance, and play music.” \n\nI began to 42 . I didn't want to perform — especially in front of an audience (观众<sub>)!</sub>\n\nAfter I got home that day, Mom asked 43 , “You look a little unhappy, Dion. Is something the matter?” \n\nI told my mom about the play, and she understood my <sub>44</sub> . “Perhaps there is something else you can do for the play,” she said. Then she asked, “What's the play about?” Mom listened as I told her the 45 . We both laughed at the funny ending. \n\n“I have an idea,” said Mom. Then she led me to my room. <sub>“</sub> <sub>46</sub> <sub>all</sub> <sub>your</sub> <sub>paintings,”</sub>Mom said, as she pointed to my walls. “You’ re good at painting, <sub>47</sub> maybe you canpaint the scenery(舞台布景).”\n\nI thought for a minute. Soon I had a 48 in my mind of what I would do. \n\nThe next day, I couldn't 49 to get to school to tell Ms. Lopez that I would like to draw and paint the scenery for the play. \n\n“What a 50 idea, Dion,” she replied. “I'm sure that you will do a great job!” \n\nOn the night of the class play,I 51 the play fromthe side of the stage(舞台). The stage looked so great that Iwas very 52 with all the work that I'd done.\n\n[图片]\n\nThe play was excellent, and it was over too quickly. As I walked away backstage, Ms.Lopez came up to me and said, “On stage, Dion!” I 53 Ms. Lopez onto the stage. Shepointed to the scenery, and the audience clapped(鼓掌) and 54 loudly.\n\nI looked down at Mom smiling and clapping in the audience. I thought she was 55 to see me on stage. And I was happy to know that. \n\n41. A. prizes B. abilities C. results D. feelings \n\n42. A. practice B. share C. move D. worry \n\n43. A. coldly B. bravely C. softly D. angrily \n\n44. A. problem B. dream C. mistake D. promise \n\n45. A. purpose B. story C. reason D. choice \n\n46. A. Look at B. Look for C. Give out D. Give away \n\n47. A. but B. so C. if D. as \n\n48. A. rule B. test C. picture D. lesson \n\n49. A. manage B. agree C. refuse D. wait \n\n50. A. simple B. strange C. wonderful D. crazy \n\n51. A. started B. learned C. wrote D. watched \n\n52. A. pleased B. bored C. busy D. patient \n\n53. A. sent B. invited C. pushed D. followed \n\n54. A. cheered B. reported C. answered D. sang \n\n55. A. regretful B. nervous C. proud D. tired",
+    "answer": "41. 答案；42. B；43. D；44. C；45. A；46. B；47. A；48. B；49. C；50. D；51. C；52. D；53. A；54. D；55. A"
+  },
+  {
+    "id": 58,
+    "subject": "English",
+    "ques_type": "综合题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·四、语篇填空 ( 15 小题，每小题1 分 ， 共15 分)】\n## 四、语篇填空 ( 15 小题，每小题1 分 ， 共15 分)\n\n第一节\n\n阅读短文，从方框中选择适当的词并用其正确形式填空，使短文通顺、意思完整。每空限填一词，每词限用一次。\n\nyear wide they build rush on because clean example produce \n\nChina is trying its best to use clean natural energy (能源) to protect the environment.Although some clean energy technologies are still expensive, China continues to develop<sub>56</sub> to meet people's needs.\n\nFor example, wind energy is 57 used. We can see tall windturbines on grasslands, mountains and even on the sea. Wind energy isone of the 58 energy sources (来 源). People have found thatwind power works better in open areas.\n\n[图片]\n\nwind turbines wind turbines\n\nAnother 59 is solar energy. Solar panels (太阳能电池板)are placed on mountains, open lands and building rooftops. They take in sunlight and turnlight energy into electric power. Solar energy works easily 60 sunny days. When theweather is fine, it can provide enough electricity for a whole house.\n\nWater energy is also used in many places. China has 61 many large dams (水坝) onbig rivers. The water falls down from high places and 62 fast, driving the machines tomake electricity. Water power is friendly to nature and dams can serve people for many 63\n\nBesides, tidal (潮 汐 的) energy is another way to make electricity. The sea has rising andfalling tides every day. When the tides move, we use their force to 64 energy.\n\nAll these forms of green energy will hardly run out 65 they come from nature. China keeps developing clean energy to build a greener future.",
+    "answer": ""
+  },
+  {
+    "id": 59,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·第二节】\n## 第二节\n\n阅读短文，根据语篇要求填空，使短文通顺、意思完整。每空限填一词。",
+    "answer": ""
+  },
+  {
+    "id": 60,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·MWhy we LOVE our school】\n## MWhy we LOVE our school",
+    "answer": ""
+  },
+  {
+    "id": 61,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·HOME | ABOUT US |. COURSES I BLOG】\n## HOME | ABOUT US |. COURSES I BLOG\n\n[图片]\n\nKarin Our school is great! There are many modern buildings. Also, theprincipal (校长) and the teachers66very kind.\n\nAmy We have different activities in the clubs after class. I like studying languages, especially Chinese67German. I practice them every day. \n\nLi Hua My favorite room is the art room. I do lots of painting and drawing there every day68enter the art competition next month. \n\nMia Our school has a technology room where we can design (设计) thingsand make models. That's my favorite place in the school. I want to be69ITengineer!\n\nEvaI like the schoolyard. I enjoy playing games outside70my classmates. But I like being inside, too. Our school is cool!",
+    "answer": ""
+  },
+  {
+    "id": 62,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·五、补全对话 ( 5 小题，每小题2 分 ， 共10 分)】\n## 五、补全对话 ( 5 小题，每小题2 分 ， 共10 分)\n\n根据下面的对话情景，在每个空白处填上一个适当的句子，使对话的意思连贯、完整。",
+    "answer": ""
+  },
+  {
+    "id": 63,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·(Li Lei is talking with Jim, an exchange student, in their school.)】\n## (Li Lei is talking with Jim, an exchange student, in their school.)\n\nA: Hi, Jim! What a great day! What are you doing? \n\nB: I'm reading an interesting book. \n\nA:71. ? \n\nB: It's about great people from Henan. I just learned that Du Fu was born in Henan. \n\nA: Exactly. 72. . We can still find some of these poems in our textbooks. \n\nB: I read his poem Chun Ye Xi Yu last week. It's really beautiful! \n\nA: So it is.73. ? \n\nB: I also know Yue Fei, but not much. 74. ? \n\nA: He was well-known for his deep loyalty (忠诚) and great bravery.\n\nB: So great! I’ m really interested in Henan’ s history and culture. How can I know more about this fantastic place? \n\nA: It's easy.75. \n\nB: That's a good idea.",
+    "answer": ""
+  },
+  {
+    "id": 64,
+    "subject": "English",
+    "ques_type": "解答题",
+    "source_file": "2026英语试卷",
+    "question": "【河南中考·六、书面表达(20 分)】\n## 六、书面表达(20 分)\n\n某英文报刊 Writers Write 专栏新一期的征文内容为“If you' re asked to describeyourself with three description words, what will they be? And explain why.”。请你根据征文内容和写作提示，用英语写一篇短文投稿。\n\n写作提示: 1. 你选择的三个形容词是什么(如 kind,creative,hard-working 等);\n\n2. 分别阐述理由。\n\n写作要求：1. 文中须包含以上写作提示中的所有信息，可适当发挥；\n\n2. 文中不得出现真实姓名和学校名称；\n\n3. 词数 100 左右 (文中已给出内容不计入总词数)。\n\nIf I'm asked to describe myself with three description words, they will be \n\n# 河南省2026 年初中学业水平考试\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《英语》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": ""
+  },
+  {
+    "id": 67,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·1】从考古看，二里头文化风格礼器的分布范围北到内蒙，南到长江，西至甘青，东到山东。商朝礼器也曾传播到广大地区，江西、湖南等地的许多遗址都出土过商式青铜礼器。这说明夏商时期A. 青铜礼器系统完备 B. 铁器制作工艺高超C. 社会分工日益细化 D. 中原文化影响广泛",
+    "answer": ""
+  },
+  {
+    "id": 68,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·2】墨子用“端”表示组成物质不可再分割的最小微粒。他还将力定义为物体运动状态改变的原因。他的这些认识A. 源于政治实践 B. 蕴含科学思想C. 关注社会现实 D. 服务国家治理",
+    "answer": "D"
+  },
+  {
+    "id": 69,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·3】自秦汉大一统体制建立之后，生产与消费都冲破了原来的地域界限，各经济区逐渐融入“财物流通”的经济共同体之中。这说明A. 国家统一加强经济联系 B. 交通建设推动商业繁荣C. 经济发展利于社会安定 D. 统治政策影响社会风尚",
+    "answer": "B"
+  },
+  {
+    "id": 70,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·4】隋唐时期的三省六部制等制度，都是在前代政治文明的基础上改革和创新，从而更加完善。材料强调隋唐时期的政治制度A. 体现民本思想 B. 在继承中发展C. 重视官吏考核 D. 在交流中完善",
+    "answer": "A"
+  },
+  {
+    "id": 71,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·5】据记载，两宋以前，航海业完全靠天上的星宿和地表目标来确定方位。南宋时期，海上航行已使用将东西南北方向细分为 24 个方位的罗盘。从中可以看出宋朝A. 航海技术进步 B. 海陆交通发达C. 造船水平提升 D. 海外贸易繁荣",
+    "answer": "B"
+  },
+  {
+    "id": 72,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·6】元朝开创了中央集权在地方治理层面新的政治模式，改变了前代在地方推行较小政区和地方分权的治理方式。与这一评述相关的是A. 分封制 B. 郡县制C. 刺史制度 D. 行省制度",
+    "answer": "A"
+  },
+  {
+    "id": 73,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·7】明朝时期，大量货物在全国各地进行交易，形成了囊括流通枢纽城市、中等商业城镇和农村集市的城乡市场网络体系。材料表明明朝A. 货物种类丰富 B. 商人地位提高C. 商帮资本雄厚 D. 商品贸易兴盛",
+    "answer": "D"
+  },
+  {
+    "id": 74,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·8】有学者认为，19世纪的这场战争本身虽不曾导致中国社会结构和社会性质的骤然改变，但此后中国经济、政治、社会和思想文化的结构性变革，却无不导源于此。这里的“战争”应是A. 鸦片战争 B. 第二次鸦片战争C. 甲午中日战争 D. 八国联军侵华战争",
+    "answer": "D"
+  },
+  {
+    "id": 75,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·9】洋务派创办的军工企业雇佣大量工人，采用机器生产。由此可知，这些企业A. 设备完全依赖进口 B. 具有资本主义因素C. 采用官督商办制度 D. 积极吸纳民间资本",
+    "answer": "A"
+  },
+  {
+    "id": 76,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·10】下表列举了我国1931年的一些史事。这些史事反映出当时\n\n<table><tr><td>时间</td><td>事件</td></tr><tr><td>1931年9月23日</td><td>南京各界约20万人举行反日救国大会</td></tr><tr><td>1931年9月28日</td><td>北平各界约20多万人召开抗日救国大会</td></tr><tr><td>1931年10月初</td><td>上海80多万工人组织抗日救国联合会</td></tr></table>\n\nA. 国民革命运动兴起 B. 工农革命运动蓬勃发展C. 抗日救亡运动高涨 D. 抗日民族统一战线形成",
+    "answer": "B"
+  },
+  {
+    "id": 77,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·11】右 图 是1949年中国人民解放军第三野战军 10 兵 团28 军 84 师251 团给江苏靖江支前民工和船工颁发的渡江锦旗。该锦旗可用于说明，人民解放战争的胜利得益于A. 土地革命的开展B. 解放军英勇作战C. 人民群众的支持D. 三大战役的进行\n\n[图片]\n\n12.1955 年4 月 5 日，中共中央政治局扩大会议决定，中国代表团参会总方针“应该是争取扩大世界和平统一战线，⋯⋯并为建立和加强我国同若干亚非国家的事务和外交关系创造条件”。这是为了参加A. 日内瓦会议 B. 万隆会议C. 第 26 届联合国大会 D. 世界贸易组织第四届部长级会议\n\n13.1988 年，我国颁布了《全民所有制工业企业法》，首次对“所有权与经营权的分离”做出法律界定。该法律的颁布旨在A. 实现企业公私合营 B. 推广家庭联产承包责任制C. 深化经济体制改革 D. 推动对外开放格局的形成",
+    "answer": ""
+  },
+  {
+    "id": 78,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·14】古代希腊城邦的政治制度都有或多或少的民主色彩，这样的环境有利于新的理论和学派的产生。据此可得出的观点是A. 政治体制影响文化发展 B. 思想解放推动社会进步C. 团结合作促进共同发展 D. 交流互鉴丰富文明内涵\n\n15.11 世纪以后，法学在西欧一部分城市迅速兴起。同时，会计、公证等行业也开始流行。这些现象反映了A. 庄园法庭的普及 B. 大学地位的提高C. 社会发展的需求 D. 近代科学的发展",
+    "answer": ""
+  },
+  {
+    "id": 79,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·6】有学者认为，文艺复兴激起了人们无止境的好奇心，最终发展出一种全新的思考方式，让欧洲迸发出前所未有的创造性。下列可以佐证该观点的是A. 自治城市出现 B. 市民阶层形成C. 英国议会产生 D. 新航路的开辟",
+    "answer": "A"
+  },
+  {
+    "id": 80,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·17】从 1787年开始，法国连续两年农业歉收，制造业也陷入停滞。随之，粮食出现短缺，食品价格上涨，失业人数激增。当时，赤贫者已占总人口的<sub>1</sub>/3。材料可用于说明A. 启蒙运动兴起的背景 B. 法国大革命爆发的社会根源C. 法兰西第一帝国覆灭的原因 D. 巴黎公社建立的基础",
+    "answer": ""
+  },
+  {
+    "id": 81,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·18】在 18 世 纪90 年代的英国，纺纱工每纺100磅棉花需用时300 小时。到了 19 世 纪30年代，同样的工作量仅需135小时。出现这一变化的主要原因在于A. 手工工场的兴起 B.“ 珍妮机”的发明C. 工业革命的推进 D. 内燃机的应用\n\n19.1932 年，苏联的工业产值在工农业总产值中所占比重由1928 年 的48%增 至70.7% ；职工的全年平均工资比1928年 增 长68%。这表明苏联“一五”计划A. 兼顾工业建设与民生改善 B. 超额完成建设任务C. 调整了不合理的工业布局 D. 加速了农业集体化",
+    "answer": ""
+  },
+  {
+    "id": 82,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·20】近年来，全球平均气温不断上升。有学者警告，地球气温每增加一度，就会给地球上的栖息者带来更大危险。这提醒人类要关注A. 公共卫生 B. 网络安全C. 生态环境 D. 社会保障",
+    "answer": ""
+  },
+  {
+    "id": 83,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·21】(6 分)阅读下列材料，回答问题。\n\n材料一\n\n[图片]\n\n湖南道县玉蟾岩遗址出土的稻谷(距今约12000—10000年)\n\n[图片]\n\n河南新密李家沟遗址出土的巨型石磨盘(距今约10500—8600年)\n\n[图片]\n\n北京门头沟东胡林遗址出土的炭化粟粒和黍粒(距今约10000—8000年)\n\n材料二 据学者研究，我国农民在公元前6 世纪甚至更早就采用垄耕种植法，对土地轮流休耕，以保证地力。唐朝时出现的曲辕犁，操纵灵活、省力，而且能够深耕，一直沿用到近现代。北朝贾思勰撰写的《齐民要术》、明朝徐光启的著作《农政全书》，至今仍闪烁着智慧的光芒。\n\n——摘编自吴军《全球科技通史》\n\n材料三 20 世 纪60 年代，河南林县人民在县委领导下，建成长达1500千米的“人工天河”红旗渠，创造了一代中国农民改天换地的传奇。自通水以来，红旗渠的功能从人畜饮水、农田灌溉增至工业供水、生态补水。一幅“渠清水绿、业兴民富”的画卷正徐徐铺展。\n\n——摘编自中国历史研究院《(新编)中国通史纲要：全二册》\n\n(<sub>1</sub> )据材料一，你能获取什么历史信息?(<sub>2</sub> 分)\n\n(<sub>2</sub>)据材料二，概括我国古代农业取得了哪些方面的成就。(<sub>3</sub> 分)\n\n(3 )综合以上探究，你能从我国农业发展历程中汲取怎样的智慧?(1分)\n\n22.(6 分)阅读下列材料，回答问题。\n\n材料一 古田会议决议着重强调从思想上建党。从思想上建党，这是中国共产党自身建设的一大理论创新，也是古田会议决议的精髓所在。\n\n——摘编自李颖《文献中的百年党史》\n\n材料二 红军到达陕北后，中共中央大力加强党自身建设。到1938 年底，全国党员人数从全民族抗战爆发时的4 万多人增加到50 多万人。1939年，陈云撰写《怎样做一个共产党员》、张闻天发表《共产党员的权利与义务》……，这些论著为党员教育提供了重要教材。1945 年，党的七大确立毛泽东思想为党的指导思想，全党达到空前的团结。\n\n——摘编自《中国共产党简史》编写组《中国共产党简史》\n\n材料三 党的十八大强调，形势的发展、事业的开拓、人民的期待，都要求我们以改革创新精神全面推进党的建设新的伟大工程，全面提高党的建设科学化水平。\n\n——摘编自张士义等《从一大到十九大：中国共产党全国代表大会史》\n\n(1 )据材料一，指出古田会议所关注的工作。(1分)\n\n(2 )据材料二并结合所学知识，概括这一时期中国共产党加强自身建设的作用。(3 分)\n\n(3 )综上所述，你能看出中国共产党的哪些优良作风?(2 分)",
+    "answer": "( 6 分 )"
+  },
+  {
+    "id": 84,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·23】(<sub>6</sub> 分)阅读下列材料，回答问题。\n\n材料一 “民亦劳止，汔(qì，这里表希望)可小康”是《诗经》中的诗句。1979 年，邓小平第一次用“小康”概念来描述我国现代化建设所要达到的目标水平。\n\n[图片]\n\n1978年以来我国居民人均可支配收入情况\n\n——摘编自刘志新《百年党史关键词》\n\n[图片]\n\n1978年以来我国普通本专科在校学生情况\n\n材料三 党的十二大提出，到20 世纪末，使人民物质文化生活达到小康水平。此后，党的历次全国代表会议和国家的长期发展规划，都对小康前景作出具体设计，全国人民也凝聚在一起，一心一意奔小康。从“总体小康”到“全面建设小康社会”再到“全面建成小康社会”，党领导人民一步步接近胜利的目标。2021 年，我国全面建成小康社会目标如期实现，实现中华民族伟大复兴迈出了关键一步。\n\n——摘编自中共中央党史和文献研究院《中国共产党的一百年》\n\n(1 )材料一中的“小康”反映了自古以来我国人民怎样的追求?(1分)\n\n(2)据材料二，指出这一时期我国社会的变化，并结合材料三说明其原因。(4 分)\n\n(3 )请举一例我国全面建成小康社会目标如期实现后取得的成就。(1分)",
+    "answer": "( 6 分 )"
+  },
+  {
+    "id": 85,
+    "subject": "History",
+    "ques_type": "选择题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·24】(6 分)阅读下列材料，回答问题。\n\n材料一 早在原始社会末期，我国先民们为从事农业生产，对天文现象进行观察和记录，总结日月星辰的运行规律。至商代，已形成了较为完备的历法。由于生产活动的需要，古埃及人也对各种天象进行观测，他们通过观察尼罗河定期泛滥与天狼星的运行而得到灵感，从而创造了历法。\n\n——摘编自王斯德《世界通史.第一编，古代文明与地域性历史：<sub>1500</sub>年以前的世界》\n\n材料二 17 世纪，牛顿建立的经典力学理论架构，使人们认识到天体和地面上的物体一样，服从统一的运动规律；18世纪，天王星的发现彻底改变了人类对太阳系的认识；19世纪，人类测定了地球到附近恒星的距离。\n\n——摘编自苏宜《天文学新概论》",
+    "answer": "( 6 分 )"
+  },
+  {
+    "id": 86,
+    "subject": "History",
+    "ques_type": "解答题",
+    "source_file": "2026历史试卷",
+    "question": "【河南中考·25】(<sub>6</sub> 分)请阅读下面材料，围绕该观点，结合所学历史知识，写一篇80~ 120 字的小短文。(要求：题目自拟，观点明确；史实正确；条理清晰，语句通顺，表述完整)\n\n社会的每一次发展都是由多种力量博弈而成的，正是这种多重力量的存在，使得社会更为自由。——摘编自李宏图《欧洲文明的现代历程》\n\n# 河南省2026年初中学业水平考试\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《历史》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": "( 6 分)"
+  },
+  {
+    "id": 89,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·1】某地一天早晨的气温是 $-3^{\\circ} \\mathrm{C}$ , 到中午升高了 $5^{\\circ} \\mathrm{C}$ , 则中午的气温是\nA. $-3^{\\circ} \\mathrm{C}$ B. $-2^{\\circ} \\mathrm{C}$ C. $2^{\\circ} \\mathrm{C}$ D. $5^{\\circ} \\mathrm{C}$",
+    "answer": ""
+  },
+  {
+    "id": 90,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·2】今年我国六五环境日的主题为“全面绿色转型,共建美丽中国”. 将 “共建美丽中国” 这六个汉字分别写在某正方体的表面上,如图是它的一种展开图,则在原正方体中,与“建”字所在面相对的面上的汉字是\nA. 美 \nB. 丽 \nC. 中 \nD. 国\n\n[图片]\n\n(第2题)",
+    "answer": "C"
+  },
+  {
+    "id": 91,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·3】下列调查中,适宜用全面调查(普查)的是\nA. 检查某载人飞船的零部件质量 \nB. 检测一条河流的水质情况\nC. 了解某市中学生的课外阅读时间 \nD. 调查一批玉米种子的发芽率",
+    "answer": "B"
+  },
+  {
+    "id": 92,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·4】已知 $x = 2$ 是关于 $x$ 的方程 $x^{2} - mx = 6$ 的一个根, 则 $m$ 的值为\nA. 5 B. -5 C. 1 D. -1",
+    "answer": "A"
+  },
+  {
+    "id": 93,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·5】如图, $\\triangle ABC$ 与 $\\triangle A'B'C'$ 关于直线 $l$ 对称, $\\angle C = 90^{\\circ}, AC = 8, BC = 6$ , 则 $A'B'$ 的长为\nA. 6 B. 8 C. 10 D. 12\n\n[图片]\n\n[图片]\n\n(第5题)\n\n[图片]\n\n[图片]\n\n(第6题)",
+    "answer": "D"
+  },
+  {
+    "id": 94,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·6】如图是高铁线路上某高压线支撑结构的部分示意图, 已知 $AB \\parallel CD$ , $\\angle 1 = 50^{\\circ}$ , $\\angle 2 = 30^{\\circ}$ , 则 $\\angle 3$ 的度数为\nA. $90^{\\circ}$ B. $80^{\\circ}$ C. $70^{\\circ}$ D. $60^{\\circ}$",
+    "answer": "C"
+  },
+  {
+    "id": 95,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·7】下列式子中, 运算结果为 $x^{2} - 4$ 的是\nA. $(x - 2)^{2}$ B. $(x + 2)(2 - x)$ C. $(x + 2)(x - 2)$ D. $x(x - 4)$",
+    "answer": "B"
+  },
+  {
+    "id": 96,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·8】2026年3月,我国自主研发的 SYT80(T1200 级) 超高强度碳纤维发布,这是全世界第一款量产的 T1200 级碳纤维产品. SYT80 超高强度碳纤维拉伸强度突破 $8 \\times 10^{3}$ 兆帕,普通钢材的拉伸强度约为 $8 \\times 10^{2}$ 兆帕. 数据 “ $8 \\times 10^{3}$ ” 是 “ $8 \\times 10^{2}$ ” 的\nA. 2 倍 B. 5 倍 C. 8 倍 D. 10 倍",
+    "answer": "C"
+  },
+  {
+    "id": 97,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·9】如图, 在平面直角坐标系中, 矩形 $OABC$ 的边 $OC$ 在 $x$ 轴上, 对角线 $OB, AC$ 交于点 $P$ , $OA = 2, OC = 4$ . 将矩形 $OABC$ 向左平移, 当点 $P$ 的对应点落在 $y$ 轴上时, 点 $A$ 的对应点的坐标为\nA. $(-2, 2)$ B. $(-2, 1)$ C. $(0, 2)$ D. $(0, 1)$ \n\n[图片]\n\n(第9题)\n\n[图片]\n\n[图片]\n\n(第10题)",
+    "answer": "D"
+  },
+  {
+    "id": 98,
+    "subject": "Math",
+    "ques_type": "选择题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·10】团扇始于汉代,盛于唐宋,寓意“团圆友善”. 劳动课上,小红想在自己制作的团扇边缘选一段弧进行装饰. 如图,已知扇面边缘为 $\\odot O$ ,扇柄所在直线经过圆心 $O$ ,她过扇柄端点 $P$ 作 $PA, PB$ 分别与 $\\odot O$ 相切于点 $A, B$ ,得到 $\\widehat{AB}$ . 若 $\\odot O$ 的半径为 $9 \\mathrm{~cm}$ , $\\angle APB = 60^{\\circ}$ ,则小红想要装饰的 $\\widehat{AB}$ 的长为\nA. $3 \\pi \\mathrm{~cm}$ B. $6 \\pi \\mathrm{~cm}$ C. $9 \\pi \\mathrm{~cm}$ D. $27 \\pi \\mathrm{~cm}$",
+    "answer": "A"
+  },
+  {
+    "id": 99,
+    "subject": "Math",
+    "ques_type": "填空题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·11】请写出一个图象经过第一、三象限的正比例函数表达式____。",
+    "answer": ""
+  },
+  {
+    "id": 100,
+    "subject": "Math",
+    "ques_type": "填空题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·12】方程 $\\frac{2}{x+1} = \\frac{1}{x}$ 的解为 ____.",
+    "answer": "y=x(答案不唯一)"
+  },
+  {
+    "id": 101,
+    "subject": "Math",
+    "ques_type": "填空题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·13】如图, $AB$ 为 $\\odot O$ 的直径, $C, D$ 为 $\\odot O$ 上两点, $\\angle ADC = 40^{\\circ}$ , 则 $\\angle CAB$ 的度数为 ____.\n\n[图片]\n\n(第13题)",
+    "answer": "x=1"
+  },
+  {
+    "id": 102,
+    "subject": "Math",
+    "ques_type": "填空题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·14】在钢琴上弹奏不同的琴键,能够发出高低不同的声音,当同时弹奏两个相邻的白色琴键时,发出的声音构成二度音程. 如图是钢琴键盘的一部分,从 F,G,A,B 四个白色琴键中随机选两个琴键同时弹奏,发出的声音构成二度音程的概率为 ____.\n\n[图片]\n\n(第14题)\n\n[图片]\n\n(第15题)",
+    "answer": "50°"
+  },
+  {
+    "id": 103,
+    "subject": "Math",
+    "ques_type": "填空题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·15】如图, 在 $\\triangle ABC$ 中, $AB = AC = 5$ , $BC = 6$ , $CD$ 是角平分线. 点 $E$ 为边 $BC$ 上一点, 连接 $AE$ , 交 $CD$ 于点 $F$ , 连接 $BF$ . 若 $AE = 2\\sqrt{5}$ , 则 $BF$ 的长为 ____.",
+    "answer": "<eq>\\frac{1}{2}</eq>"
+  },
+  {
+    "id": 104,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·16】(10 分) (1) 计算: $(3 - \\pi)^{0} - 2^{-1} + \\sqrt{\\frac{1}{4}}$ .\n\n(2) 解不等式组: $\\left\\{ \\begin{array}{l} 3x - 1 \\leqslant 2, \\\\ 2x + 5 \\geqslant x + 3. \\end{array} \\right.$ ① ②\n\n完成以下解答过程.\n\ni）解不等式 ①, 得 ____.\n\nii）解不等式 ②, 得 ____.\n\niii) 把不等式 ① 和 ② 的解集在数轴上表示出来.\n\n[图片]\n\niv) 所以, 原不等式组的解集是 ____.",
+    "answer": "(10 分)"
+  },
+  {
+    "id": 105,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·17】(9 分) 加强中小学科技教育是服务国家创新驱动发展战略、培养未来科技创新人才的重要路径。某学校科创社团组装了甲、乙两个投篮机器人, 准备从中选一个参加青少年科技创新大赛。为此, 该社团对两个投篮机器人分别进行了 10 组测试 (每组测试投篮 10 次, 以投进次数作为测试成绩), 并对测试成绩整理、描述、分析如下。\n\n[图片]\n\n测试成绩统计表\n\n<table><tr><td>统计量</td><td>甲</td><td>乙</td></tr><tr><td>平均数</td><td>7.1</td><td>7.1</td></tr><tr><td>中位数</td><td>a</td><td>7</td></tr><tr><td>众数</td><td>8</td><td>b</td></tr><tr><td>方差</td><td>s21</td><td>s22</td></tr></table>\n\n根据以上信息,回答下列问题.\n\n(1) 表中 $a$ 的值为 $\\underline{\\quad}$ , $b$ 的值为 $\\underline{\\quad}$ , $s_1^2\\quad\\underline{\\quad}\\quad s_2^2$ (填“>”“=”或“<”).\n\n(2) 你认为科创社团应选哪个投篮机器人参加青少年科技创新大赛？请说明理由.",
+    "answer": "(9 分)"
+  },
+  {
+    "id": 106,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·18】(9分)近视可防可控不可逆,保持“一尺、一拳、一寸”的正确书写姿势能有效预防近\n\n视. 小文发现,一本书的长度加上她的一拳长是1尺,这本书长度的2倍比她的一拳长的3倍多1尺. 这本书的长度和小文的一拳长分别是多少尺?\n\n[图片]",
+    "answer": "(9分)"
+  },
+  {
+    "id": 107,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·19】(9分)如图,在□ABCD中,点E为边BC上一点,连接AE.\n\n(1) 请用无刻度的直尺和圆规作 $\\angle DCM$ , 使 $\\angle DCM = \\angle BAE$ , 且射线 $CM$ 交边 $AD$ 于点 $F$ (保留作图痕迹, 不写作法).\n\n(2) 判断线段 BE 与 (1) 中得到的线段 DF 的数量关系, 并给出证明.\n\n[图片]",
+    "answer": ""
+  },
+  {
+    "id": 108,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·20】(9 分) 今年是红军长征胜利 90 周年, 为传承红色基因、厚植爱国情怀, 某校学生上午 8:00 从学校出发步行到长征纪念广场开展研学活动, 学生步行的平均速度 $v(\\mathrm{km/h})$ 与步行全程所用时间 $t(\\mathrm{h})$ 的函数关系如图 1 所示.\n\n[图片]\n\n图1\n\n[图片]\n\n图2\n\n(1) 求 $\\nu$ 关于 $\\iota$ 的函数表达式.\n\n(2) 如果学生从学校出发步行到长征纪念广场所用时间不超过 $2.5 \\mathrm{~h}$ , 那么学生步行的平均速度至少为多少?\n\n(3) 学生出发 $0.25 \\mathrm{~h}$ 后, 李老师带着补给物品从学校出发, 沿与学生相同的路线先去补给点, 为学生整理、发放补给物品后, 再去长征纪念广场. 李老师、学生已走路程 $y(\\mathrm{km})$ 与学生步行时间 $t(\\mathrm{h})$ 的函数关系如图 2 所示. 下列三个说法:\n\n① 李老师在补给点停留的时间为 $1 \\mathrm{~h}$ ;\n\n②李老师比学生先到达长征纪念广场；\n\n③ 学生从学校到补给点所走路程为 $4 \\mathrm{~km}$ .\n\n其中正确说法的序号是____。",
+    "answer": ""
+  },
+  {
+    "id": 109,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·21】(9分)某学校为提高地下车库入口的行车安全性,计划对其进行改造.为此,某数学兴趣小组开展了综合与实践活动,记录如下.\n\n<table><tr><td>活动主题</td><td colspan=\"2\">地下车库入口改造</td></tr><tr><td>采集信息</td><td>图1是地下车库入口示意图.1点C,B,D在同一水平线上,点E,A,F在同一水平线上,CD//EF.2斜坡AB的长为10m,∠BAF=26.4°.3车库限高2.7m.</td><td><img src=\"https://cdn-mineru.openxlab.org.cn/result/2026-07-08/6bdea2af-4ebf-4b30-a63b-715a17045de7/45483e5518cce5b4e77a034d9594c1aed74686141ba167885ad4e5b518629166.jpg\"/>图1</td></tr><tr><td>设计方案</td><td>如图2,保持点A不动,将点B沿射线BD平移到点B&#x27;,使∠B&#x27;AF=18.4°.</td><td><img src=\"https://cdn-mineru.openxlab.org.cn/result/2026-07-08/6bdea2af-4ebf-4b30-a63b-715a17045de7/84249786aa813728c3f5a02e07263f8f58d4f99128a331f54f829f4df8c98539.jpg\"/>图2</td></tr><tr><td>完成任务</td><td>任务一:求BB&#x27;的长.任务二:调整限高.经计算,点C到斜坡AB&#x27;的距离约为3.47m.在保障行车安全的前提下,车库限高标志上的数值最大可为_.(结果均保留一位小数)</td><td><img src=\"https://cdn-mineru.openxlab.org.cn/result/2026-07-08/6bdea2af-4ebf-4b30-a63b-715a17045de7/ec4c2c56b3e4d5cf3871566dba07552c1e2e50a69a9a170499037066ebaaf501.jpg\"/>图3</td></tr></table>\n\n请帮数学兴趣小组完成表中的两个任务(参考数据: $\\sin 26.4^{\\circ} \\approx 0.44, \\cos 26.4^{\\circ} \\approx 0.90, \\tan 26.4^{\\circ} \\approx 0.50, \\sin 18.4^{\\circ} \\approx 0.32, \\cos 18.4^{\\circ} \\approx 0.95, \\tan 18.4^{\\circ} \\approx",
+    "answer": "(9 分)\n任务一:"
+  },
+  {
+    "id": 110,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·22】(10 分) 定义: 若点 $P, Q$ 在同一抛物线上, 且点 $Q$ 的横坐标比点 $P$ 的横坐标大 3 , 则称点 $Q$ 是点 $P$ 的“黄金搭档点”. 例如, 抛物线 $y = x^{2}$ 上, 点 $(3,9)$ 是点 $(0,0)$ 的“黄金搭档点”.\n\n(1) 点 $A(0, -3)$ 和点 $B$ 在抛物线 $y = x^{2} + bx + c$ 上, 点 $B$ 是点 $A$ 的“黄金搭档点”, 且点 $B$ 的纵坐标为 12. 求 $b, c$ 的值.\n\n(2) 点 $M, N$ 在 (1) 中的抛物线上, 且点 $N$ 是点 $M$ 的“黄金搭档点”.\n\n① 若点 M, N 的纵坐标相等, 求点 M, N 的横坐标.\n\n②抛物线上 M, N 两点之间的部分(含 M, N 两点) 记为图象 W, 设点 M 的横坐标为 m, 当 $-\\frac{5}{2} < m < 0$ 时, 若图象 W 上的最高点和最低点到 x 轴的距离之和为 5, 请直接写出 m 的值.",
+    "answer": "(10分)\n(1) ∵ 点 A(0, -3) 在抛物线 $y = x^{2} + bx + c$ 上，\n∴ c = -3.\n由题意知，点 B 的坐标为 $(3, 12)$ . ……\n∴ $9 + 3b - 3 = 12$ .\n∴ b = 2."
+  },
+  {
+    "id": 111,
+    "subject": "Math",
+    "ques_type": "解答题",
+    "source_file": "2026数学试卷",
+    "question": "【河南中考·23】(10 分) 在菱形 $ABCD$ 中, $\\angle BAD = 120^{\\circ}, AB = 4$ . 将边 $AB$ 绕点 $A$ 逆时针旋转至 $AE$ , 记旋转角为 $\\alpha$ . 作射线 $DE$ , 在射线 $DE$ 上取一点 $H$ , 使 $BH = BE$ , 连接 $CH$ .\n\n(1) 观察猜想\n当 $\\alpha = 30^{\\circ}$ 时, 如图 1, $\\angle BEH$ 的度数为 ____, CH 的长为 ____.\n\n(2) 探究证明\n\n当 $0^{\\circ} < \\alpha < 120^{\\circ}$ 时，(1) 中的两个结论是否仍然成立？若成立，请仅就图2的情形进行证明；若不成立，请说明理由。\n\n(3) 拓展延伸\n\n当 $0^{\\circ} < \\alpha < 120^{\\circ}$ 时, 若 $\\triangle DCH$ 的面积为 $4\\sqrt{2}$ , 请直接写出此时旋转角 $\\alpha$ 的度数.\n\n[图片]\n\n图1\n\n[图片]\n\n图2\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《数学》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": ""
+  },
+  {
+    "id": 113,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·1】图 1 是甲骨文中的“乐”字, 其含义是木架上设着丝弦的乐器。拨动木架上的丝弦, 是通过____的振动发声的; 调节丝弦的松紧程度, 是为了改变声音的____(填声音的特性)。\n\n[图片]\n\n图1\n\n[图片]\n\n图2\n\n[图片]\n\n图3",
+    "answer": "丝弦 音调"
+  },
+  {
+    "id": 114,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·2】石子饼是河南特色面食。图 2 是将面饼放在烧热的石子上烙制的情景, 面饼的内能增加是通过____的方式实现的; 空气中弥漫着面饼的香味, 这是____现象。",
+    "answer": "热传递 扩散"
+  },
+  {
+    "id": 115,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·3】杆秤是我国传统的称量工具。某同学利用自制杆秤称量物体质量,秤杆平衡时如图 3 所示。若将挂绳对秤杆的力设为动力,作用点为 C 点,则此时秤杆可看作____(填“省力”或“费力”)杠杆。若想增大该杆秤能称量的最大质量,在不改变其他条件的情况下,可将提纽在秤杆上的位置 B 适当向____(填“左”或“右”)移动。",
+    "answer": "省力 左"
+  },
+  {
+    "id": 116,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·4】红旗渠被称为“人工天河”。在修建过程中,甲、乙两人用同一条绳子沿同一方向拉一辆装有石料的车,甲用力 $300 \\mathrm{~N}$ ,乙用力 $260 \\mathrm{~N}$ ,则该车受到绳子的拉力大小为 ____ N。红旗渠的总干渠入水口与出水口高度差约 $10 \\mathrm{~m}$ ,实现渠水全程自流,渠水的动能是由 ____ 能转化而来的。渠水除了有灌溉作用以外,还可以调节周边气温,这是由于水具有较大的 ____ 。",
+    "answer": "560 重力势 比热容"
+  },
+  {
+    "id": 117,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·5】某煮茶器的额定电压为 220 V, 有“加热”和“保温”两个挡位, 额定功率分别为 1 000 W、110 W, 其电路简图如图 4 所示, 两电热丝的电阻分别为 $R_{1}$ 、 $R_{2}$ 。当开关 $S_{1}$ 闭合、 $S_{2}$ 断开时, 煮茶器处于 ____ 挡位, 正常工作时电路中的电流为 ____ A。当开关 $S_{1}$ 、 $S_{2}$ 均闭合时, 煮茶器正常工作 5 min, 消耗的电能为 ____ J。\n\n[图片]\n\n图4",
+    "answer": "保温 0.5 $3 \\times 10^{5}$"
+  },
+  {
+    "id": 118,
+    "subject": "Physics",
+    "ques_type": "填空题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·6】《天工开物》记载了我国古人收获稻粒的场景。如图5甲,人向下挥动稻秆时,以稻秆为参照物,石板是____(填“运动”或“静止”)的。如图5乙,将稻秆摔打在石板上,稻粒从稻秆上脱离,请从物理学的角度解释这一现象:____。\n\n[图片]\n\n甲\n\n乙\n\n图 5",
+    "answer": "运动 稻秆由于受到石板的作用力而停止运动,稻粒由于惯性继续运动,所以稻粒从稻秆上脱离"
+  },
+  {
+    "id": 119,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·7】制作下列物品选用的材料,应用其具有良好导热性的是\nA. 用塑料制作电工钳把手 B. 用橡胶制作汽车轮胎 C. 用铁制作家用的炒菜锅 D. 用铜制作静电消除器",
+    "answer": "C"
+  },
+  {
+    "id": 120,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·8】下列体育项目中的做法,为了增大摩擦的是\nA. 自行车减速时用力捏闸\nB. 将冰壶的底部打磨光滑\nC. 轮滑鞋底部安装有滚轮\nD. 给赛车的轴承加润滑油",
+    "answer": "A"
+  },
+  {
+    "id": 121,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·9】端午节,某同学观察厨房中的一些现象,下列分析正确的是\nA. 从冰箱中取出冷冻粽子,粽子表面出现的一层“白霜”是凝固形成的\nB. 将冷冻粽子放入锅内冷水中,过一会儿,锅外壁出现的水珠是液化形成的\nC. 打开燃气灶,煮粽子的过程中,锅上方出现的“白气”是汽化形成的\nD. 煮粽子的过程中,锅中的水沸腾后,继续对其加热,水温会不断升高",
+    "answer": "B"
+  },
+  {
+    "id": 122,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·10】某同学对生活中的用电行为进行了调查,下列做法符合安全用电原则的是\nA. 一个插座同时接入多个大功率用电器 B. 未切断电源就更换灯泡 C. 使用测电笔时用手指接触笔尾金属体 D. 使用绝缘皮破损的插头",
+    "answer": "C"
+  },
+  {
+    "id": 123,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·11】图 6 是同学们利用身边的物品所做的趣味小实验, 下列分析正确的是\n\n[图片]\n\n甲\n\n[图片]\n\n乙\n\n图6\n\n[图片]\n\n丙\n\n[图片]\n\n丁\n\nA. 甲: 挤压装满水的玻璃瓶, 细玻璃管内的水面变化, 说明大气压发生变化  \nB. 乙: 水从塑料瓶侧壁的一小孔喷出, 说明液体的内部向各个方向都有压强  \nC. 丙: 往水平吸管中吹气, 竖直吸管中水面上升, 说明流速大的位置压强大  \nD. 丁: 将吸管插入水中, 封住上端并提起, 可取出一些水, 说明大气压的存在",
+    "answer": "D"
+  },
+  {
+    "id": 124,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·12】如图 7, 某工人用大小为 300 N 的拉力 F, 通过滑轮将重为 240 N 的物料匀速提升, 在 30 s 内物料竖直上升了 4 m。某同学根据以上数据对该过程进行分析和计算, 下列结果正确的是\nA. 使用的滑轮重为60N\nB. 拉力 F 做的功为 2400J\nC. 拉力 F 做功的功率为 80W\nD. 该滑轮的机械效率为 80%\n\n[图片]\n\n图7",
+    "answer": "D"
+  },
+  {
+    "id": 125,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·13】(双选)图8为某同学制作的简易电动机,下列说法正确的是\nA. 简易电动机的线圈通电能转动,是利用电磁感应现象\nB. 为使线圈连续转动,要将线圈两端引线漆皮全部刮掉\nC. 若要改变线圈转动方向,可只将磁体的磁极位置调换\nD. 电风扇转动的工作原理与简易电动机的工作原理相同\n\n[图片]\n\n图8",
+    "answer": "CD"
+  },
+  {
+    "id": 126,
+    "subject": "Physics",
+    "ques_type": "选择题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·14】(双选)某同学对学校的科技赋能建设项目进行了研究,下列说法正确的是\nA. 装在楼顶的太阳能电池板利用的太阳能,来自太阳内部核聚变\nB. 装在操场周围的风力发电照明灯利用的风能,属于可再生能源\nC. 装有AI学习系统的设备所用芯片,主要是由超导材料制成的\nD. 利用新配备的天文望远镜观测到的月球,距离地球约380km",
+    "answer": "AB"
+  },
+  {
+    "id": 127,
+    "subject": "Physics",
+    "ques_type": "解答题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·三、作图题(本题共2小题,每小题2分,共4分)】\n## 三、作图题(本题共2小题,每小题2分,共4分)\n\n15. 如图 9 甲, 科技节上, 人在魔术箱旁, 看到箱内遨游在空中的“完整”火箭, 其实是半个火箭模型粘在箱内倾斜的平面镜上产生的视觉效果。请在图 9 乙中画出人眼通过平面镜看到火箭模型上 A 点的像 $A'$ 的光路图。\n\n[图片]\n\n甲\n\n图9\n\n[图片]\n\n乙\n\n[图片]\n\n图10\n\n16. 如图 10, 某运动员手握拉环通过牵引绳向岸边拉皮划艇。请画出皮划艇所受重力和牵引绳对拉环拉力的示意图。(O 点为皮划艇的重心)",
+    "answer": ""
+  },
+  {
+    "id": 128,
+    "subject": "Physics",
+    "ques_type": "解答题",
+    "source_file": "2026物理试卷",
+    "question": "【河南中考·四、实验探究题(本题共3小题,第17题4分,第18题7分,第19题8分,共19分)】\n## 四、实验探究题(本题共3小题,第17题4分,第18题7分,第19题8分,共19分)\n\n17. 某小组进行“探究凸透镜成像的规律”的实验。\n\n(1)图 11 是用同一个凸透镜观察远处树木和近处课本的情景,请由此提出一个可探究的物理问题:____。\n\n[图片]\n\n图11\n\n[图片]\n\n[图片]\n\n图12\n\n(2)该小组利用图 12 的装置进行实验,凸透镜的焦距为 10.0 cm,“F”形光源的高度为 2.5 cm。实验记录表如下:\n\n<table><tr><td>实验序号</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr><tr><td>物距/cm</td><td>30.0</td><td>25.0</td><td>20.0</td><td>18.0</td><td>15.0</td><td>10.0</td><td>8.0</td></tr><tr><td>像距/cm</td><td>15.0</td><td>16.7</td><td>20.0</td><td>22.3</td><td>30.0</td><td>\\</td><td>\\</td></tr><tr><td>像的高度/cm</td><td>1.3</td><td>1.7</td><td>2.5</td><td>3.1</td><td>5.0</td><td>\\</td><td>\\</td></tr><tr><td>像的正倒</td><td>倒</td><td>倒</td><td>倒</td><td>倒</td><td>倒</td><td>\\</td><td>正</td></tr></table>\n\n①分析实验过程及表格中的信息可以发现:光屏上的像比物小的条件为物距____(填“大于”或“小于”)20.0 cm;物距越____,光屏上的像越小。\n\n②若在第5次实验的基础上,保持凸透镜位置不变,移动“F”形光源使物距为13.0 cm,请推测应将光屏向____(填“靠近”或“远离”)凸透镜的方向适当移动,光屏上能成清晰的像。\n\n18. 某小组用图 13 甲中的器材测量定值电阻的电阻, 所用电源电压为 $3 \\, V$ 。\n\n[图片]\n\n甲\n\n[图片]\n\n乙\n\n图13\n\n[图片]\n\n丙\n\n(1)请用笔画线表示导线,将图 13 甲中的电路连接完整。\n\n(2) 正确连接好电路, 闭合开关前, 应将滑动变阻器的滑片 P 置于____(填“A”或“B”)端。闭合开关后, 移动滑片 P, 电流表示数发生变化, 而电压表无示数, 造成该故障的原因可能是____(写出一种即可)。\n\n(3) 排除故障后进行实验, 当电压表示数如图 13 乙所示时, 电流表示数如图 13 丙所示, 则通过定值电阻的电流为 ____ A, 本次测得定值电阻的电阻为 ____ Ω。\n\n(4)为减小误差,要多次测量,设计表格如下,请将表中横线处的内容填写完整。\n\n<table><tr><td>实验序号</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>...</td></tr><tr><td>电压U/V</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>电流I/A</td><td></td><td></td><td></td><td></td><td></td><td",
+    "answer": ""
+  },
+  {
+    "id": 131,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·1】继全球发展倡议、全球安全倡议、全球文明倡议之后，习近平主席提出了全球治理倡议。这一重要倡议以奉行主权平等、遵守国际法治、践行多边主义、倡导以人为本、注重行动导向为核心理念，紧扣影响全球治理体系改革和建设的关键问题，顺应人类历史发展大趋势，反映世界政治文明进步大逻辑，对维护世界和平与发展具有重大意义。全球治理倡议的提出表明①中国秉持共商共建共享的全球治理观②中国为全球治理提出中国方案，贡献中国智慧③中华人民共和国主席是代表国家行使外事权的行政机关④中国学习和借鉴人类文明的一切成果，坚持以我为主，兼收并蓄A. ①② B. ①③ C. ②④ D. ③④",
+    "answer": ""
+  },
+  {
+    "id": 132,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·2】习近平主席历年发表的新年贺词中多次提及“构建人类命运共同体”。例如，二○二二年强调“世界各国风雨同舟、团结合作，才能书写构建人类命运共同体的新篇章”；二○二六年强调“中国始终站在历史正确一边，愿同各国携手促进世界和平发展，推动构建人类命运共同体”。这展现了中国①发挥负责任大国作用②集中力量办好自己的事情③与全世界所有国家共同合作的实际行动④为推动建设相互尊重、公平正义、合作共赢的新型国际关系不懈努力A. ①② B. ①④ C. ②③ D. ③④",
+    "answer": "A"
+  },
+  {
+    "id": 133,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·3】“惩治环境违法犯罪。审结生态环境资源刑事案件 2.4 万件，同比下降 5.4% ，民事案件 16.4 万件，同比增长 8.4% 。”以上内容出自一份十四届全国人大四次会议审议的工作报告。分析内容可知，作这份工作报告的国家机关是A. 中央人民政府 B. 最高人民检察院C. 最高人民法院 D. 全国人大常委会",
+    "answer": "B"
+  },
+  {
+    "id": 134,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·4】从开展网络征求意见活动、累计收到超过311.3万条网民建言，到各级政府部门分类汇总涉及便利子女就学、提高就业质量等老百姓关心的“身边事”，“十五五”规划编制坚持顶层设计和问计于民相统一，真正让“党和政府要干的”与“百姓心里盼的”同频共振。这说明\n\n①网络丰富了民主形式，拓宽了民主渠道②政府推进政务公开，保障公民的决定权③党和政府坚持以人民为中心的发展思想④民主决策的过程要保证广泛的公民参与A. ①②③ B. ①②④ C. ①③④ D. ②③④",
+    "answer": "C"
+  },
+  {
+    "id": 135,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·5】阅读下面材料，根据内容可以推断，这部法律是\n\n有这样一部法律，她所规定的内容是国家生活中带有全局性、根本性的问题，她的部分内容摘录如下：●中华人民共和国是工人阶级领导的、以工农联盟为基础的人民民主专政的社会主义国家。●中华人民共和国的一切权力属于人民。●中华人民共和国公民有言论、出版、集会、结社、游行、示威的自由。A.《中华人民共和国民族团结进步促进法》B. 《中华人民共和国民法典》C. 《中华人民共和国国家发展规划法》 D. 《中华人民共和国宪法》",
+    "answer": "C"
+  },
+  {
+    "id": 136,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·6】在我国，边防战士行进在雪山之脊，值守在浪涛之畔，守护着祖国的每一寸土地；一代代“治沙人”植绿护绿，织就世界最长“绿色围脖”，支撑生态安全；多所学校以各种形式开展国家网络安全宣传周活动，让网络安全在青少年心中落地生根⋯⋯这些事例①说明实现生态安全是维护国家安全的根本目的②体现了我国的国家安全体系涵盖诸多领域③启示公民行使维护国家安全的权利④是坚持总体国家安全观的具体表现A. ①③ B. ①④ C. ②③ D. ②④",
+    "answer": "D"
+  },
+  {
+    "id": 137,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·7】曾经，我国盾构机市场被国外垄断，技术封锁、高价掣肘，国家重大工程屡屡受制于人。如今，雪域高原上，国产的世界首台双结构硬岩掘进机“雪域先锋号”刀盘转动；长江入海口，由我国自主研制的世界最大直径高铁盾构机“领航号”智能掘进 突 破11000 米大关……今昔对比，比出了我国①突破关键核心技术的创新活力②实施创新驱动发展战略的行动实力③助力全球商品贸易高速发展的强劲动力④处理经济发展与生态环境保护关系的协调能力A. ①② B. ①③ C. ②④ D. ③④\n\no. 兄 叫 て 入 以 不 ， 以 刁 近 干 问 心 刀 核 心 时 兄 牛 犬 向 反 里 视 残 疾 八 尹 业 ， 对 残 疾人格外关心、格外关注。例如，制定并实施的公共文化服务保障法、公共图书馆法等，为残疾人共享文化成果提供了有力的法律保障。这体现了①我国立法保障残疾人的受教育权②中华人民共和国公民享有平等权③残疾人的文化权利受到法律的特殊保障④让全体人民共享发展成果是党的奋斗目标A. ①② B. ①④ C. ②③ D. ③④",
+    "answer": "D"
+  },
+  {
+    "id": 138,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·9】《中华人民共和国生态环境法典》第十条规定：“公民应当增强生态环境保护意识，采取简约适度、绿色低碳的生活方式”。这一规定要求公民①少用或不用一次性产品②为了节约粮食而食用过期食品③绿色出行，尽量搭乘公共交通工具④建立健全绿色低碳发展机制，完善相关政策体系A. ①② B. ①③ C. ②④ D. ③④",
+    "answer": "C"
+  },
+  {
+    "id": 139,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·10】随着互联网和新媒体的发展，古诗词借助短视频、社交平台、线上展览等多种形式，以更加生动、形象、便捷的方式呈现在大众面前，与大众产生了强烈的共鸣。许多人感叹：小时候学过的诗词，是长大后才读懂的人生。这告诉我们①中华文化虽历经沧桑，仍薪火相传、历久弥新②小时候思维能力弱，学习古诗词是长大后的事③学习能够为我们的成长奠定良好的基础，需要终身学习④古诗词必须与互联网、新媒体结合，才能实现创新发展A. ①② B. ①③ C. ②④ D. ③④",
+    "answer": "B"
+  },
+  {
+    "id": 140,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·11】世间哪有什么岁月静好，不过是有人替我们负重前行。这句话启示我们①要调节情绪，做情绪的主人 ②学会感恩，帮助他人③对社会负责，在尽责中成长 ④居安思危，保护自己A. ①② B. ①④ C. ②③ D. ③④",
+    "answer": "B"
+  },
+  {
+    "id": 141,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·12】暑期将至，学校向学生发出了一份温馨提示：“不私自到江河、湖泊、水库玩耍，无家长陪伴不游泳。户外活动尽量避开高温时段，大量出汗后应及时补充水分。注意防范游戏充值诈骗、冒充好友诈骗。”这份温馨提示旨在让学生A. 拒绝使用网络 B. 充盈精神世界C. 掌握自救方法 D. 增强安全意识",
+    "answer": "C"
+  },
+  {
+    "id": 142,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·13】一天，性格温和的班主任孙老师一反常态地在教室门外与人高声争辩，原来，他是在与检查纪律的人员据理力争，希望通过解释让班级免于被扣分。目睹这一幕，同学们内心受到了触动。此后，班级悄悄地发生了变化：违反纪律的现象变少了，主动参加义务劳动的同学变多了，师生关系更加融洽了……该班级的变化告诉我们①老师是学生成长的引路人②性格温和的老师更应受到尊重③建设美好集体有赖于个人英雄主义④自觉维护集体荣誉可以让集体更美好A. ①③ B. ①④ C. ②③ D. ②④",
+    "answer": "D"
+  },
+  {
+    "id": 143,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·14】“不以物喜，不以己悲，居庙堂之高则忧其民，处江湖之远则忧其君。是进亦忧，退亦忧。然则何时而乐耶?其必曰‘先天下之忧而忧，后天下之乐而乐’乎！”《岳阳楼记》中的这段文字启示我们要A. 允许自己持续地处于负面情绪状态 B. 坚持律己宽人的处世准则C. 弘扬以自强不息为核心的民族精神 D. 具有忧国忧民的爱国情怀",
+    "answer": "B"
+  },
+  {
+    "id": 144,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·15】某校学生因学习时饱受鸟鸣干扰而致信校长信箱，请求派专人拆除鸟巢。校长回以一封有温度的信，信中写道：这世界不是为了某个人而存在的，学会与万物共存，是成长的必修课。随后，学校在远离教学区的场所放置了人工鸟巢，想办法引鸟儿“搬家”。校长回信中这句话表达的意思是\n\nA. 学生要正确认识自己，避免产生自我意识B. 学生勇于提出意见是一种成长，值得鼓励C. 我们处于一个开放互动的世界D. 我们要坚持人与自然和谐共生",
+    "answer": "D"
+  },
+  {
+    "id": 145,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·16】给右边漫画拟定一个标题，最为恰当的是A. 生命有接续B. 劳动见成效C. 孝亲敬长，行动彰显D. 代代种树，才成家风\n\n[图片]",
+    "answer": "D"
+  },
+  {
+    "id": 146,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·17】一位短跑运动员说：遭遇挫折在运动员成长过程中很正常，重要的是如何面对它。如果成绩到达瓶颈了，首先要反省自己，是起跑能力差、跑动技术不行，还是力量不够、心态不稳定等，找到问题之后，再想办法找不同的人寻求建议。这位运动员提出的战胜挫折的方法是①科学归因，提升对挫折的认知 ②加强训练，增强自身的实力③向他人寻求帮助 ④发现自己的长处A. ①③ B. ①④ C. ②③ D. ②④",
+    "answer": "A"
+  },
+  {
+    "id": 147,
+    "subject": "Politics",
+    "ques_type": "选择题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·18】(6 分)联系所学道德与法治课程内容，分析下面资料卡片，可以得出哪些结论?",
+    "answer": "( 6 分 )"
+  },
+  {
+    "id": 148,
+    "subject": "Politics",
+    "ques_type": "解答题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·19】(8 分)下面是初中生小德与 AI (人工智能)的对话。联系所学道德与法治课程内容，对小德与AI的对话过程进行辨别与分析。\n\n<table><tr><td>小德:我是一名初中生,学校举办时事述评征文比赛,要求提交800字左右的原创作品。请帮我查找一则对初中生有教育意义的社会时事。AI:一位现役军人看到有人溺水,毫不犹豫地跃入湖中连救5人。小德:分析一下这则时事给初中生带来的启示。AI:这位军人有高度的社会责任感,初中生应当像他一样见义勇为,救他人于危难之际。小德:你说得不对。未成年人如果鲁莽行事,容易使自己陷入险境。老师说,遇到这种情况时,我们应在保全自己、减少伤害的前提下见义智为。AI:你说得有道理。在这种情况下,初中生应该借助他人或社会的力量施以援手。小德:请按照上面的思路,生成一份符合比赛要求的时事述评。AI:好的,我已生成你需要的时事述评。小德:真不错!我就直接用你写的参加比赛了。</td></tr></table>",
+    "answer": "( 8 分 )"
+  },
+  {
+    "id": 149,
+    "subject": "Politics",
+    "ques_type": "解答题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·20】(10分)阅读材料，完成任务。\n\n2025 年，全国检察机关起诉侵害未成年人犯罪和受理审查起诉未成年人犯罪同比分别下降2.2% 和9.8% ，为近5 年首次“双下降”。首次“双下降”，既彰显司法机关对侵害未成年人犯罪零容忍的坚定立场，也体现出对“问题幼苗”宽容不纵容，给予教育、感化、挽救等温情守护。\n\n我们可以从一起校园欺凌案件的处置来看司法机关对未成年人的守护：王某等9名未成年学生对同学李某实施欺凌行为，导致李某受到身心伤害。法院在保障受害未成年人合法权益的同时，深挖9 个家庭的监护缺位问题，有针对性地开展家庭教育指导工作，促进欺凌者矫正偏差行为；通过制发司法建议等形式促进学校整改，就防范学生欺凌等予以指导。\n\n(1 )联系所学道德与法治课程内容，结合该起案件的处置中司法机关守护未成年人实施的一系列举措，谈谈司法机关为什么要实施这些举措。(<sub>6</sub> 分)\n\n(2 )巩固“双下降”成效，预防未成年人犯罪，不仅需要司法机关、学校和家长的守护，更需要未成年人自己的积极行动。如果家庭教育出现问题，未成年人应该怎样应对?完成下面表格，给遇到家庭教育问题的未成年人提出建议。(4 分)\n\n<table><tr><td></td><td>家庭教育问题</td><td>给未成年人的建议(每项写两条)</td></tr><tr><td>一</td><td>有的家长不懂家庭教育,在孩子犯错时只会批评。</td><td></td></tr><tr><td>二</td><td>有的家长对孩子疏于管教,导致孩子过早进入社会,容易沾染不良习气。</td><td></td></tr></table>",
+    "answer": "( 10 分)"
+  },
+  {
+    "id": 150,
+    "subject": "Politics",
+    "ques_type": "解答题",
+    "source_file": "2026道法试卷",
+    "question": "【河南中考·21】(12分)下面是一节道德与法治大单元复习课的部分环节，复习的内容是七年级上册第一单元“成长的节拍”、九年级下册第三单元“走向未来的少年”。请你参与课堂学习并完成相关任务。\n\n在自主学习之后的展示交流中，几位同学分享了自己的学习心得。\n\n小豫：“我发现，七年级上册第一单元作为初中道德与法治课的起始单元，它的内容正符合我刚刚进入初中时的所思所感所想。”\n\n小治：“作为初中道德与法治课的收尾单元，九年级下册第三单元也正是我们在毕业季时的真实写照：回首过去，我们依依不舍；展望未来，我们满怀期待。”\n\n大河：“的确如此，道德与法治课一直陪伴着我们，帮助我们解决生活中的问题。”\n\n(1 )结合自身经历，谈谈初中道德与法治课的起始单元与收尾单元分别帮助你解决了哪些实际问题。(4 分)\n\n(2 )参与“教材栏目助我学习”活动，探究起始单元与收尾单元的教材栏目，分析栏目功能，补充完成以下内容。(4 分)\n\n[图片]\n\n(3 )参与“课程价值引我前行”活动，按照“分析原因—提出对策”的思路，续写下面这封信，让道德与法治课的价值之光照耀我们的成长之路。(4 分)亲爱的同学：\n\n你好！我是陪伴了你三年的初中道德与法治课，我既是你的老师，也是你的朋友。\n\n你即将进入新的人生阶段，接下来再相遇时，我会是“思想政治课”“思想政治理论课”，或是“大思政课”。我会一直引领你、鼓励你，伴你成长。\n\n临近毕业，你可能会有些担心，甚至有一些焦虑、紧张。我想告诉你：\n\n---\n\n============================================================\n============================================================\n\n> **📝 以上为《道德与法治》试题部分，以下为答案部分的分界线，答案请参见独立答案文件。**\n\n---\n\n============================================================\n============================================================",
+    "answer": "( 12 分)"
+  }
+]

@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+*.pyo
+.egg-info/
+*.egg
+.pytest_cache/
+.venv-molscribe/
+*.molscribe-cache.jsonl
+*.molscribe-report.json
+*.molecular-structures.jsonl
+logs/
+*.log
+.env
+!.env.example
+
+# 本地运行状态与生成产物
+data/runtime/*
+!data/runtime/.gitkeep
+llm-test/results/
+teacher_agent.egg-info/
+
+# Codex / Superpowers 临时工作区
+.worktrees/
+.superpowers/

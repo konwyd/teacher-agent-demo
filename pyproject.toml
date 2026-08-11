@@ -1,0 +1,39 @@
+[project]
+name = "teacher-agent"
+version = "0.1.0"
+description = "Research demo: Chinese junior-high math Teacher Agent (DeepSeek + LangGraph + Graph RAG)"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "langgraph>=0.2",
+    "openai>=1.30",          # DeepSeek OpenAI-compatible client
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "neo4j>=5.20",
+    "qdrant-client>=1.9",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.35", "requests>=2.31"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "httpx>=0.27"]
+# Install MolScribe through scripts/install_molscribe_env.sh instead of this
+# project environment: MolScribe 1.1.1 requires torch<2.0, while local model
+# inference uses PyTorch 2.x. RDKit stays listed for tooling/type discovery.
+chem-structure = ["rdkit==2025.9.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "safety_contract: permanent safety and public-contract regression",
+    "legacy_lock: frozen implementation-lock test; keep green and add no new cases",
+    "teaching_behavior: new multi-turn teaching-quality behavior test",
+]
