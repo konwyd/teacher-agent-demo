@@ -30,6 +30,10 @@ canonical loop。`app/agent` 的旧结构化工作流仍保留，服务于兼容
 
 实现归属如下：
 
+canonical loop 面向通用 K9 数学对话；确定性验证的权威覆盖在当前已支持的
+一元一次方程上最强。对其他主题，DeepSeek 可以继续教学，但不能把教学性推理说成
+已经由确定性 checker 验证。
+
 - `prototypes/llm_led_teacher/logic.py`：episode 状态、观察/软节奏、验证、
   DeepSeek 调用、断言审计、一次性 repair 与回合记录。
 - `prototypes/llm_led_teacher/rag_adapter.py`：canonical loop 对检索层的唯一
@@ -47,7 +51,8 @@ canonical loop。`app/agent` 的旧结构化工作流仍保留，服务于兼容
 
 `problem_context` 是 active problem，首轮建立后跨回合保留；观察器只能提供软
 节奏，不能重写题目或裁定数学正误。学生尝试与教师可验证断言均交给确定性
-verifier；不支持的题型仍可由 DeepSeek 正常教学，但不能伪装为已经验证。
+verifier。确定性验证对当前已支持的一元一次方程最强；其他通用 K9 数学主题仍可由
+DeepSeek 正常教学，但不能伪装为已经验证。
 
 检索位于学生验证之后、教师生成之前。`retrieval_reference` 是不可信、可选的
 辅助证据，必须与 `problem_context`、`deterministic_verification`、
@@ -81,8 +86,10 @@ problem 连续两次被 verifier 确认答错、或学生明确表示完全不�
 这些 gates 只限制检索内容，绝不选择教学动作或强制学生按脚本作答。
 
 新题会清除前题缓存并检索一次；普通追问复用当前问题缓存。若例题后来首次获准且
-缓存只有参考资料，可刷新一次请求例题。disabled、empty 和 error 本轮可缓存，
-但后续明确例题请求可以重试。检索结果不会写入 `problem_context` 或
+此前缓存尚未标记为允许例题，则可刷新一次请求例题（无论旧结果是 reference、
+disabled、empty 还是 error）。一旦缓存已经在允许例题的条件下生成，后续回合会
+复用它，不承诺对 cached disabled、empty 或 error 自动重试；下一个新题才会清除
+缓存并开始新的检索。检索结果不会写入 `problem_context` 或
 `previous_verified_step`。
 
 Chroma provider 是惰性加载的向量检索实现，支持 `CHROMA_SERVER` 指定的 HTTP
