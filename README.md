@@ -41,7 +41,7 @@ $env:TEACHER_RAG_ENABLED = "true"
 $env:CHROMA_SERVER = "localhost:8002"
 ```
 
-也可以用 `TEACHER_RAG_VECTORDB_PATH` 指定本地持久化向量库路径。完整环境变量和运行说明见 [prototypes/llm_led_teacher/README.md](prototypes/llm_led_teacher/README.md)。检索被禁用、为空或失败时，都不会阻断教学。
+也可以使用本地持久化向量库：必须先清除或取消设置 `CHROMA_SERVER`（HTTP 服务优先），再设置 `TEACHER_RAG_VECTORDB_PATH`。完整环境变量和运行说明见 [prototypes/llm_led_teacher/README.md](prototypes/llm_led_teacher/README.md)。检索被禁用、为空或失败时，都不会阻断教学。
 
 ## 验证
 

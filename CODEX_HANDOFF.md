@@ -175,8 +175,10 @@ Remove-Item Env:USE_REAL_LLM_FOR_EVAL
 真实 Chroma、bge-m3-compatible embedding 和 DeepSeek 检查依赖本机配置、可用服务
 与成本授权，应分别记录 PASS、FAIL 或 NOT RUN；外部服务缺失绝不等价于 PASS。
 
-本次只更新交接文档，执行其 focused handoff 搜索和 `git diff --check`；不把这类
-文档检查表述成 runtime 或真实服务验证。
+本次完整五份文档刷新及其最终修复后的文档状态，已在最终提交前运行完整离线 gate：
+`python -m pytest` 为 `388 passed, 1 warning`，`python scripts/run_eval.py` 在离线 mock
+模式为 `38/38 passed`。此外执行了 focused 文档标记检查、所有文档路径验证、占位符扫描
+和 `git diff --check`；这些文档检查不表示 runtime 或真实外部服务验证。
 
 ## 10. 已知问题与下一步
 

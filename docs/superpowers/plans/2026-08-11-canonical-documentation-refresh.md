@@ -30,7 +30,7 @@
 - Consumes: current runtime entry point, dependency groups, RAG environment names, and repository invariants.
 - Produces: the default-branch landing page and quick-start instructions consumed by users and contributors.
 
-- [ ] **Step 1: Replace the stale positioning and architecture description**
+- [x] **Step 1: Replace the stale positioning and architecture description**
 
 Use these exact top-level sections in this order:
 
@@ -55,7 +55,7 @@ State explicitly under `当前架构`:
 - `TeachingPlanner`, `StrategyRegistry`, and mastery-driven hard flow control are not part of the canonical loop;
 - `app/agent` is retained as a legacy/research baseline.
 
-- [ ] **Step 2: Correct the scope language**
+- [x] **Step 2: Correct the scope language**
 
 Replace the one-variable-equation MVP claim with the explicit distinction:
 
@@ -68,7 +68,7 @@ that the checker verified them.
 
 Render the final copy naturally in Chinese without expanding the checker claim.
 
-- [ ] **Step 3: Document the canonical quick start**
+- [x] **Step 3: Document the canonical quick start**
 
 Use PowerShell commands that point to the actual UI:
 
@@ -83,7 +83,7 @@ streamlit run prototypes/llm_led_teacher/streamlit_app.py
 Explain that `DEEPSEEK_API_KEY` is required for real conversations and must
 never be committed.
 
-- [ ] **Step 4: Document optional RAG without making it mandatory**
+- [x] **Step 4: Document optional RAG without making it mandatory**
 
 Include the install command and two connection modes:
 
@@ -97,7 +97,7 @@ Also mention `TEACHER_RAG_VECTORDB_PATH` as the alternative local persistent
 path, and link to `prototypes/llm_led_teacher/README.md` for the complete list.
 State that disabled, empty, or failed retrieval does not block teaching.
 
-- [ ] **Step 5: Add verification, repository map, and current limitations**
+- [x] **Step 5: Add verification, repository map, and current limitations**
 
 Use the exact offline gates:
 
@@ -119,7 +119,7 @@ List the pending multi-question and `single_move` enforcement work as known
 limitations and link to
 `docs/superpowers/specs/2026-08-10-single-move-turn-contract-design.md`.
 
-- [ ] **Step 6: Run focused README checks**
+- [x] **Step 6: Run focused README checks**
 
 Run:
 
@@ -140,7 +140,7 @@ architecture and operational markers.
 - Consumes: `AGENTS.md`, the RAG consolidation design, current runtime modules, and audited branch SHAs.
 - Produces: the detailed handoff coding agents must read before changing the repository.
 
-- [ ] **Step 1: Replace the legacy handoff structure**
+- [x] **Step 1: Replace the legacy handoff structure**
 
 Use these exact top-level sections:
 
@@ -161,7 +161,7 @@ Use these exact top-level sections:
 ## 12. 接手规则
 ```
 
-- [ ] **Step 2: Describe the canonical loop and module ownership**
+- [x] **Step 2: Describe the canonical loop and module ownership**
 
 Document this flow exactly in meaning:
 
@@ -186,7 +186,7 @@ Map the implementation to:
   `app/retrieval/chroma_semantic_provider.py`;
 - `app/llm/deepseek_client.py`.
 
-- [ ] **Step 3: Record RAG behavior and external dependencies accurately**
+- [x] **Step 3: Record RAG behavior and external dependencies accurately**
 
 State that RAG is opt-in, non-blocking, and separate from the active problem.
 Document statuses `disabled`, `success`, `empty`, and `error`; reference versus
@@ -198,14 +198,14 @@ machine-specific values. Distinguish offline fake-provider coverage from real
 Chroma, embedding-model, and DeepSeek checks. Do not preserve stale claims that
 only mock Graph RAG exists.
 
-- [ ] **Step 4: Preserve the legacy baseline without presenting it as canonical**
+- [x] **Step 4: Preserve the legacy baseline without presenting it as canonical**
 
 Explain that `app/agent/workflow.py`, `app/api/main.py`,
 `app/ui/streamlit_app.py`, and mastery persistence remain for compatibility,
 regression research, and architecture comparisons. State that they must not be
 merged back into the LLM-led loop as hard planning or mastery control.
 
-- [ ] **Step 5: Record known issues and Git lineage**
+- [x] **Step 5: Record known issues and Git lineage**
 
 List these current unresolved runtime issues without claiming they are fixed:
 
@@ -230,14 +230,14 @@ Record these audited SHAs:
 
 State that RAG was manually adapted rather than merging either old Agent loop.
 
-- [ ] **Step 6: Add operational and safety instructions**
+- [x] **Step 6: Add operational and safety instructions**
 
 Document the canonical Streamlit command, optional RAG setup, both required
 offline gates, optional real evaluation command, and a reminder that real LLM
 checks incur cost. Reiterate no `.env`, keys, vector database artifacts,
 runtime logs, or `data/runtime` contents may be committed.
 
-- [ ] **Step 7: Run focused handoff checks**
+- [x] **Step 7: Run focused handoff checks**
 
 Run:
 
@@ -260,7 +260,7 @@ architecture, lineage, and known-issue coverage.
 - Consumes: the refreshed README and handoff.
 - Produces: unambiguous authority ordering and a verified documentation-only commit.
 
-- [ ] **Step 1: Add the historical-status banner without changing the original body**
+- [x] **Step 1: Add the historical-status banner without changing the original body**
 
 Insert this meaning immediately after `# CLAUDE.md`:
 
@@ -275,7 +275,7 @@ Insert this meaning immediately after `# CLAUDE.md`:
 
 Do not edit the remaining original specification.
 
-- [ ] **Step 2: Verify every documented path exists**
+- [x] **Step 2: Verify every documented path exists**
 
 Run:
 
@@ -299,7 +299,7 @@ Run:
 
 Expected: exit code 0 with no missing-path error.
 
-- [ ] **Step 3: Verify the diff is documentation-only and clean**
+- [x] **Step 3: Verify the diff is documentation-only and clean**
 
 Run:
 
@@ -315,7 +315,7 @@ documents, and this plan appear across the complete documentation series; the
 working-tree diff contains only the three target documents plus the spec
 correction and plan before commit.
 
-- [ ] **Step 4: Run repository-wide offline gates**
+- [x] **Step 4: Run repository-wide offline gates**
 
 Run:
 
@@ -327,7 +327,7 @@ python scripts/run_eval.py
 Expected: both commands exit 0. Record actual totals from command output in the
 final handoff rather than retaining stale hard-coded test counts.
 
-- [ ] **Step 5: Review the final prose diff**
+- [x] **Step 5: Review the final prose diff**
 
 Run:
 
@@ -340,7 +340,7 @@ Select-String -Path README.md,CODEX_HANDOFF.md,CLAUDE.md,docs/superpowers/specs/
 Expected: no placeholders, no machine-specific paths, no secrets, no claims
 that external services passed, and no runtime source changes.
 
-- [ ] **Step 6: Commit the coherent documentation refresh**
+- [x] **Step 6: Commit the coherent documentation refresh**
 
 Run:
 
