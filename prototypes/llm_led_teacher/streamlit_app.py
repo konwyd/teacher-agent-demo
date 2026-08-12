@@ -18,27 +18,21 @@ from app.memory.conversation_archive import (
     ConversationRecord,
     get_local_conversation_store,
 )
+from prototypes.llm_led_teacher.context_usage import build_context_usage_display
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
-from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
-from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
+from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
+from prototypes.llm_led_teacher.public_thinking import format_public_thinking_event
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_display_chunks
 
 
-_SESSION_SCHEMA_VERSION = 10
-_PROGRESS_LABELS = {
-    "observing": "正在判断题目和本轮节奏……",
-    "retrieving": "正在检索相关教材与题目……",
-    "generating": "教师正在组织讲解……",
-    "auditing": "正在核验数学步骤和教学节奏……",
-    "repairing": "检测到需要修正，正在生成安全版本……",
-    "complete": "回答已核验",
-}
+_SESSION_SCHEMA_VERSION = 11
 
 
 st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
 
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
+_JUST_GENERATED_TURN_KEY = "public_thinking_just_generated_turn_id"
 
 
 def _get_pending_student_message(current_episode: object) -> str:
@@ -209,6 +203,7 @@ with st.sidebar:
             "prototype_session_schema_version",
             "conversation_selector",
             _PENDING_STUDENT_MESSAGE_KEY,
+            _JUST_GENERATED_TURN_KEY,
         ):
             st.session_state.pop(key, None)
         st.rerun()
@@ -305,25 +300,39 @@ def render_context_usage(current_episode: PrototypeEpisode) -> None:
         else {}
     )
     configured_window = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW_TOKENS", "131072"))
-    context_window = int(
-        metadata.get("context_window_tokens", configured_window) or configured_window
+    display = build_context_usage_display(
+        metadata,
+        current_window_tokens=configured_window,
     )
-    context_used = int(metadata.get("context_used_tokens", 0) or 0)
-    usage_ratio = context_used / context_window if context_window > 0 else 0.0
     label = (
-        f"{usage_ratio:.1%} · {_format_token_count(context_used)} / "
-        f"{_format_token_count(context_window)} 上下文已使用"
+        f"{display.usage_ratio:.1%} · {_format_token_count(display.used_tokens)} / "
+        f"{_format_token_count(display.current_window_tokens)}"
     )
     with st.popover(
-        f"{usage_ratio:.1%}",
+        label,
         icon=":material/data_usage:",
-        help=label,
+        help="本轮最后一次模型请求占用 / 当前模型上限",
         type="tertiary",
         key="context_usage_popover",
     ):
-        st.markdown(f"#### {label}")
-        st.progress(min(max(usage_ratio, 0.0), 1.0))
-        st.caption("当前对话最后一次模型请求的实际上下文占用。")
+        st.markdown("#### 上下文占用")
+        st.progress(min(max(display.usage_ratio, 0.0), 1.0))
+        st.write("**本轮请求占用**", _format_token_count(display.used_tokens))
+        st.write(
+            "**当前模型上限**",
+            _format_token_count(display.current_window_tokens),
+        )
+        if display.historical_window_tokens is None:
+            historical_label = "暂无记录"
+        else:
+            historical_label = _format_token_count(display.historical_window_tokens)
+            if display.historical_limit_changed:
+                historical_label += "（旧配置记录）"
+        st.write("**该对话历史上限**", historical_label)
+        st.caption(
+            "占用值来自本轮最后一次模型请求，不是整段对话累计 Token，"
+            "也不是 GPU 显存占用。"
+        )
 
 
 def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
@@ -523,10 +532,30 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
         st.write("**修正后仍有警告**", turn.remaining_warnings or [])
 
 
+def render_public_thinking(
+    turn: PrototypeTurnRecord,
+    *,
+    expanded: bool = False,
+) -> None:
+    """Render saved public events without exposing internal trace payloads."""
+
+    if not turn.public_thinking_events:
+        return
+    seconds = max(round(turn.backend_total_seconds), 0)
+    with st.expander(f"🧠 已思考（用时 {seconds} 秒）", expanded=expanded):
+        for event in turn.public_thinking_events:
+            st.markdown(format_public_thinking_event(event))
+
+
+just_generated_turn_id = st.session_state.pop(_JUST_GENERATED_TURN_KEY, None)
 for turn in episode.turns:
     with st.chat_message("user"):
         st.markdown(turn.student_message)
     with st.chat_message("assistant"):
+        render_public_thinking(
+            turn,
+            expanded=turn.turn_id == just_generated_turn_id,
+        )
         st.markdown(turn.teacher_output.response)
         render_turn_token_usage(turn)
         render_turn_details(turn)
@@ -563,29 +592,21 @@ if message:
         st.stop()
 
     with st.chat_message("assistant"):
-        progress_status = st.status(_PROGRESS_LABELS["observing"], expanded=True)
-        live_trace = LiveProgressTrace(progress_status)
-
-        def update_progress(stage: str | AgentTraceEvent) -> None:
-            if isinstance(stage, AgentTraceEvent):
-                live_trace.update_agent_event(stage)
-                return
-            live_trace.update(stage)
-            progress_status.update(label=_PROGRESS_LABELS.get(stage, stage))
+        progress_status = st.status(
+            "🧠 思考中…（已用时 0 秒）",
+            expanded=True,
+        )
+        live_thinking = LiveThinkingPanel(progress_status)
 
         try:
             turn = run_turn(
                 episode,
                 message,
                 enable_agent_loop=True,
-                progress_callback=update_progress,
+                thinking_callback=live_thinking.append,
             )
         except (DeepSeekError, ValueError) as exc:
-            progress_status.update(
-                label="本轮处理失败",
-                state="error",
-                expanded=True,
-            )
+            live_thinking.fail()
             st.error(str(exc))
         else:
             _set_pending_student_message(episode, "")
@@ -594,39 +615,13 @@ if message:
                 _save_active_conversation(episode)
             except ConversationArchiveError as exc:
                 history_save_error = str(exc)
-            progress_status.write(
-                "🧭 **Observer 结论**："
-                f"starts_new_problem={turn.turn_guidance.starts_new_problem}，"
-                f"pacing={turn.turn_guidance.pacing.value}；"
-                f"{turn.turn_guidance.reason or '未提供额外理由'}"
-            )
-            if turn.rag_source.startswith("retrieval_error"):
-                progress_status.write(
-                    f"⚠️ **RAG 已降级**：{turn.rag_source}；教学主回答未被阻断。"
-                )
-            else:
-                progress_status.write(
-                    f"📚 **RAG 结果**：来源={turn.rag_source or 'none'}，"
-                    f"命中={len(turn.rag_hits)} 条。"
-                )
-            progress_status.write(
-                f"🧮 **审计结果**：提取 {len(turn.extracted_equations)} 个方程，"
-                f"修正={'是' if turn.repair_performed else '否'}。"
-            )
             if history_save_error:
-                progress_status.write(
-                    f"⚠️ **历史记录保存失败**：{history_save_error}"
-                )
-            else:
-                progress_status.write("💾 **历史记录**：本轮对话已自动保存。")
-            progress_status.update(
-                label=_PROGRESS_LABELS["complete"],
-                state="complete",
-                expanded=True,
-            )
+                st.warning(f"历史记录保存失败：{history_save_error}")
+            live_thinking.complete(turn.backend_total_seconds)
             display_started = perf_counter()
             st.write_stream(iter_display_chunks(turn.teacher_output.response))
             turn.display_seconds = round(perf_counter() - display_started, 3)
             render_turn_token_usage(turn)
             render_turn_details(turn)
+            st.session_state[_JUST_GENERATED_TURN_KEY] = turn.turn_id
             st.rerun()

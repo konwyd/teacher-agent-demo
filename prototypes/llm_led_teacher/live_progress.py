@@ -1,56 +1,24 @@
-"""User-visible, auditable progress trace for one teaching turn."""
+"""DeepSeek-style rendering for whitelisted public thinking events."""
 
 from __future__ import annotations
 
 from time import perf_counter
 from typing import Callable, Protocol
 
-from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
+from prototypes.llm_led_teacher.public_thinking import (
+    PublicThinkingEvent,
+    format_public_thinking_event,
+)
 
 
 class StatusWriter(Protocol):
     def write(self, value: str) -> object: ...
 
-
-_STAGES = {
-    "observing": (
-        1,
-        "识别题目与教学节奏",
-        "判断是否开启新题、学生是否要求完整答案，以及本轮应该推进一步还是完整回答。",
-    ),
-    "retrieving": (
-        2,
-        "检索教材与题库",
-        "查询本地 Chroma 教材库和题库；新题在本地有效命中不足时才尝试联网回退。",
-    ),
-    "generating": (
-        3,
-        "让本地模型组织教师初稿",
-        "把原题、对话历史、有效 guidance、确定性证据和有边界的 RAG 参考交给本地 DeepSeek。",
-    ),
-    "auditing": (
-        4,
-        "核验数学步骤与教学节奏",
-        "提取回答中的方程，运行 verifier，并检查是否越步、泄露最终答案或包含多个结尾问题。",
-    ),
-    "repairing": (
-        5,
-        "修正未通过审计的初稿",
-        "只把审计发现的冲突交给本地模型修正；未修正的初稿不会直接展示给学生。",
-    ),
-}
-
-_COMPLETED_TITLES = {
-    "observing": "题目与节奏判断",
-    "retrieving": "教材与题库检索",
-    "generating": "教师初稿生成",
-    "auditing": "数学步骤与教学节奏核验",
-    "repairing": "安全修正",
-}
+    def update(self, **kwargs: object) -> object: ...
 
 
-class LiveProgressTrace:
-    """Append completed work and elapsed time to a Streamlit-like status box."""
+class LiveThinkingPanel:
+    """Append safe events and keep a Streamlit-like status title current."""
 
     def __init__(
         self,
@@ -60,31 +28,24 @@ class LiveProgressTrace:
     ) -> None:
         self._status = status
         self._clock = clock
-        self._stage = "observing"
         self._started_at = clock()
-        self._write_start(self._stage)
 
-    def _write_start(self, stage: str) -> None:
-        number, title, detail = _STAGES[stage]
-        self._status.write(f"⏳ **{number}. 正在{title}**\n\n{detail}")
+    def append(self, event: PublicThinkingEvent) -> None:
+        self._status.write(format_public_thinking_event(event))
+        elapsed = max(round(self._clock() - self._started_at), 0)
+        self._status.update(label=f"🧠 思考中…（已用时 {elapsed} 秒）")
 
-    def update(self, stage: str) -> None:
-        now = self._clock()
-        elapsed = now - self._started_at
-        self._status.write(f"✅ 完成{_COMPLETED_TITLES[self._stage]} · **{elapsed:.3f} 秒**")
-        if stage == "complete":
-            return
-        self._stage = stage
-        self._started_at = now
-        self._write_start(stage)
-
-    def update_agent_event(self, event: AgentTraceEvent) -> None:
-        """Render only the event's explicitly public summary."""
-        icon = "✅" if event.ok is True else ("⚠️" if event.ok is False else "🧭")
-        tool = f" `{event.tool_name}`" if event.tool_name else ""
-        elapsed = (
-            f" · {event.elapsed_seconds:.3f} 秒"
-            if event.elapsed_seconds > 0
-            else ""
+    def complete(self, total_seconds: float) -> None:
+        seconds = max(round(total_seconds), 0)
+        self._status.update(
+            label=f"🧠 已思考（用时 {seconds} 秒）",
+            state="complete",
+            expanded=True,
         )
-        self._status.write(f"{icon} **Agent {event.step}**{tool}：{event.summary}{elapsed}")
+
+    def fail(self) -> None:
+        self._status.update(
+            label="🧠 思考中断",
+            state="error",
+            expanded=True,
+        )

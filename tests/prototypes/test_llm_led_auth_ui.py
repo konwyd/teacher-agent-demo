@@ -6,12 +6,22 @@ from pydantic import BaseModel, Field
 from streamlit.testing.v1 import AppTest
 
 from app.auth.local_accounts import LocalAccountStore, get_local_account_store
+from app.agent.state import VerificationResult, VerificationStatus
 from app.memory.conversation_archive import (
     LocalConversationStore,
     get_local_conversation_store,
 )
-from prototypes.llm_led_teacher.logic import PrototypeEpisode
+from prototypes.llm_led_teacher.logic import (
+    PrototypeEpisode,
+    PrototypeTurnRecord,
+    TeacherResponse,
+)
 from prototypes.llm_led_teacher import logic, rag_hook
+from prototypes.llm_led_teacher.public_thinking import (
+    PublicThinkingEvent,
+    PublicThinkingKind,
+    PublicThinkingStatus,
+)
 from app.llm.deepseek_client import DeepSeekError
 
 
@@ -200,3 +210,82 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
         app.session_state.prototype_conversation_id,
     )
     assert saved.episode["pending_student_message"] == "旧会话热更新后发送的消息"
+
+
+def test_new_public_thinking_stays_expanded_for_one_rerun_then_collapses(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    LocalAccountStore(account_db).register("thinking_student", "history-password")
+
+    public_event = PublicThinkingEvent(
+        sequence=1,
+        kind=PublicThinkingKind.COMPLETE,
+        status=PublicThinkingStatus.COMPLETED,
+        summary="思考过程已完成。",
+        elapsed_seconds=6.8,
+    )
+
+    def successful_turn(episode, message, **kwargs):
+        kwargs["thinking_callback"](public_event)
+        turn = PrototypeTurnRecord(
+            turn_id=len(episode.turns) + 1,
+            student_message=message,
+            teacher_output=TeacherResponse(response="这是审计后的回答。"),
+            student_verification=VerificationResult(
+                status=VerificationStatus.UNABLE_TO_VERIFY,
+                summary="当前题型暂无确定性 verifier。",
+                verifier_name="none",
+            ),
+            evidence_level="unverified",
+            public_thinking_events=[public_event],
+            backend_total_seconds=6.8,
+        )
+        episode.turns.append(turn)
+        return turn
+
+    monkeypatch.setattr(logic, "run_turn", successful_turn)
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("thinking_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    app.chat_input[0].set_value("请解释这道题").run()
+
+    thinking_expanders = [
+        expander
+        for expander in app.expander
+        if expander.label == "🧠 已思考（用时 7 秒）"
+    ]
+    assert len(thinking_expanders) == 1
+    assert thinking_expanders[0].proto.expanded is True
+    assert any(
+        markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
+        for markdown in thinking_expanders[0].markdown
+    )
+
+    app.run()
+
+    thinking_expanders = [
+        expander
+        for expander in app.expander
+        if expander.label == "🧠 已思考（用时 7 秒）"
+    ]
+    assert len(thinking_expanders) == 1
+    assert thinking_expanders[0].proto.expanded is False

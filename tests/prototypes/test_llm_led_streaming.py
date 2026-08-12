@@ -48,7 +48,7 @@ def test_streamlit_streams_only_final_audited_turn_response():
     )
 
     assert "from prototypes.llm_led_teacher.streaming import iter_display_chunks" in source
-    assert "progress_callback=update_progress" in source
+    assert "thinking_callback=live_thinking.append" in source
     assert run_turn_call in source
     assert final_stream_call in source
     assert source.index(run_turn_call) < source.index(final_stream_call)
@@ -71,41 +71,70 @@ def test_current_turn_details_render_immediately_after_streaming():
     )
 
 
-def test_live_progress_trace_appends_work_and_elapsed_time():
-    from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+def test_live_thinking_panel_renders_public_copy_and_updates_elapsed_label():
+    from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
+    from prototypes.llm_led_teacher.public_thinking import (
+        PublicThinkingEvent,
+        PublicThinkingKind,
+        PublicThinkingStatus,
+    )
 
     class FakeStatus:
         def __init__(self):
             self.lines = []
+            self.updates = []
 
         def write(self, value):
             self.lines.append(value)
 
+        def update(self, **kwargs):
+            self.updates.append(kwargs)
+
     status = FakeStatus()
-    clock = iter([10.0, 12.5, 15.0, 19.0]).__next__
-    trace = LiveProgressTrace(status, clock=clock)
+    clock = iter([10.0, 12.4]).__next__
+    panel = LiveThinkingPanel(status, clock=clock)
+    panel.append(
+        PublicThinkingEvent(
+            sequence=1,
+            kind=PublicThinkingKind.RETRIEVAL,
+            status=PublicThinkingStatus.COMPLETED,
+            summary="找到 4 条可用的本地参考。",
+        )
+    )
+    panel.complete(6.8)
 
-    trace.update("retrieving")
-    trace.update("generating")
-    trace.update("complete")
-
-    rendered = "\n".join(status.lines)
-    assert "正在识别题目与教学节奏" in rendered
-    assert "完成题目与节奏判断" in rendered
-    assert "2.500 秒" in rendered
-    assert "正在检索教材与题库" in rendered
-    assert "正在让本地模型组织教师初稿" in rendered
-    assert "4.000 秒" in rendered
+    assert status.lines == ["✓ 找到 4 条可用的本地参考。"]
+    assert status.updates[0]["label"] == "🧠 思考中…（已用时 2 秒）"
+    assert status.updates[-1] == {
+        "label": "🧠 已思考（用时 7 秒）",
+        "state": "complete",
+        "expanded": True,
+    }
 
 
-def test_streamlit_uses_expanded_live_progress_trace():
-    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+def test_live_thinking_panel_failure_never_renders_exception_details():
+    from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
 
-    assert "from prototypes.llm_led_teacher.live_progress import LiveProgressTrace" in source
-    assert "expanded=True" in source
-    assert "live_trace = LiveProgressTrace(progress_status)" in source
-    assert "live_trace.update(stage)" in source
-    assert "progress_status.write(" in source
+    class FakeStatus:
+        def __init__(self):
+            self.lines = []
+            self.updates = []
+
+        def write(self, value):
+            self.lines.append(value)
+
+        def update(self, **kwargs):
+            self.updates.append(kwargs)
+
+    status = FakeStatus()
+    panel = LiveThinkingPanel(status, clock=lambda: 1.0)
+
+    panel.fail()
+
+    assert status.lines == []
+    assert status.updates == [
+        {"label": "🧠 思考中断", "state": "error", "expanded": True}
+    ]
 
 
 def test_streamlit_shows_generation_and_online_fallback_metadata_not_raw_thoughts():
@@ -122,12 +151,17 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
 
     assert "def render_context_usage(" in source
+    assert "build_context_usage_display(" in source
     assert "with st.bottom:" in source
     assert 'key="context_usage_control"' in source
     assert "st-key-context_usage_control" in source
     assert "context_usage_slot" not in source
     assert "position-anchor" not in source
-    assert "上下文已使用" in source
+    assert "本轮请求占用" in source
+    assert "当前模型上限" in source
+    assert "该对话历史上限" in source
+    assert "旧配置记录" in source
+    assert 'metadata.get("context_window_tokens", configured_window)' not in source
     assert "def render_turn_token_usage(" in source
     assert "本轮 KV 缓存命中" in source
     assert "prompt_cache_hit_tokens" in source
@@ -139,33 +173,3 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     assert "_save_active_conversation(episode)" in source
     assert "_get_pending_student_message(episode)" in source
     assert "enable_agent_loop=True" in source
-
-
-def test_live_progress_renders_public_agent_event_without_private_payload() -> None:
-    from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
-    from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
-
-    class FakeStatus:
-        def __init__(self):
-            self.lines = []
-
-        def write(self, value):
-            self.lines.append(value)
-
-    status = FakeStatus()
-    trace = LiveProgressTrace(status, clock=lambda: 1.0)
-    trace.update_agent_event(
-        AgentTraceEvent(
-            step=2,
-            event_type="tool_result",
-            summary="本地物理教材命中 4 条",
-            tool_name="search_local_knowledge",
-            ok=True,
-            details={"secret_prompt": "must never render"},
-        )
-    )
-
-    rendered = "\n".join(status.lines)
-    assert "本地物理教材命中 4 条" in rendered
-    assert "search_local_knowledge" in rendered
-    assert "must never render" not in rendered
