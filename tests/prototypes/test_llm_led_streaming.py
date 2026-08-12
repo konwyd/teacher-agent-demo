@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from prototypes.llm_led_teacher import streaming
-from prototypes.llm_led_teacher.streaming import iter_display_chunks
+from prototypes.llm_led_teacher.streaming import (
+    iter_display_chunks,
+    iter_markdown_display_chunks,
+)
 
 
 @pytest.mark.parametrize(
@@ -20,6 +23,18 @@ def test_display_chunks_reconstruct_audited_text_exactly(text, chunk_size):
 
     assert "".join(chunks) == text
     assert all(0 < len(chunk) <= chunk_size for chunk in chunks)
+
+
+def test_display_math_is_emitted_as_one_closed_chunk():
+    chunks = list(
+        iter_markdown_display_chunks(
+            "说明\n\n$$x=\\frac{1}{2}$$\n\n结束", delay_seconds=0
+        )
+    )
+
+    assert "$$x=\\frac{1}{2}$$" in chunks
+    assert all(chunk.count("$$") in (0, 2) for chunk in chunks)
+    assert "".join(chunks) == "说明\n\n$$x=\\frac{1}{2}$$\n\n结束"
 
 
 @pytest.mark.parametrize("chunk_size", [0, -1])
