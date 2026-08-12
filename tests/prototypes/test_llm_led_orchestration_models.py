@@ -5,9 +5,12 @@ from pydantic import ValidationError
 
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentDecision,
+    AgentOrchestrationResult,
     AnswerMode,
+    BoundaryAudit,
     RequestClassification,
     TeachingContract,
+    TeachingResponseMode,
 )
 
 
@@ -99,3 +102,45 @@ def test_only_full_solution_may_reveal_final_answer() -> None:
 def test_finish_decision_requires_teaching_contract() -> None:
     with pytest.raises(ValidationError):
         AgentDecision(kind="finish", reason="done")
+
+
+def test_full_solution_contract_may_reveal_final_answer() -> None:
+    contract = TeachingContract(
+        response_mode="full_solution",
+        requested_target="完整解答当前题",
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=True,
+        reason="student requested a complete solution",
+    )
+
+    assert contract.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert contract.may_reveal_final_answer is True
+
+
+def test_orchestration_result_without_contract_remains_legacy_compatible() -> None:
+    result = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="数学",
+            stage="初中",
+            is_new_problem=False,
+            answer_mode="guided",
+            reason="legacy result",
+        )
+    )
+
+    assert result.teaching_contract is None
+
+
+def test_boundary_audit_serializes_violation_enum_values() -> None:
+    audit = BoundaryAudit(
+        passed=False,
+        violations=["final_answer_leak", "too_many_steps"],
+        evidence=["draft exposed the final answer"],
+        repair_instructions=["remove the final answer"],
+    )
+
+    assert audit.model_dump(mode="json")["violations"] == [
+        "final_answer_leak",
+        "too_many_steps",
+    ]

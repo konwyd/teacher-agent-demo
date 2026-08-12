@@ -155,7 +155,7 @@ class AgentOrchestrationResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     classification: RequestClassification
-    teaching_contract: TeachingContract
+    teaching_contract: TeachingContract | None = None
     rag_context: Any = None
     observations: list[ToolResult] = Field(default_factory=list)
     trace: list[AgentTraceEvent] = Field(default_factory=list)
