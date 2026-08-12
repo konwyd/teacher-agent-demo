@@ -3,6 +3,7 @@ import json
 from prototypes.llm_led_teacher.logic import (
     PacingMode,
     PrototypeEpisode,
+    PrototypeTurnRecord,
     TurnGuidance,
     run_turn,
 )
@@ -155,6 +156,52 @@ def test_run_turn_reports_repair_before_complete(monkeypatch):
         "complete",
     ]
     assert "x=5/2" not in turn.teacher_output.response
+    assert any(
+        event.kind.value == "repair" for event in turn.public_thinking_events
+    )
+
+
+def test_turn_persists_public_thinking_and_emits_the_same_events(monkeypatch):
+    _no_rag(monkeypatch)
+    emitted = []
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+        thinking_callback=emitted.append,
+    )
+
+    assert emitted == turn.public_thinking_events
+    assert [event.sequence for event in emitted] == list(range(1, len(emitted) + 1))
+    assert any(
+        event.summary == "最终回答已经通过教学内容与节奏审计。"
+        for event in emitted
+    )
+    assert emitted[-1].kind.value == "complete"
+    assert "reasoning_content" not in turn.model_dump_json()
+
+
+def test_old_turn_without_public_thinking_events_still_loads() -> None:
+    payload = {
+        "turn_id": 1,
+        "student_message": "旧问题",
+        "teacher_output": {"response": "旧回答"},
+        "student_verification": {
+            "status": "unable_to_verify",
+            "summary": "旧记录没有公开思考字段。",
+            "verifier_name": "none",
+        },
+        "evidence_level": "unverified",
+    }
+
+    restored = PrototypeTurnRecord.model_validate(payload)
+
+    assert restored.public_thinking_events == []
 
 
 def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
@@ -337,6 +384,32 @@ def test_progress_callback_failure_does_not_block_teacher_response(monkeypatch):
     )
 
     assert "2x=5" in turn.teacher_output.response
+
+
+def test_thinking_callback_failure_does_not_block_or_truncate_record(monkeypatch):
+    _no_rag(monkeypatch)
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
+    )
+
+    def broken_callback(event):
+        raise RuntimeError(f"UI unavailable at {event.sequence}")
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+        thinking_callback=broken_callback,
+    )
+
+    assert "2x=5" in turn.teacher_output.response
+    assert turn.public_thinking_events[-1].kind.value == "complete"
+    assert any(
+        event.kind.value == "verification"
+        and event.status.value == "warning"
+        for event in turn.public_thinking_events
+    )
 
 
 def test_explicit_full_solution_allows_complete_response_and_final_answer(monkeypatch):
@@ -548,6 +621,10 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     assert episode.active_subject == "物理"
     assert episode.active_stage == "初中"
     assert episode.problem_context == "物体受力后运动状态为什么会改变？"
+    assert any(
+        event.summary == "已确定为初中物理新题。"
+        for event in turn.public_thinking_events
+    )
     assert turn.classification == classification
     assert turn.agent_trace == trace
     assert turn.loaded_skills == ["concept_explanation"]

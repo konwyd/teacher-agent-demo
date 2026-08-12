@@ -25,6 +25,10 @@ from prototypes.llm_led_teacher.orchestration_models import (
     RequestClassification,
     RequestScope,
 )
+from prototypes.llm_led_teacher.public_thinking import (
+    PublicThinkingEvent,
+    PublicThinkingRecorder,
+)
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
 
 
@@ -82,6 +86,7 @@ class PrototypeTurnRecord(BaseModel):
     final_character_count: int = 0
     classification: RequestClassification | None = None
     agent_trace: list[AgentTraceEvent] = Field(default_factory=list)
+    public_thinking_events: list[PublicThinkingEvent] = Field(default_factory=list)
     loaded_skills: list[str] = Field(default_factory=list)
     agent_termination_reason: str = ""
 
@@ -96,9 +101,13 @@ class PrototypeEpisode(BaseModel):
 
 
 ProgressCallback = Callable[[str | AgentTraceEvent], None]
+ThinkingCallback = Callable[[PublicThinkingEvent], None]
 
 
-def _report_progress(callback: ProgressCallback | None, stage: str) -> None:
+def _report_progress(
+    callback: ProgressCallback | None,
+    stage: str | AgentTraceEvent,
+) -> None:
     if callback is None:
         return
     try:
@@ -504,6 +513,7 @@ def run_turn(
     orchestrator: TurnOrchestrator | None = None,
     enable_agent_loop: bool = False,
     progress_callback: ProgressCallback | None = None,
+    thinking_callback: ThinkingCallback | None = None,
     clock: Callable[[], float] = perf_counter,
 ) -> PrototypeTurnRecord:
     """Run one autonomous LLM teaching turn with thin verification audits."""
@@ -516,6 +526,8 @@ def run_turn(
     stage_started_at = started_at
     current_stage = "observing"
     stage_timings: dict[str, float] = {}
+    thinking = PublicThinkingRecorder(callback=thinking_callback)
+    reported_agent_event_ids: set[int] = set()
 
     def enter_stage(stage: str) -> None:
         nonlocal current_stage, stage_started_at
@@ -524,6 +536,12 @@ def run_turn(
         current_stage = stage
         stage_started_at = now
         _report_progress(progress_callback, stage)
+        thinking.stage(stage)
+
+    def report_agent_event(event: AgentTraceEvent) -> None:
+        reported_agent_event_ids.add(id(event))
+        _report_progress(progress_callback, event)
+        thinking.agent(event)
 
     active_client = client or DeepSeekClient()
     usage_history = getattr(active_client, "usage_history", None)
@@ -531,6 +549,7 @@ def run_turn(
         len(usage_history) if isinstance(usage_history, list) else None
     )
     _report_progress(progress_callback, "observing")
+    thinking.stage("observing")
     raw_guidance, observer_error = _observe_turn(active_client, episode, clean_message)
     guidance = raw_guidance
     orchestration_result: AgentOrchestrationResult | None = None
@@ -547,9 +566,17 @@ def run_turn(
             clean_message,
             episode.active_subject,
             episode.active_stage,
-            progress_callback=lambda event: _report_progress(progress_callback, event),
+            progress_callback=report_agent_event,
         )
         classification = orchestration_result.classification
+        for event in orchestration_result.trace:
+            if id(event) in reported_agent_event_ids:
+                continue
+            if event.event_type == "classification" and not event.details:
+                event = event.model_copy(
+                    update={"details": classification.model_dump(mode="json")}
+                )
+            thinking.agent(event)
         starts_new_problem = (
             classification.scope is RequestScope.K9
             and (classification.is_new_problem or not previous_problem)
@@ -614,6 +641,13 @@ def run_turn(
             enter_stage("retrieving")
             rag = retrieve_context(episode.problem_context, online_mode="off")
 
+    thinking.verification(verification)
+    thinking.retrieval(
+        source=rag.source,
+        hit_count=len(rag.hits),
+        online_triggered=rag.online_triggered,
+        online_status=rag.online_status,
+    )
     payload = _teacher_payload(
         episode,
         clean_message,
@@ -669,6 +703,10 @@ def run_turn(
         output.response,
         claim_audits,
     )
+    thinking.audit(
+        repair_performed=bool(repair_reasons),
+        remaining_warning_count=len(remaining_warnings),
+    )
     if usage_history_offset is not None:
         current_history = getattr(active_client, "usage_history", [])
         model_generation_metadata = summarize_usage_metadata(
@@ -677,6 +715,7 @@ def run_turn(
     finished_at = clock()
     stage_timings[current_stage] = round(finished_at - stage_started_at, 3)
     backend_total_seconds = round(finished_at - started_at, 3)
+    thinking.complete(backend_total_seconds)
     record = PrototypeTurnRecord(
         turn_id=len(episode.turns) + 1,
         student_message=clean_message,
@@ -710,6 +749,7 @@ def run_turn(
             orchestration_result.classification if orchestration_result else None
         ),
         agent_trace=(orchestration_result.trace if orchestration_result else []),
+        public_thinking_events=thinking.events,
         loaded_skills=(orchestration_result.loaded_skills if orchestration_result else []),
         agent_termination_reason=(
             orchestration_result.termination_reason if orchestration_result else ""
