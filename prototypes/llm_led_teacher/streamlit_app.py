@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
 from app.llm.deepseek_client import DeepSeekError, is_configured
+from app.llm.kv_cache import KvCacheIdentity
 from app.memory.conversation_archive import (
     ConversationArchiveError,
     ConversationRecord,
@@ -590,6 +591,20 @@ def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
         st.caption(
             "命中指显存中的 KV/prompt cache 前缀复用，不代表模型权重是否已装入显存。"
         )
+        if metadata.get("kv_persistence_enabled"):
+            restore_status = metadata.get("kv_persistence_restore_status", "not_attempted")
+            save_status = metadata.get("kv_persistence_save_status", "not_attempted")
+            st.divider()
+            st.markdown("#### 💾 KV 持久化")
+            st.write("**llama-server slot**", metadata.get("kv_persistence_slot"))
+            st.write("**恢复状态**", restore_status)
+            st.write("**保存状态**", save_status)
+            if metadata.get("kv_persistence_filename"):
+                st.write("**本地文件**", metadata["kv_persistence_filename"])
+            if metadata.get("kv_persistence_directory"):
+                st.caption(f"保存目录：{metadata[kv_persistence_directory]}")
+            if metadata.get("kv_persistence_error"):
+                st.warning(f"KV 已降级，不影响本轮回答：{metadata[kv_persistence_error]}")
 
 
 def render_turn_details(turn: PrototypeTurnRecord) -> None:
@@ -808,6 +823,10 @@ if message:
                 message,
                 enable_agent_loop=True,
                 thinking_callback=live_thinking.append,
+                kv_identity=KvCacheIdentity(
+                    authenticated_user["user_id"],
+                    target_conversation_id,
+                ),
             )
         except (DeepSeekError, ValueError) as exc:
             live_thinking.fail()

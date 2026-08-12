@@ -166,6 +166,12 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     assert "本轮 KV 缓存命中" in source
     assert "prompt_cache_hit_tokens" in source
     assert "prompt_cache_miss_tokens" in source
+    assert "KvCacheIdentity(" in source
+    assert "authenticated_user[\"user_id\"]" in source
+    assert "target_conversation_id" in source
+    assert "KV 持久化" in source
+    assert "kv_persistence_restore_status" in source
+    assert "kv_persistence_save_status" in source
     assert "st.progress(" in source
     assert source.count("render_context_usage(episode)") == 1
     assert source.count("render_turn_token_usage(turn)") == 2
