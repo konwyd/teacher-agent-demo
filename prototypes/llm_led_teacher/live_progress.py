@@ -13,6 +13,10 @@ class StatusWriter(Protocol):
     def write(self, value: str) -> object: ...
 
 
+class StatusUpdater(Protocol):
+    def update(self, **kwargs: object) -> object: ...
+
+
 class TraceTurn(Protocol):
     agent_trace: list[AgentTraceEvent]
 
@@ -54,6 +58,14 @@ _STAGE_ALIASES = {
     "auditing": "boundary_check",
 }
 
+_AGENT_PROGRESS_LABELS = {
+    "classification": "Agent · 请求分类",
+    "decision": "Agent · 规划",
+    "tool_result": "Agent · Tool",
+    "teaching_contract": "Agent · 教学契约",
+    "fallback": "Agent · 安全收口",
+}
+
 
 def escape_markdown_text(value: object) -> str:
     """Escape untrusted text before interpolating it into Streamlit Markdown."""
@@ -61,6 +73,15 @@ def escape_markdown_text(value: object) -> str:
     return "".join(
         f"\\{character}" if character in punctuation else character
         for character in str(value)
+    )
+
+
+def agent_event_progress_label(event: AgentTraceEvent) -> str:
+    """Return a safe canonical status label for a public Agent event."""
+
+    return _AGENT_PROGRESS_LABELS.get(
+        event.event_type,
+        f"Agent · {escape_markdown_text(event.event_type)}",
     )
 
 
@@ -147,3 +168,14 @@ class LiveProgressTrace:
             f"{icon} **Agent {event.step} · {event_label}**{tool}："
             f"{summary}{elapsed}"
         )
+
+
+def update_agent_progress(
+    status: StatusUpdater,
+    trace: LiveProgressTrace,
+    event: AgentTraceEvent,
+) -> None:
+    """Render an Agent event and update its Markdown-capable status label safely."""
+
+    trace.update_agent_event(event)
+    status.update(label=agent_event_progress_label(event))

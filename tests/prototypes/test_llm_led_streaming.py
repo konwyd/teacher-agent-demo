@@ -127,7 +127,7 @@ def test_live_progress_trace_shows_agent_and_answer_guardrail_stages():
 def test_streamlit_uses_expanded_live_progress_trace():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
 
-    assert "from prototypes.llm_led_teacher.live_progress import LiveProgressTrace" in source
+    assert "LiveProgressTrace," in source
     assert "expanded=True" in source
     assert "live_trace = LiveProgressTrace(progress_status)" in source
     assert "live_trace.update(stage)" in source
@@ -321,6 +321,43 @@ def test_live_progress_escapes_every_dynamic_agent_event_field() -> None:
     assert "[点击](" not in rendered
     assert "![](" not in rendered
     assert rendered.count("\\# 标题") == 3
+
+
+def test_agent_event_progress_callback_escapes_unknown_event_type_label() -> None:
+    from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+
+    class FakeStatus:
+        def __init__(self):
+            self.lines = []
+            self.updates = []
+
+        def write(self, value):
+            self.lines.append(value)
+
+        def update(self, **kwargs):
+            self.updates.append(kwargs)
+
+    malicious = "[点击](https://evil.test)![](https://evil.test/x)# 标题"
+    status = FakeStatus()
+    trace = LiveProgressTrace(status, clock=lambda: 1.0)
+    event = AgentTraceEvent(
+        step=2,
+        event_type=malicious,
+        summary="公开摘要",
+    )
+
+    try:
+        live_progress.update_agent_progress(status, trace, event)
+    except AttributeError:
+        pytest.fail("update_agent_progress must own the Streamlit status callback")
+
+    label = status.updates[-1]["label"]
+    assert label == f"Agent · {live_progress.escape_markdown_text(malicious)}"
+    assert "[点击](" not in label
+    assert "![](" not in label
+    assert "\\# 标题" in label
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+    assert "update_agent_progress(progress_status, live_trace, stage)" in source
 
 
 def test_persisted_trace_table_keeps_untrusted_text_as_plain_cell_values() -> None:

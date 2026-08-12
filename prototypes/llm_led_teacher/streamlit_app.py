@@ -21,7 +21,12 @@ from app.memory.conversation_archive import (
 )
 from prototypes.llm_led_teacher.context_usage import build_context_usage_display
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
-from prototypes.llm_led_teacher.live_progress import LiveProgressTrace, agent_trace_rows
+from prototypes.llm_led_teacher.live_progress import (
+    LiveProgressTrace,
+    agent_trace_rows,
+    escape_markdown_text,
+    update_agent_progress,
+)
 from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_markdown_display_chunks
@@ -655,22 +660,16 @@ if message:
 
         def update_progress(stage: str | AgentTraceEvent) -> None:
             if isinstance(stage, AgentTraceEvent):
-                live_trace.update_agent_event(stage)
-                event_label = {
-                    "classification": "Agent · 请求分类",
-                    "decision": "Agent · 规划",
-                    "tool_result": "Agent · Tool",
-                    "teaching_contract": "Agent · 教学契约",
-                    "fallback": "Agent · 安全收口",
-                }.get(stage.event_type, f"Agent · {stage.event_type}")
-                progress_status.update(label=event_label)
+                update_agent_progress(progress_status, live_trace, stage)
                 return
             if stage == "complete":
                 live_trace.update("formatting")
                 progress_status.update(label=_PROGRESS_LABELS["formatting"])
                 return
             live_trace.update(stage)
-            progress_status.update(label=_PROGRESS_LABELS.get(stage, stage))
+            progress_status.update(
+                label=_PROGRESS_LABELS.get(stage, escape_markdown_text(stage))
+            )
 
         try:
             turn = run_turn(
