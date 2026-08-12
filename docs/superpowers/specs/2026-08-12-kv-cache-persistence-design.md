@@ -7,6 +7,7 @@
 ## Scope
 
 - 只接入 `prototypes/llm_led_teacher` 的完整教学回合。
+- 保留项目已有的模型地址、端口、数据库地址和其他启动参数；KV 功能复用这些已有值，只新增必要的 KV 配置，不迁移或替换现有地址。
 - 聊天历史仍由 `data/runtime/conversations.sqlite3` 保存，并且始终是权威数据源。
 - KV 文件只作为可删除、可重建的性能缓存。
 - Observer、分类、RAG、审计等内部阶段可以使用被分配的 slot，但只有最终面向学生的教师状态会落盘。
@@ -95,6 +96,8 @@ TEACHER_KV_CACHE_DIR=<absolute path>
 TEACHER_KV_SERVER_URL=http://127.0.0.1:8080
 TEACHER_LLAMA_PARALLEL=<parallel>
 ```
+
+这里的 server URL 从启动器当前已有的 `--model-host` 与 `--model-port` 派生；默认值继续是项目原有的 `127.0.0.1:8080`，用户传入其他已有地址时原样复用，不新增固定端口或改写现有连接地址。
 
 设置 `TEACHER_KV_PERSIST=0` 时，Agent 完全跳过 slot API 和请求附加字段，聊天继续正常工作。
 
