@@ -7,6 +7,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from prototypes.llm_led_teacher.retrieval_policy import (
+    RetrievalDecision,
+    RetrievalMode,
+)
+
 
 class Subject(str, Enum):
     MATH = "数学"
@@ -103,6 +108,13 @@ class AgentOrchestrationResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     classification: RequestClassification
+    retrieval_decision: RetrievalDecision = Field(
+        default_factory=lambda: RetrievalDecision(
+            mode=RetrievalMode.NONE,
+            reason="未请求检索",
+            confidence=1.0,
+        )
+    )
     rag_context: Any = None
     observations: list[ToolResult] = Field(default_factory=list)
     trace: list[AgentTraceEvent] = Field(default_factory=list)

@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from prototypes.llm_led_teacher.orchestration_models import (
+    AgentOrchestrationResult,
     AnswerMode,
     RequestClassification,
 )
@@ -69,3 +70,20 @@ def test_off_topic_rejects_subject_or_non_redirect_mode(
             answer_mode=answer_mode,
             reason="invalid off-topic shape",
         )
+
+
+def test_orchestration_result_loads_legacy_data_with_no_retrieval_default() -> None:
+    result = AgentOrchestrationResult.model_validate(
+        {
+            "classification": {
+                "scope": "k9",
+                "subject": "数学",
+                "stage": "初中",
+                "is_new_problem": True,
+                "answer_mode": "guided",
+                "reason": "数学问题",
+            }
+        }
+    )
+
+    assert result.retrieval_decision.mode.value == "none"
