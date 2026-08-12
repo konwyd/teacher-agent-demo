@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
 from app.agent.state import VerificationResult, VerificationStatus
-from app.llm.deepseek_client import DeepSeekClient, summarize_usage_metadata
+from app.llm.deepseek_client import DeepSeekClient, llama_slot, summarize_usage_metadata
+from app.llm.kv_cache import KvCacheIdentity, KvCacheManager, KvCacheSettings
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
@@ -505,7 +506,7 @@ def _repair(
     )
 
 
-def run_turn(
+def _run_turn_impl(
     episode: PrototypeEpisode,
     message: str,
     *,
@@ -515,6 +516,7 @@ def run_turn(
     progress_callback: ProgressCallback | None = None,
     thinking_callback: ThinkingCallback | None = None,
     clock: Callable[[], float] = perf_counter,
+    kv_lease=None,
 ) -> PrototypeTurnRecord:
     """Run one autonomous LLM teaching turn with thin verification audits."""
 
@@ -657,6 +659,8 @@ def run_turn(
         orchestration_result,
     )
     enter_stage("generating")
+    if kv_lease is not None:
+        kv_lease.restore()
     output = _chat_teaching_turn(
         active_client,
         _SYSTEM_PROMPT,
@@ -695,6 +699,9 @@ def run_turn(
             episode.previous_verified_step,
         )
 
+    if kv_lease is not None:
+        kv_lease.save()
+
     remaining_warnings = _collect_warnings(
         episode,
         clean_message,
@@ -712,6 +719,8 @@ def run_turn(
         model_generation_metadata = summarize_usage_metadata(
             current_history[usage_history_offset:]
         )
+    if kv_lease is not None:
+        model_generation_metadata.update(kv_lease.status.to_metadata())
     finished_at = clock()
     stage_timings[current_stage] = round(finished_at - stage_started_at, 3)
     backend_total_seconds = round(finished_at - started_at, 3)
@@ -765,3 +774,39 @@ def run_turn(
         if verified_equation:
             episode.previous_verified_step = verified_equation
     return record
+
+
+def run_turn(
+    episode: PrototypeEpisode,
+    message: str,
+    *,
+    client: StructuredTeacherClient | None = None,
+    orchestrator: TurnOrchestrator | None = None,
+    enable_agent_loop: bool = False,
+    progress_callback: ProgressCallback | None = None,
+    thinking_callback: ThinkingCallback | None = None,
+    clock: Callable[[], float] = perf_counter,
+    kv_identity: KvCacheIdentity | None = None,
+    kv_manager: KvCacheManager | None = None,
+) -> PrototypeTurnRecord:
+    """Run one turn, optionally restoring and saving its llama-server slot."""
+
+    active_client = client or DeepSeekClient()
+    manager = kv_manager
+    if kv_identity is not None and manager is None:
+        settings = KvCacheSettings.from_env()
+        if settings.enabled:
+            manager = KvCacheManager(settings)
+    kwargs = {
+        "client": active_client,
+        "orchestrator": orchestrator,
+        "enable_agent_loop": enable_agent_loop,
+        "progress_callback": progress_callback,
+        "thinking_callback": thinking_callback,
+        "clock": clock,
+    }
+    if kv_identity is None or manager is None:
+        return _run_turn_impl(episode, message, **kwargs)
+    with manager.lease(kv_identity) as lease:
+        with llama_slot(lease.slot_id):
+            return _run_turn_impl(episode, message, kv_lease=lease, **kwargs)

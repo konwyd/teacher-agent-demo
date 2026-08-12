@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from prototypes.llm_led_teacher.logic import (
     PacingMode,
     PrototypeEpisode,
@@ -87,6 +89,124 @@ def _no_rag(monkeypatch):
         "prototypes.llm_led_teacher.logic.retrieve_context",
         lambda problem, online_mode: RagContext(source="none"),
     )
+
+
+def test_kv_persistence_restores_after_observer_and_saves_final_teacher_state(
+    monkeypatch,
+):
+    from app.llm.kv_cache import KvCacheIdentity
+
+    _no_rag(monkeypatch)
+    events = []
+
+    class EventClient(_ScriptedClient):
+        def chat_json(self, *args, **kwargs):
+            events.append("observer")
+            return super().chat_json(*args, **kwargs)
+
+        def chat(self, *args, **kwargs):
+            events.append("teacher")
+            return super().chat(*args, **kwargs)
+
+    class Status:
+        def to_metadata(self):
+            return {
+                "kv_persistence_enabled": True,
+                "kv_persistence_slot": 2,
+                "kv_persistence_restore_status": "restored",
+                "kv_persistence_save_status": "saved",
+            }
+
+    class Lease:
+        slot_id = 2
+        status = Status()
+
+        def restore(self):
+            events.append("restore")
+            return True
+
+        def save(self):
+            events.append("save")
+            return True
+
+    class Manager:
+        class Context:
+            def __enter__(self):
+                events.append("lease-enter")
+                return Lease()
+
+            def __exit__(self, *_args):
+                events.append("lease-exit")
+
+        def lease(self, identity):
+            assert identity == KvCacheIdentity("usr_1", "conv_1")
+            return self.Context()
+
+    client = EventClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
+    )
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+        kv_identity=KvCacheIdentity("usr_1", "conv_1"),
+        kv_manager=Manager(),
+    )
+
+    assert events == [
+        "lease-enter",
+        "observer",
+        "restore",
+        "teacher",
+        "save",
+        "lease-exit",
+    ]
+    assert turn.model_generation_metadata["kv_persistence_slot"] == 2
+    assert turn.model_generation_metadata["kv_persistence_save_status"] == "saved"
+
+
+def test_kv_persistence_does_not_save_when_teacher_generation_fails(monkeypatch):
+    from app.llm.kv_cache import KvCacheIdentity
+
+    _no_rag(monkeypatch)
+    events = []
+
+    class Lease:
+        slot_id = 0
+        status = type("Status", (), {"to_metadata": lambda self: {}})()
+
+        def restore(self):
+            events.append("restore")
+
+        def save(self):
+            events.append("save")
+
+    class Manager:
+        @staticmethod
+        def lease(_identity):
+            class Context:
+                def __enter__(self):
+                    return Lease()
+
+                def __exit__(self, *_args):
+                    events.append("lease-exit")
+            return Context()
+
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        [],
+    )
+    with pytest.raises(StopIteration):
+        run_turn(
+            PrototypeEpisode(),
+            "2x+9=14，这道题怎么解",
+            client=client,
+            kv_identity=KvCacheIdentity("usr_1", "conv_1"),
+            kv_manager=Manager(),
+        )
+
+    assert events == ["restore", "lease-exit"]
 
 
 def test_correct_single_move_observer_keeps_single_move(monkeypatch):
