@@ -212,6 +212,26 @@ def test_duplicate_local_query_and_filters_are_rejected() -> None:
     assert repeated.error == "duplicate local search"
 
 
+def test_distinct_second_local_query_exhausts_turn_budget() -> None:
+    registry = OrchestrationToolRegistry(local_handler=lambda **kwargs: {"hits": []})
+    runtime = _runtime()
+
+    first = registry.execute(
+        "search_local_knowledge",
+        {"query": "力", "subject": "物理", "stage": "初中"},
+        runtime,
+    )
+    second = registry.execute(
+        "search_local_knowledge",
+        {"query": "运动状态", "subject": "物理", "stage": "初中"},
+        runtime,
+    )
+
+    assert first.ok
+    assert not second.ok
+    assert second.error == "local search budget exhausted"
+
+
 def test_tool_timeout_is_a_recoverable_result() -> None:
     def timeout_runner(handler, kwargs, timeout_seconds):
         raise TimeoutError
@@ -229,6 +249,51 @@ def test_tool_timeout_is_a_recoverable_result() -> None:
 
     assert not result.ok
     assert result.error == "tool timed out"
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "expected_timeout"),
+    [
+        (
+            "search_local_knowledge",
+            {"query": "力", "subject": "物理", "stage": "初中"},
+            3,
+        ),
+        (
+            "search_web",
+            {
+                "query": "最新教材变化",
+                "subject": "物理",
+                "stage": "初中",
+                "evidence_gap": "需要核对最新变化",
+            },
+            12,
+        ),
+    ],
+)
+def test_tool_uses_source_specific_timeout(
+    tool_name, arguments, expected_timeout
+) -> None:
+    observed_timeouts = []
+
+    def timeout_runner(handler, kwargs, timeout_seconds):
+        observed_timeouts.append(timeout_seconds)
+        return {"hits": []}
+
+    registry = OrchestrationToolRegistry(
+        local_handler=lambda **kwargs: {"hits": []},
+        web_handler=lambda **kwargs: {"hits": []},
+        timeout_runner=timeout_runner,
+        local_timeout_seconds=3,
+        web_timeout_seconds=12,
+    )
+    runtime = _runtime()
+    runtime.local_search_succeeded = True
+
+    result = registry.execute(tool_name, arguments, runtime)
+
+    assert result.ok
+    assert observed_timeouts == [expected_timeout]
 
 
 @pytest.mark.parametrize("sources", [[], ["教材", "题库"], ["unknown"]])

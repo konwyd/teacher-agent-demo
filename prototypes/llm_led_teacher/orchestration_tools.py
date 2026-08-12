@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from time import perf_counter
@@ -91,14 +90,14 @@ class OrchestrationToolRegistry:
         local_handler: Callable[..., Any] | None = None,
         web_handler: Callable[..., Any] | None = None,
         timeout_runner: TimeoutRunner = _bounded_call,
-        timeout_seconds: float | None = None,
+        local_timeout_seconds: float = 3.0,
+        web_timeout_seconds: float = 12.0,
     ) -> None:
         self.local_handler = local_handler or self._search_local
         self.web_handler = web_handler or self._search_web
         self.timeout_runner = timeout_runner
-        self.timeout_seconds = timeout_seconds or float(
-            os.getenv("TEACHER_TOOL_TIMEOUT_SECONDS", "45")
-        )
+        self.local_timeout_seconds = local_timeout_seconds
+        self.web_timeout_seconds = web_timeout_seconds
 
     @staticmethod
     def _search_local(**kwargs: Any) -> RagContext:
@@ -179,7 +178,7 @@ class OrchestrationToolRegistry:
         signature = parsed.model_dump_json()
         if signature in runtime.local_search_signatures:
             return ToolResult(name="search_local_knowledge", ok=False, error="duplicate local search")
-        if len(runtime.local_search_signatures) >= 2:
+        if len(runtime.local_search_signatures) >= 1:
             return ToolResult(name="search_local_knowledge", ok=False, error="local search budget exhausted")
         runtime.local_search_signatures.add(signature)
         return self._run_handler(
@@ -189,6 +188,7 @@ class OrchestrationToolRegistry:
             runtime,
             started,
             local=True,
+            timeout_seconds=self.local_timeout_seconds,
         )
 
     def _execute_web(
@@ -212,6 +212,7 @@ class OrchestrationToolRegistry:
             parsed.model_dump(),
             runtime,
             started,
+            timeout_seconds=self.web_timeout_seconds,
         )
 
     def _run_handler(
@@ -223,9 +224,10 @@ class OrchestrationToolRegistry:
         started: float,
         *,
         local: bool = False,
+        timeout_seconds: float,
     ) -> ToolResult:
         try:
-            value = self.timeout_runner(handler, kwargs, self.timeout_seconds)
+            value = self.timeout_runner(handler, kwargs, timeout_seconds)
         except (TimeoutError, FutureTimeoutError):
             return ToolResult(name=name, ok=False, error="tool timed out", elapsed_seconds=perf_counter() - started)
         except Exception as exc:  # noqa: BLE001 - tools must not break the UI process

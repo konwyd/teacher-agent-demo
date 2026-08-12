@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from prototypes.llm_led_teacher.orchestration_models import (
-    AgentDecision,
     RequestClassification,
     ToolResult,
 )
 from prototypes.llm_led_teacher.orchestrator import (
     MultisubjectAgentLoop,
     RequestClassifier,
+    RetrievalDecisionProvider,
 )
+from prototypes.llm_led_teacher.retrieval_policy import RetrievalDecision
 
 
 class _Classifier:
@@ -19,25 +20,30 @@ class _Classifier:
         return self.classification
 
 
-class _Decisions:
-    def __init__(self, decisions: list[AgentDecision]) -> None:
-        self.decisions = list(decisions)
+class _Routes:
+    def __init__(self, decision: RetrievalDecision) -> None:
+        self.decision = decision
         self.calls = 0
 
-    def decide(self, payload) -> AgentDecision:
+    def decide(self, payload) -> RetrievalDecision:
         self.calls += 1
-        return self.decisions.pop(0)
+        return self.decision
 
 
 class _Registry:
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: list[tuple[str, dict]] = []
 
     def execute(self, name, arguments, runtime) -> ToolResult:
         self.calls.append((name, arguments))
         if name == "search_local_knowledge":
             runtime.local_search_succeeded = True
-        return ToolResult(name=name, ok=True, data={"text": "证据", "hits": []})
+        return ToolResult(
+            name=name,
+            ok=True,
+            data={"text": f"{name} evidence", "hits": []},
+            elapsed_seconds=0.25,
+        )
 
 
 def _k9(subject: str, *, new: bool) -> RequestClassification:
@@ -51,14 +57,14 @@ def _k9(subject: str, *, new: bool) -> RequestClassification:
     )
 
 
-def _finish() -> AgentDecision:
-    return AgentDecision(kind="finish", reason="evidence is enough", plan="guided")
+def _no_retrieval() -> RetrievalDecision:
+    return RetrievalDecision(mode="none", reason="无需外部证据", confidence=1.0)
 
 
 def test_followup_inherits_math_subject_when_classifier_marks_same_problem() -> None:
     loop = MultisubjectAgentLoop(
         classifier=_Classifier(_k9("数学", new=False)),
-        action_provider=_Decisions([_finish()]),
+        retrieval_provider=_Routes(_no_retrieval()),
         registry=_Registry(),
     )
 
@@ -76,7 +82,7 @@ def test_followup_inherits_math_subject_when_classifier_marks_same_problem() -> 
 def test_explicit_physics_problem_switches_subject() -> None:
     loop = MultisubjectAgentLoop(
         classifier=_Classifier(_k9("物理", new=True)),
-        action_provider=_Decisions([_finish()]),
+        retrieval_provider=_Routes(_no_retrieval()),
         registry=_Registry(),
     )
 
@@ -101,10 +107,10 @@ def test_off_topic_finishes_without_knowledge_tools() -> None:
         reason="company product question",
     )
     registry = _Registry()
-    provider = _Decisions([_finish()])
+    provider = _Routes(_no_retrieval())
     loop = MultisubjectAgentLoop(
         classifier=_Classifier(classification),
-        action_provider=provider,
+        retrieval_provider=provider,
         registry=registry,
     )
 
@@ -121,32 +127,53 @@ def test_off_topic_finishes_without_knowledge_tools() -> None:
     assert result.routing_guidance["answer_mode"] == "brief_redirect"
 
 
-def test_loop_stops_after_six_decisions() -> None:
-    repeated = AgentDecision(
-        kind="call_tool",
-        tool_name="search_local_knowledge",
-        arguments={"query": "力", "subject": "物理", "stage": "初中"},
-        reason="try local evidence",
+def test_creative_guidance_skips_all_retrieval_tools() -> None:
+    registry = _Registry()
+    routes = _Routes(
+        RetrievalDecision(
+            mode="local_then_web",
+            reason="模型提出搜索",
+            confidence=0.8,
+        )
     )
-    provider = _Decisions([repeated.model_copy(deep=True) for _ in range(8)])
     loop = MultisubjectAgentLoop(
-        classifier=_Classifier(_k9("物理", new=True)),
-        action_provider=provider,
-        registry=_Registry(),
-        max_iterations=6,
+        classifier=_Classifier(_k9("语文", new=True)),
+        retrieval_provider=routes,
+        registry=registry,
     )
 
-    result = loop.run(
-        problem_context="",
-        student_message="力是什么",
-        active_subject="",
-        active_stage="",
+    result = loop.run("", "把这句话润色成作文开头", "", "")
+
+    assert result.retrieval_decision.mode.value == "none"
+    assert routes.calls == 1
+    assert registry.calls == []
+
+
+def test_local_then_web_executes_each_tool_at_most_once() -> None:
+    registry = _Registry()
+    routes = _Routes(
+        RetrievalDecision(
+            mode="local_then_web",
+            reason="需要核对最新政策",
+            confidence=0.9,
+            needs_current_information=True,
+        )
+    )
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("道法", new=True)),
+        retrieval_provider=routes,
+        registry=registry,
     )
 
-    decision_events = [event for event in result.trace if event.event_type == "decision"]
-    assert len(decision_events) == 6
-    assert provider.calls == 6
-    assert result.termination_reason == "iteration_budget_exhausted"
+    result = loop.run("", "查询今天最新教材政策", "", "")
+
+    assert [name for name, _ in registry.calls] == [
+        "search_local_knowledge",
+        "search_web",
+    ]
+    assert [
+        event.tool_name for event in result.trace if event.event_type == "tool_result"
+    ] == ["search_local_knowledge", "search_web"]
 
 
 def test_classifier_repairs_once_then_falls_back_off_topic() -> None:
@@ -164,3 +191,28 @@ def test_classifier_repairs_once_then_falls_back_off_topic() -> None:
     assert client.calls == 2
     assert result.scope.value == "off_topic"
     assert result.answer_mode.value == "brief_redirect"
+
+
+def test_retrieval_provider_requests_typed_decision_schema() -> None:
+    class Client:
+        def __init__(self) -> None:
+            self.schema = None
+
+        def chat_json(self, **kwargs):
+            self.schema = kwargs["schema"]
+            return {
+                "mode": "local",
+                "reason": "需要教材证据",
+                "confidence": 0.9,
+            }
+
+    client = Client()
+
+    result = RetrievalDecisionProvider(client).decide({"student_message": "什么是力"})
+
+    assert client.schema is RetrievalDecision
+    assert result == RetrievalDecision(
+        mode="local",
+        reason="需要教材证据",
+        confidence=0.9,
+    )

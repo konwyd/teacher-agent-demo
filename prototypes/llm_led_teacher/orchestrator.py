@@ -7,8 +7,6 @@ from typing import Any, Callable, Protocol
 
 from app.llm.deepseek_client import DeepSeekClient
 from prototypes.llm_led_teacher.orchestration_models import (
-    AgentActionKind,
-    AgentDecision,
     AgentOrchestrationResult,
     AgentTraceEvent,
     AnswerMode,
@@ -22,6 +20,11 @@ from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.retrieval_policy import (
+    RetrievalDecision,
+    RetrievalMode,
+    apply_retrieval_guards,
+)
 
 
 class Classifier(Protocol):
@@ -34,8 +37,8 @@ class Classifier(Protocol):
     ) -> RequestClassification: ...
 
 
-class ActionProvider(Protocol):
-    def decide(self, payload: dict[str, Any]) -> AgentDecision: ...
+class RetrievalProvider(Protocol):
+    def decide(self, payload: dict[str, Any]) -> RetrievalDecision: ...
 
 
 class RequestClassifier:
@@ -88,29 +91,25 @@ off_topic 必须 subject=null、stage=未知、answer_mode=brief_redirect。
         )
 
 
-class DeepSeekActionProvider:
-    _SYSTEM_PROMPT = """你是有边界的九学科教师 Agent 编排器，不直接回答学生。
-每步只输出一个动作：call_tool 或 finish。可用工具：
-- load_skill(name)
-- inspect_student_context()
-- search_local_knowledge(query, subject, stage, top_k, sources)，其中 sources 只能是 ["textbook","exercise"] 的非空子集
-- search_web(query, subject, stage, evidence_gap)
-
-规则：K9 问题优先查本地教材/题库；只有本地工具成功后且存在具体证据缺口才可联网。
-有相关本地片段即可 finish，不要求凑满五条，也不要用固定相似度阈值替代内容判断。
-同一参数不要重复调用；联网最多一次。reason 只写可公开的简短动作理由，不写思维链。
-finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。"""
+class RetrievalDecisionProvider:
+    _SYSTEM_PROMPT = """你是九年义务教育教师的检索路由器，只判断回答当前请求是否需要外部证据。
+不要回答学生，不要生成教学内容，不要编排自由步骤或工具调用计划。
+mode 只能是 none、local、local_then_web：无需资料选 none；需要教材或题库证据选 local；
+只有需要核对今天、最新、刚发布等时效信息时才选 local_then_web，并设置 needs_current_information=true。
+reason 只写可公开的简短检索理由，不写私有思维链；confidence 表示路由置信度。"""
 
     def __init__(self, client: DeepSeekClient) -> None:
         self.client = client
 
-    def decide(self, payload: dict[str, Any]) -> AgentDecision:
-        return self.client.chat_json(
-            system=self._SYSTEM_PROMPT,
-            user=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-            schema=AgentDecision,
-            temperature=0.0,
-            max_tokens=900,
+    def decide(self, payload: dict[str, Any]) -> RetrievalDecision:
+        return RetrievalDecision.model_validate(
+            self.client.chat_json(
+                system=self._SYSTEM_PROMPT,
+                user=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                schema=RetrievalDecision,
+                temperature=0.0,
+                max_tokens=500,
+            )
         )
 
 
@@ -120,19 +119,17 @@ class MultisubjectAgentLoop:
         client: DeepSeekClient | None = None,
         *,
         classifier: Classifier | None = None,
-        action_provider: ActionProvider | None = None,
+        retrieval_provider: RetrievalProvider | None = None,
         registry: OrchestrationToolRegistry | None = None,
-        max_iterations: int = 6,
     ) -> None:
-        if max_iterations < 1:
-            raise ValueError("max_iterations must be positive")
         active_client = client
-        if classifier is None or action_provider is None:
+        if classifier is None or retrieval_provider is None:
             active_client = active_client or DeepSeekClient()
         self.classifier = classifier or RequestClassifier(active_client)
-        self.action_provider = action_provider or DeepSeekActionProvider(active_client)
+        self.retrieval_provider = retrieval_provider or RetrievalDecisionProvider(
+            active_client
+        )
         self.registry = registry or OrchestrationToolRegistry()
-        self.max_iterations = max_iterations
 
     def run(
         self,
@@ -168,6 +165,11 @@ class MultisubjectAgentLoop:
         if classification.scope is RequestScope.OFF_TOPIC:
             return AgentOrchestrationResult(
                 classification=classification,
+                retrieval_decision=RetrievalDecision(
+                    mode=RetrievalMode.NONE,
+                    reason="当前请求无需课程资料",
+                    confidence=1.0,
+                ),
                 rag_context=RagContext(source="off_topic"),
                 trace=trace,
                 termination_reason="off_topic_redirect",
@@ -185,62 +187,71 @@ class MultisubjectAgentLoop:
             },
         )
         observations = []
-        loaded_skills: list[str] = []
         rag_context = RagContext(source="none")
-        termination_reason = "iteration_budget_exhausted"
         routing_guidance = {"answer_mode": classification.answer_mode.value}
 
-        for step in range(1, self.max_iterations + 1):
-            payload = {
-                "classification": classification.model_dump(mode="json"),
-                "problem_context": problem_context[-1600:],
-                "student_message": student_message[-1200:],
-                "observations": [item.model_dump(mode="json") for item in observations],
-                "budgets": {
-                    "remaining_steps": self.max_iterations - step + 1,
-                    "local_calls": len(runtime.local_search_signatures),
-                    "web_calls": runtime.web_search_count,
-                },
-            }
-            try:
-                decision = AgentDecision.model_validate(self.action_provider.decide(payload))
-            except Exception as exc:  # noqa: BLE001 - bounded safe fallback
-                termination_reason = "provider_error"
-                self._trace(
-                    trace,
-                    AgentTraceEvent(
-                        step=step,
-                        event_type="fallback",
-                        summary="编排决策失败，使用已有证据安全收口",
-                        ok=False,
-                        details={"error_type": type(exc).__name__},
-                    ),
-                    progress_callback,
-                )
-                break
+        payload = {
+            "classification": classification.model_dump(mode="json"),
+            "problem_context": problem_context[-1600:],
+            "student_message": student_message[-1200:],
+        }
+        try:
+            decision = apply_retrieval_guards(
+                RetrievalDecision.model_validate(
+                    self.retrieval_provider.decide(payload)
+                ),
+                message=student_message,
+                classification=classification,
+            )
+            termination_reason = "retrieval_routed"
+        except Exception as exc:  # noqa: BLE001 - bounded safe fallback
+            decision = RetrievalDecision(
+                mode=RetrievalMode.NONE,
+                reason="检索路由失败，使用已有知识继续",
+                confidence=0.0,
+            )
+            termination_reason = "provider_error"
             self._trace(
                 trace,
                 AgentTraceEvent(
-                    step=step,
-                    event_type="decision",
+                    step=1,
+                    event_type="fallback",
                     summary=decision.reason,
-                    tool_name=decision.tool_name,
+                    ok=False,
+                    details={"error_type": type(exc).__name__},
                 ),
                 progress_callback,
             )
-            if decision.kind is AgentActionKind.FINISH:
-                termination_reason = "model_finished"
-                if decision.plan in {mode.value for mode in AnswerMode}:
-                    routing_guidance["answer_mode"] = decision.plan
-                break
+        else:
+            self._trace(
+                trace,
+                AgentTraceEvent(
+                    step=1,
+                    event_type="decision",
+                    summary=decision.reason,
+                    details=decision.model_dump(mode="json"),
+                ),
+                progress_callback,
+            )
 
-            result = self.registry.execute(decision.tool_name, decision.arguments, runtime)
+        local_arguments = {
+            "query": student_message,
+            "subject": classification.subject.value,
+            "stage": classification.stage.value,
+            "top_k": 5,
+            "sources": ["textbook", "exercise"],
+        }
+        web_arguments = {
+            "query": student_message,
+            "subject": classification.subject.value,
+            "stage": classification.stage.value,
+            "evidence_gap": decision.reason,
+        }
+
+        def record(result: Any, step: int) -> None:
+            nonlocal rag_context
             observations.append(result)
-            if result.ok and result.name == "load_skill":
-                skill_name = str(result.data.get("name", ""))
-                if skill_name and skill_name not in loaded_skills:
-                    loaded_skills.append(skill_name)
-            if result.ok and result.name in {"search_local_knowledge", "search_web"}:
+            if result.ok:
                 rag_context = self._merge_rag(rag_context, result.data)
             hit_count = len(result.data.get("hits", [])) if result.ok else 0
             summary = (
@@ -262,12 +273,21 @@ class MultisubjectAgentLoop:
                 progress_callback,
             )
 
+        if decision.mode in {RetrievalMode.LOCAL, RetrievalMode.LOCAL_THEN_WEB}:
+            local = self.registry.execute(
+                "search_local_knowledge", local_arguments, runtime
+            )
+            record(local, 2)
+        if decision.mode is RetrievalMode.LOCAL_THEN_WEB:
+            web = self.registry.execute("search_web", web_arguments, runtime)
+            record(web, 3)
+
         return AgentOrchestrationResult(
             classification=classification,
+            retrieval_decision=decision,
             rag_context=rag_context,
             observations=observations,
             trace=trace,
-            loaded_skills=loaded_skills,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
         )
