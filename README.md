@@ -1,8 +1,8 @@
 # LLM-led Teacher — 中文 K9 多学科教师原型
 
-这是一个面向中文小学、初中九学科的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：有界 Agent Loop 识别学科并按需调用 Skill、本地知识和联网工具，DeepSeek 负责自然语言教学，确定性数学检查器继续审计可验证步骤。
+这是一个面向中文小学、初中九学科的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：有界 Agent Loop 识别学科并按需调用 Skill、本地知识和联网工具，DeepSeek 负责自然语言教学，可选的确定性 verifier 为其支持的数学步骤提供证据。
 
-项目关注的不是让模型一次性给出答案，而是让它在普通求助场景中每轮只推进一个有意义步骤。
+项目关注的不是让模型无条件一次性给出答案，而是让每轮回答服从明确的教学契约：概念提问只讲通用概念，普通求解只推进允许的步骤，只有学生明确索要完整解答时才开放最终答案。
 
 ## 当前主版本
 
@@ -11,7 +11,7 @@
 - 教师模型：本地 DeepSeek-V4 Flash GGUF（llama.cpp OpenAI-compatible 服务）
 - 本地检索：bge-m3 + Chroma Server + BM25 + RRF
 - 学科范围：数学、语文、英语、物理、化学、生物、历史、地理、道法
-- 教学防线：六步 Agent Loop + 工具门禁 + observer 节奏规范化 + math_checker 后置审计/修正
+- 教学防线：六步 Agent Loop + 工具门禁 + disclosure-aware `TeachingContract` + 本地语义边界审计 + 可选确定性 verifier
 - 展示方式：先完成审计，再将最终安全回答逐字符显示
 
 旧的结构化 Teacher Agent 仍保留为研究 baseline，入口为 Streamlit `8501` 和 FastAPI `8000`，但它不是当前默认演示。
@@ -21,26 +21,28 @@
 ```text
 学生消息
   ↓
-observer 判断是否换题及建议本轮节奏
-  ↓
 Agent 强制分类学科、学段、是否新题
   ↓
 有界 Loop 按需加载 Skill、检索本地知识，必要时受控联网
   ↓
-本地规则规范化有效 guidance
+Agent 提交 TeachingContract：目标、回答模式、允许/禁止内容、当前题应用与答案披露权限
   ↓
-DeepSeek 生成教师初稿
+本地策略根据学生原始请求收紧契约；可选 verifier 只检查其支持的数学步骤
   ↓
-math_checker / verifier 提取并核验方程
+DeepSeek 按契约生成教师初稿
   ↓
-节奏审计；必要时让模型修正一次
+本地模型做语义边界审计；越界时按公开修正指令重写，并做高置信字面复查
+  ↓
+将公式规范化为 MathJax 兼容 Markdown，持久化本轮契约、公开 Agent trace 与审计结果
   ↓
 只把审计后的回答逐字符展示给学生
 ```
 
-observer 是软判断来源，不是最终裁决者。对于新题中的普通“怎么解”“不会”“帮我”等请求，如果确定性检查能确认它是需要多步变形的方程，错误的 `complete_response` 会被规范化为 `single_move`。即使 observer 判断失误，后置审计仍会阻止首轮直接泄露最终形式。
+8502 的 Agent 路径不再以实验性 Observer 作为节奏来源；Observer 仅留在未启用 Agent Loop 的兼容路径。Agent 必须以 `concept_explanation`、`one_step`、`guided_solution`、`full_solution` 或 `brief_redirect` 提交教学契约。本地策略再以学生原始措辞为可信依据收紧权限；旧的 `single_move` / `complete_response` 只是由契约派生的兼容字段，不再决定披露边界。
 
-学生明确要求“完整步骤和答案”时可以完整回答；概念题、直接事实题或缺少确定性 verifier 的题型不会被错误阻断。
+例如，追问“求根公式是什么”会规范化为 `concept_explanation`，不允许把公式代入 active problem，也不允许披露该题答案；学生明确要求“完整步骤和答案”时才可使用 `full_solution` 并开放这两项权限。语义边界审计检查的是回答是否服从该目标、应用权限、披露权限和步骤范围，**不是**对数学、物理或其他学科陈述做通用事实验证。
+
+确定性 verifier 是可选的学科工具，而不是生成回答的前置条件。当前实现只把既有的 Fraction 一元一次方程 checker 暴露为 verifier；超出支持域时记录 `not_applicable` / `unable_to_verify`，回答仍受教学契约与边界审计约束。不要把“边界审计通过”解释成“所有事实均已验证正确”。
 
 ## RAG 的实际工作方式
 
@@ -61,7 +63,7 @@ RAG 在服务端运行，用户浏览器不需要下载向量库或嵌入模型�
 - 8502 的本地工具复用 `llm-test/rag_retriever.py` 的教材/题库、BM25、bge-m3 和 RRF，但不应用固定阈值，也绝不会隐式联网；raw vector、BM25、RRF 和融合分会作为诊断返回 Agent。
 - 联网只能用于 K9 请求，并且本轮必须已经成功执行本地检索、提供具体证据缺口；每轮最多一次。非 K9 请求不调用本地库或联网，只简短回答并引导回学习内容。
 
-RAG 是有边界的参考数据：它只进入教师生成请求，不进入 observer 请求，不能覆盖 `turn_guidance`，也不能替换当前 `active problem`。检索内容与题目无关时，教师可以忽略。
+RAG 是有边界的参考数据：它只能通过 Agent 的受控工具调用进入教师生成请求，不能改变请求分类、`TeachingContract` 或当前 `active problem`。检索内容与题目无关时，教师可以忽略。
 
 ## 化学分子结构图增强（MolScribe + RDKit）
 
@@ -136,6 +138,7 @@ python3 scripts/run_llm_led_teacher.py
 每轮成功回答会自动把完整对话保存到
 `data/runtime/conversations.sqlite3`。重新登录后自动打开最近一次对话，也可以在侧边栏
 “历史对话”中切换或新建；查询始终同时校验内部学生 ID 和对话 ID，不同账号不能读取彼此记录。
+每个新回合还会随 episode 持久化请求分类、TeachingContract、真实执行过的公开 Agent/Tool 事件、边界审计、可选 verifier 结果和公式规范化标记；历史详情页可重新展示这些 trace，但不会保存或展示 prompt、私有 tool details 或模型思维链。
 
 模型默认使用 `131072` 上下文、单并发槽、K=`q8_0`、V=`q4_0`，并把 batch/ubatch 都限制为 `128`。这套配置已在当前 8×16 GiB GPU 环境完成真实长提示词回归；旧的 `262144 / parallel=-1 / batch=512` 配置会在首轮计算时使 GPU4 OOM。首次加载可能需要数分钟，启动器最多等待 900 秒，并在开放网页前执行一次最小真实推理来验证 CUDA 计算可用。模型端口被未知或不健康服务占用、模型提前退出或健康检查超时时，整套启动直接失败，不会调用 DeepSeek 付费 API。
 
@@ -168,7 +171,7 @@ python3 scripts/run_llm_led_teacher.py \
 | 配置 | 默认值 | 用途 |
 |---|---|---|
 | 模型别名 | `deepseek-v4-flash` | 由 `/v1/models` 健康检查验证 |
-| 模型地址 | `http://127.0.0.1:8080/v1` | 教师、observer 和修正请求 |
+| 模型地址 | `http://127.0.0.1:8080/v1` | Agent 分类/决策、教师生成、语义边界审计和修正请求 |
 | `DEEPSEEK_TIMEOUT_SECONDS` | `300` | 单次本地模型请求超时 |
 | `TEACHER_RAG_DEVICE` | `cpu` | 512K 本地模型占满 GPU 时避免 bge-m3 OOM；显式环境变量优先 |
 | `TEACHER_RAG_CPU_THREADS` | `4` | RAG 相关 CPU 线程数 |
@@ -178,9 +181,9 @@ python3 scripts/run_llm_led_teacher.py \
 
 ## 回答速度与流式展示
 
-一次普通回合通常包括 observer、请求分类、若干有界 Agent 决策和教师生成；触发安全修正时还会多一次模型调用。页面会显示分类、工具、生成、审计和修正等真实阶段状态。
+一次普通回合通常包括请求分类、若干有界 Agent 决策、TeachingContract 提交、教师生成和语义边界审计；触发安全修正时还会多一次模型调用。页面会显示分类、工具、生成、审计和修正等真实阶段状态。
 
-回答生成期间，展开的状态框会实时追加每个后台阶段正在做的工作，并在阶段结束时显示耗时；完成后还会追加 Observer、RAG 和审计摘要。
+回答生成期间，展开的状态框会实时追加实际发生的 Agent 决策、Tool 结果及各后台阶段，并在阶段结束时显示耗时；完成后还会追加教学契约、RAG 和审计摘要。最终文本中的明确 LaTeX 分隔符和高置信公式块会转换成 Streamlit/MathJax 可渲染的 `$...$` 或 `$$...$$`，围栏代码块保持原样；规范化后的文本会进入显示和后续对话历史。
 
 最终回答采用安全流式展示：初稿不会直接发给学生，必须先完成审计和必要修正，随后安全版本才逐字符显示。它改善等待体验，但不会缩短上游模型和检索本身的耗时。
 
@@ -197,13 +200,15 @@ python scripts/run_eval.py
 
 重点保护的教学不变式：
 
-- 多步骤方程的普通首轮求助最终使用 `single_move`；
-- 教师收到规范化后的 `turn_guidance`；
-- 初稿泄露最终形式时触发修正；
+- 概念解释契约不能应用 active problem 或披露最终答案；
+- 只有学生明确索要完整解答时才允许 `full_solution` 和最终答案；
+- 旧 `turn_guidance` 由 TeachingContract 派生，不能反向放宽契约；
+- 初稿越过目标、应用或披露边界时触发语义修正；
 - 修正后最多推进一个有意义步骤，且最多一个结尾问题；
-- 明确索要完整答案和直接事实题仍可使用 `complete_response`；
-- observer 异常或缺少 verifier 时，学生回答仍正常显示；
-- RAG 不进入 observer payload，也不改变 active problem。
+- 缺少适用 verifier 时不会阻断回答，也不会伪造“已验证”证据；
+- 公式输出规范化为 MathJax 兼容 Markdown，并持久化规范化结果；
+- 历史记录保存真实公开 Agent trace、TeachingContract 和边界审计；
+- RAG 不改变 TeachingContract 或 active problem；
 - 九学科新题可以自动切换，追问继承当前学科和学段；
 - 非 K9 请求以及未先查本地的联网动作会被工具门禁拒绝。
 
@@ -238,6 +243,9 @@ app/
 prototypes/llm_led_teacher/
   logic.py                       LLM-led 编排、规范化与审计
   orchestrator.py                九学科强制分类与六步 Agent Loop
+  teaching_policy.py             从原始请求收紧 TeachingContract 权限
+  boundary_audit.py              教学范围/披露边界的语义审计与保守复查
+  math_markdown.py               MathJax 兼容 Markdown 公式规范化
   orchestration_tools.py         本地/联网/Skill 工具及确定性门禁
   orchestration_models.py        可持久化分类、动作和公开 trace 契约
   rag_hook.py                    纯本地和纯联网 RAG 适配层
@@ -255,8 +263,8 @@ data/china_textbook_k9_vectordb/ 本地 Chroma 向量库
 
 - 先阅读 [`AGENTS.md`](AGENTS.md)、[`CLAUDE.md`](CLAUDE.md)、[`CODEX_HANDOFF.md`](CODEX_HANDOFF.md) 和 [`prototypes/llm_led_teacher/README.md`](prototypes/llm_led_teacher/README.md)。
 - 修改行为必须先写失败测试，所有测试使用 fake client/mock LLM。
-- 学生步骤对错由确定性 checker/verifier 裁决，不由 LLM 自行宣判。
-- observer 和 RAG 都不能覆盖核心教学节奏或原题上下文。
+- verifier 支持域内的学生步骤对错由确定性 checker/verifier 裁决，不由 LLM 自行宣判；支持域外不得伪称已验证。
+- Agent、RAG 和兼容 `turn_guidance` 都不能覆盖本地策略收紧后的 TeachingContract 或原题上下文。
 - 不通过无限加长 system prompt 代替可测试的节奏不变式。
 - `.env`、API key 和其他凭据不得提交或打印。
 
