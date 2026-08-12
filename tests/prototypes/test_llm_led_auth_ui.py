@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -128,7 +130,8 @@ def test_login_restores_the_users_most_recent_conversation(
     assert app.session_state.prototype_episode.active_subject == "物理"
     assert app.session_state.prototype_episode.active_stage == "初中"
     assert app.session_state.prototype_user_id == account.user_id
-    assert any(title.value == "🧪 LLM 主导 Teacher Prototype" for title in app.title)
+    assert app.chat_input
+    assert any(button.label == "开启新对话" for button in app.button)
 
 
 def test_interrupted_generation_keeps_submitted_message_and_offers_retry(
@@ -480,3 +483,78 @@ def test_history_switch_and_schema_reload_preserve_one_authoritative_id(
 
     assert app.session_state.prototype_conversation_id == older.conversation_id
     assert any(markdown.value == "旧会话消息" for markdown in app.markdown)
+
+
+def test_sidebar_renders_grouped_direct_history_and_collapsed_debug_details(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    account = LocalAccountStore(account_db).register("sidebar_student", "history-password")
+    store = LocalConversationStore(conversation_db)
+    records = [
+        store.create(
+            account.user_id,
+            PrototypeEpisode(turns=[_turn("杨辉三角是什么")]).model_dump(mode="json"),
+            title="杨辉三角是什么",
+        ),
+        store.create(
+            account.user_id,
+            PrototypeEpisode(turns=[_turn("三天前的问题")]).model_dump(mode="json"),
+            title="三天前的问题",
+        ),
+        store.create(
+            account.user_id,
+            PrototypeEpisode(turns=[_turn("十二天前的问题")]).model_dump(mode="json"),
+            title="十二天前的问题",
+        ),
+        store.create(
+            account.user_id,
+            PrototypeEpisode(turns=[_turn("四十天前的问题")]).model_dump(mode="json"),
+            title="四十天前的问题",
+        ),
+    ]
+    now = datetime.now(timezone.utc)
+    timestamps = [now, now - timedelta(days=3), now - timedelta(days=12), now - timedelta(days=40)]
+    with sqlite3.connect(conversation_db) as connection:
+        for record, timestamp in zip(records, timestamps):
+            connection.execute(
+                "UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
+                (timestamp.isoformat(), record.conversation_id),
+            )
+
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("sidebar_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert any(button.label == "开启新对话" for button in app.button)
+    assert not app.selectbox
+    assert {heading.value for heading in app.subheader} >= {
+        "今天",
+        "7 天内",
+        "30 天内",
+        "更早",
+    }
+    debug = next(expander for expander in app.expander if expander.label == "调试详情")
+    assert debug.proto.expanded is False
+    next(button for button in app.button if button.label == "杨辉三角是什么").click().run()
+
+    assert app.session_state.prototype_conversation_id == records[0].conversation_id
+    assert any(markdown.value == "杨辉三角是什么" for markdown in app.markdown)

@@ -170,6 +170,7 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     assert source.count("render_context_usage(episode)") == 1
     assert source.count("render_turn_token_usage(turn)") == 2
     assert "_render_auth_gate()" in source
-    assert "_save_active_conversation(episode)" in source
+    assert "_save_conversation(" in source
+    assert "target_conversation_id" in source
     assert "_get_pending_student_message(episode)" in source
     assert "enable_agent_loop=True" in source

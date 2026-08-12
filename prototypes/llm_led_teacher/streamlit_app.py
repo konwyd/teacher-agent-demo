@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from time import perf_counter
 
@@ -34,7 +35,110 @@ from prototypes.llm_led_teacher.streaming import iter_display_chunks
 _SESSION_SCHEMA_VERSION = 12
 
 
-st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Teacher Agent", page_icon="🧠", layout="wide")
+
+_DEEPSEEK_STYLE = """
+<style>
+:root {
+    --teacher-blue: #4d6bfe;
+    --teacher-blue-soft: #e9efff;
+    --teacher-sidebar: #f7f8fa;
+    --teacher-text-muted: #7a8194;
+}
+[data-testid="stToolbar"] {
+    visibility: hidden;
+    height: 0;
+}
+[data-testid="stSidebar"] {
+    background: var(--teacher-sidebar);
+    border-right: 1px solid rgba(0, 0, 0, 0.045);
+}
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    padding-top: 1.1rem;
+}
+[data-testid="stSidebar"] .stButton > button {
+    border: 0;
+    border-radius: 0.65rem;
+    box-shadow: none;
+    justify-content: flex-start;
+    min-height: 2.35rem;
+    padding: 0.42rem 0.7rem;
+    text-align: left;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(77, 107, 254, 0.08);
+    color: #2746d8;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: var(--teacher-blue-soft);
+    color: #2746d8;
+}
+[data-testid="stSidebar"] h3 {
+    color: var(--teacher-text-muted);
+    font-size: 0.77rem;
+    font-weight: 500;
+    margin: 1rem 0 0.2rem;
+}
+[data-testid="stMainBlockContainer"] {
+    max-width: 980px;
+    padding-bottom: 9rem;
+    padding-top: 1.4rem;
+}
+.teacher-page-title {
+    color: #242735;
+    font-size: 1.05rem;
+    font-weight: 650;
+    line-height: 1.4;
+    margin: 0.1rem 0 0;
+}
+.teacher-page-subtitle {
+    color: var(--teacher-text-muted);
+    font-size: 0.78rem;
+    margin: 0.1rem 0 1.6rem;
+}
+[data-testid="stChatMessage"] {
+    background: transparent;
+    border: 0;
+    padding: 0.6rem 0;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    background: #f1f4fb;
+    border-radius: 1rem;
+    margin-left: auto;
+    max-width: 76%;
+    padding: 0.65rem 0.9rem;
+    width: fit-content;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"])
+    [data-testid="stChatMessageAvatarUser"] {
+    display: none;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"])
+    [data-testid="stChatMessageContent"] {
+    padding: 0;
+}
+[data-testid="stBottomBlockContainer"] {
+    background: rgba(255, 255, 255, 0.96);
+    margin: 0 auto;
+    max-width: 980px;
+    padding-bottom: 0.8rem;
+}
+[data-testid="stChatInput"] {
+    border-radius: 1rem;
+    box-shadow: 0 8px 28px rgba(31, 35, 48, 0.08);
+}
+@media (max-width: 760px) {
+    [data-testid="stMainBlockContainer"] {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        max-width: 90%;
+    }
+}
+</style>
+"""
+st.markdown(_DEEPSEEK_STYLE, unsafe_allow_html=True)
 
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
 _JUST_GENERATED_TURN_KEY = "public_thinking_just_generated_turn_id"
@@ -256,31 +360,13 @@ elif "prototype_episode" not in st.session_state:
 
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
-st.title("🧪 LLM 主导 Teacher Prototype")
-st.caption("九学科 Agent Loop + 本地知识优先 · 确定性验证与审计不绕过")
-
 with st.sidebar:
-    st.subheader(f"你好，{authenticated_user['username']}")
-    st.caption(f"学生 ID：{authenticated_user['user_id']}")
+    st.markdown("### 🧠 Teacher Agent")
     current_conversation_id = st.session_state.get("prototype_conversation_id")
-    st.caption(f"当前对话：{current_conversation_id or '尚未保存'}")
-    if st.button("退出登录", use_container_width=True):
-        for key in (
-            "authenticated_user",
-            "prototype_episode",
-            "prototype_conversation_id",
-            "prototype_user_id",
-            "prototype_session_schema_version",
-            _PENDING_STUDENT_MESSAGE_KEY,
-            _JUST_GENERATED_TURN_KEY,
-        ):
-            st.session_state.pop(key, None)
-        st.rerun()
-    st.divider()
-    st.subheader("历史对话")
     st.button(
         "开启新对话",
         use_container_width=True,
+        type="secondary",
         on_click=_activate_draft,
         args=(authenticated_user["user_id"],),
     )
@@ -294,7 +380,7 @@ with st.sidebar:
     last_group = ""
     for item in history_items:
         if item.group != last_group:
-            st.caption(item.group)
+            st.subheader(item.group)
             last_group = item.group
         st.button(
             item.title,
@@ -309,18 +395,51 @@ with st.sidebar:
             args=(item.conversation_id,),
         )
     st.divider()
-    st.subheader("RAG 知识检索")
-    st.write("📚 本地教材库 + 题库")
-    st.write("🌐 联网搜索（新题触发）")
-    if warmup_status["ok"]:
-        st.caption(
-            f"⚡ RAG {warmup_status['device']} · 预热 {warmup_status['elapsed_seconds']}s"
-        )
-    else:
-        st.caption(f"⚠️ RAG 预热失败，已降级：{warmup_status['error']}")
-    st.write("**当前 active problem**")
-    st.write(episode.problem_context or "尚未开始")
-    st.write("**回合数**", len(episode.turns))
+    with st.expander("调试详情", expanded=False):
+        st.caption(f"学生 ID：{authenticated_user['user_id']}")
+        st.caption(f"当前对话：{current_conversation_id or '尚未保存'}")
+        if warmup_status["ok"]:
+            st.write(
+                "**RAG 状态**",
+                f"{warmup_status['device']} · 预热 {warmup_status['elapsed_seconds']}s",
+            )
+        else:
+            st.warning(f"RAG 预热失败，已降级：{warmup_status['error']}")
+        st.write("**active problem**", episode.problem_context or "尚未开始")
+        st.write("**回合数**", len(episode.turns))
+    st.caption(f"你好，{authenticated_user['username']}")
+    if st.button("退出登录", use_container_width=True, type="tertiary"):
+        for key in (
+            "authenticated_user",
+            "prototype_episode",
+            "prototype_conversation_id",
+            "prototype_user_id",
+            "prototype_session_schema_version",
+            _PENDING_STUDENT_MESSAGE_KEY,
+            _JUST_GENERATED_TURN_KEY,
+        ):
+            st.session_state.pop(key, None)
+        st.rerun()
+
+if st.session_state.pop("prototype_conversation_switch_error", ""):
+    st.error("历史对话加载失败，已保留当前对话。")
+restore_error = st.session_state.pop("prototype_conversation_restore_error", "")
+if restore_error:
+    st.warning(restore_error)
+
+current_title = (
+    _conversation_title(episode)
+    if current_conversation_id
+    else "新对话"
+)
+st.markdown(
+    f'<div class="teacher-page-title">{escape(current_title)}</div>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<div class="teacher-page-subtitle">Teacher Agent · 本地知识优先 · 回答经过确定性审计</div>',
+    unsafe_allow_html=True,
+)
 
 if not is_configured():
     st.warning(
