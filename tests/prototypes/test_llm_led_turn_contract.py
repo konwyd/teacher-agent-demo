@@ -325,7 +325,41 @@ def test_old_turn_without_public_thinking_events_still_loads() -> None:
     restored = PrototypeTurnRecord.model_validate(payload)
 
     assert restored.public_thinking_events == []
+    assert restored.sections == []
     assert restored.retrieval_decision.mode.value == "none"
+
+
+def test_turn_sections_round_trip_without_changing_legacy_events() -> None:
+    payload = {
+        "turn_id": 1,
+        "student_message": "改写这句话",
+        "teacher_output": {"response": "新的开头"},
+        "student_verification": {
+            "status": "not_applicable",
+            "summary": "无需验证",
+            "verifier_name": "none",
+        },
+        "evidence_level": "not_applicable",
+        "sections": [
+            {
+                "kind": "classification",
+                "title": "题意",
+                "summary": "已确认题目与作答目标。",
+                "details": ["语文新题", "把问句改成作文开头"],
+                "status": "completed",
+                "elapsed_seconds": 0.1,
+            }
+        ],
+    }
+
+    restored = PrototypeTurnRecord.model_validate(payload)
+    round_tripped = PrototypeTurnRecord.model_validate(
+        restored.model_dump(mode="json")
+    )
+
+    assert round_tripped.sections == restored.sections
+    assert round_tripped.sections[0].title == "题意"
+    assert round_tripped.public_thinking_events == []
 
 
 def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
@@ -741,6 +775,50 @@ def test_creative_turn_records_no_rag_and_no_repair_call(monkeypatch) -> None:
     assert "local_retrieval" not in turn.stage_timings_seconds
     assert "web_retrieval" not in turn.stage_timings_seconds
     assert turn.repair_performed is False
+
+
+def test_agent_turn_persists_four_safe_specific_public_sections() -> None:
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["可以从画面、情绪和悬念三个方向来写。你更喜欢哪一种？"],
+    )
+    orchestration = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="语文",
+            stage="初中",
+            is_new_problem=True,
+            answer_mode="guided",
+            reason="PRIVATE CLASSIFIER REASON",
+        ),
+        rag_context=RagContext(source="none"),
+        retrieval_decision=RetrievalDecision(
+            mode="none",
+            reason="创作指导无需外部资料",
+            confidence=1.0,
+        ),
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "把这句话润色成作文开头",
+        client=client,
+        orchestrator=_FixedOrchestrator(orchestration),
+    )
+
+    assert [section.title for section in turn.sections] == [
+        "题意",
+        "写法",
+        "资料",
+        "成稿",
+    ]
+    assert turn.sections[0].details == ["语文新题", "引导完成当前题目"]
+    assert turn.sections[1].details == [
+        "当前题型暂无确定性验证，回答将保留必要的不确定性说明。"
+    ]
+    assert turn.sections[2].details == ["未使用 RAG", "创作指导无需外部资料"]
+    assert turn.sections[3].details == ["成稿已通过内容与节奏审计"]
+    assert "PRIVATE CLASSIFIER REASON" not in repr(turn.sections)
 
 
 def test_turn_copies_exact_orchestration_retrieval_decision() -> None:

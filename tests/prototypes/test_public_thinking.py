@@ -169,3 +169,124 @@ def test_formatter_shows_only_public_status_summary_and_elapsed_time() -> None:
     assert format_public_thinking_event(recorder.events[0]) == (
         "✓ 找到 4 条可用的本地参考。 · 0.250 秒"
     )
+
+
+def test_public_summary_contains_four_useful_sections() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.classification(
+        subject="语文",
+        stage="未知",
+        is_new_problem=True,
+        intent="把普通问句改成作文开头",
+    )
+    recorder.strategy("从画面、情绪、悬念三个方向改写")
+    recorder.retrieval_decision(mode="none", reason="创作指导无需外部资料")
+    recorder.composition("先解释方法，再给三个示例和迁移提示")
+
+    assert [(section.title, section.details) for section in recorder.sections] == [
+        ("题意", ["语文新题", "把普通问句改成作文开头"]),
+        ("写法", ["从画面、情绪、悬念三个方向改写"]),
+        ("资料", ["未使用 RAG", "创作指导无需外部资料"]),
+        ("成稿", ["先解释方法，再给三个示例和迁移提示"]),
+    ]
+
+
+def test_public_summary_rejects_private_agent_fields() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.agent(
+        AgentTraceEvent(
+            step=1,
+            event_type="tool_result",
+            tool_name="search_web",
+            ok=True,
+            summary="SECRET SUMMARY",
+            details={
+                "hit_count": 2,
+                "details": "SECRET DETAILS",
+                "system_prompt": "SECRET SYSTEM PROMPT",
+                "reasoning_content": "SECRET COT",
+            },
+        )
+    )
+
+    dumped = repr(recorder.sections)
+    assert "2 条可用的联网参考" in dumped
+    assert "SECRET" not in dumped
+    assert "system_prompt" not in dumped
+    assert "reasoning_content" not in dumped
+
+
+def test_public_summary_uses_neutral_copy_for_unsupported_values() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.classification(
+        subject="SECRET SUBJECT",
+        stage="SECRET STAGE",
+        is_new_problem=True,
+        intent="SECRET INTENT",
+    )
+    recorder.strategy("SECRET STRATEGY")
+    recorder.retrieval_decision(mode="SECRET MODE", reason="SECRET REASON")
+    recorder.composition("SECRET STRUCTURE")
+
+    assert [section.details for section in recorder.sections] == [
+        ["题目类型已确认"],
+        ["处理方式已确定"],
+        ["资料使用方式已确定"],
+        ["成稿结构已确定"],
+    ]
+    assert "SECRET" not in repr(recorder.sections)
+
+
+def test_public_reason_is_normalized_and_capped_at_120_characters() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.retrieval_decision(
+        mode="local",
+        reason="  使用\n课程资料  " + "补" * 120,
+    )
+
+    assert recorder.sections[0].details[0] == "使用本地 RAG"
+    assert recorder.sections[0].details[1].startswith("使用 课程资料")
+    assert "\n" not in recorder.sections[0].details[1]
+    assert len(recorder.sections[0].details[1]) == 120
+
+
+def test_retrieval_summary_accepts_only_integer_hit_counts() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.retrieval(
+        source="local",
+        hit_count="99",
+        online_triggered=False,
+        online_status="not_triggered",
+    )
+
+    assert recorder.sections[0].details == ["未找到可用参考"]
+    assert "99" not in repr(recorder.sections)
+
+
+def test_repeated_updates_stay_consolidated_and_keep_legacy_callback() -> None:
+    emitted = []
+    recorder = PublicThinkingRecorder(callback=emitted.append)
+
+    recorder.strategy("先确认题意，再分步讲解")
+    recorder.strategy("先验证学生步骤，再给下一步提示")
+    recorder.retrieval(
+        source="local",
+        hit_count=3,
+        online_triggered=False,
+        online_status="not_triggered",
+    )
+    recorder.complete(1.25)
+
+    assert len(recorder.sections) == 3
+    assert [section.title for section in recorder.sections] == ["写法", "资料", "成稿"]
+    assert recorder.sections[0].details == [
+        "先验证学生步骤，再给下一步提示"
+    ]
+    assert recorder.sections[-1].elapsed_seconds == 1.25
+    assert emitted == recorder.events
+    assert any(event.summary == "已确定本轮处理方式。" for event in emitted)
