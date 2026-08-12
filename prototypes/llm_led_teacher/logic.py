@@ -25,12 +25,17 @@ from prototypes.llm_led_teacher.orchestration_models import (
     AnswerMode,
     RequestClassification,
     RequestScope,
+    ToolResult,
 )
 from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
     PublicThinkingRecorder,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
+from prototypes.llm_led_teacher.retrieval_policy import (
+    RetrievalDecision,
+    RetrievalMode,
+)
 
 
 class PacingMode(str, Enum):
@@ -86,6 +91,13 @@ class PrototypeTurnRecord(BaseModel):
     draft_character_count: int = 0
     final_character_count: int = 0
     classification: RequestClassification | None = None
+    retrieval_decision: RetrievalDecision = Field(
+        default_factory=lambda: RetrievalDecision(
+            mode=RetrievalMode.NONE,
+            reason="旧回合未记录检索决策",
+            confidence=1.0,
+        )
+    )
     agent_trace: list[AgentTraceEvent] = Field(default_factory=list)
     public_thinking_events: list[PublicThinkingEvent] = Field(default_factory=list)
     loaded_skills: list[str] = Field(default_factory=list)
@@ -103,6 +115,30 @@ class PrototypeEpisode(BaseModel):
 
 ProgressCallback = Callable[[str | AgentTraceEvent], None]
 ThinkingCallback = Callable[[PublicThinkingEvent], None]
+
+
+def build_orchestration_timings(
+    total_seconds: float,
+    observations: list[ToolResult],
+) -> dict[str, float]:
+    """Split bounded orchestration time without double-counting tool calls."""
+
+    tool_keys = {
+        "search_local_knowledge": "local_retrieval",
+        "search_web": "web_retrieval",
+    }
+    timings: dict[str, float] = {}
+    tool_total = 0.0
+    for observation in observations:
+        elapsed = max(float(observation.elapsed_seconds), 0.0)
+        tool_total += elapsed
+        timing_key = tool_keys.get(observation.name)
+        if timing_key is not None:
+            timings[timing_key] = timings.get(timing_key, 0.0) + elapsed
+
+    result = {"routing": round(max(float(total_seconds) - tool_total, 0.0), 3)}
+    result.update({key: round(value, 3) for key, value in timings.items()})
+    return result
 
 
 def _report_progress(
@@ -659,6 +695,16 @@ def _run_turn_impl(
         orchestration_result,
     )
     enter_stage("generating")
+    orchestration_seconds = stage_timings.pop("retrieving")
+    if orchestration_result is not None:
+        stage_timings.update(
+            build_orchestration_timings(
+                orchestration_seconds,
+                orchestration_result.observations,
+            )
+        )
+    else:
+        stage_timings["local_retrieval"] = orchestration_seconds
     if kv_lease is not None:
         kv_lease.restore()
     output = _chat_teaching_turn(
@@ -677,14 +723,27 @@ def _run_turn_impl(
         extracted_equations,
         episode.previous_verified_step,
     )
-    repair_reasons = _collect_warnings(
+    actionable_repair_reasons = _collect_warnings(
         episode,
         clean_message,
         verification,
         guidance,
         output.response,
         claim_audits,
-        include_advisory=True,
+        include_advisory=False,
+    )
+    repair_reasons = (
+        _collect_warnings(
+            episode,
+            clean_message,
+            verification,
+            guidance,
+            output.response,
+            claim_audits,
+            include_advisory=True,
+        )
+        if actionable_repair_reasons
+        else []
     )
     if repair_reasons:
         enter_stage("repairing")
@@ -756,6 +815,15 @@ def _run_turn_impl(
         final_character_count=len(output.response),
         classification=(
             orchestration_result.classification if orchestration_result else None
+        ),
+        retrieval_decision=(
+            orchestration_result.retrieval_decision
+            if orchestration_result is not None
+            else RetrievalDecision(
+                mode=RetrievalMode.NONE,
+                reason="旧版直连路径未生成检索决策",
+                confidence=1.0,
+            )
         ),
         agent_trace=(orchestration_result.trace if orchestration_result else []),
         public_thinking_events=thinking.events,

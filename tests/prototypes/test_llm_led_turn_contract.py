@@ -7,6 +7,7 @@ from prototypes.llm_led_teacher.logic import (
     PrototypeEpisode,
     PrototypeTurnRecord,
     TurnGuidance,
+    build_orchestration_timings,
     run_turn,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
@@ -14,7 +15,9 @@ from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
     RequestClassification,
+    ToolResult,
 )
+from prototypes.llm_led_teacher.retrieval_policy import RetrievalDecision
 
 
 class _ObservedClient:
@@ -322,6 +325,7 @@ def test_old_turn_without_public_thinking_events_still_loads() -> None:
     restored = PrototypeTurnRecord.model_validate(payload)
 
     assert restored.public_thinking_events == []
+    assert restored.retrieval_decision.mode.value == "none"
 
 
 def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
@@ -344,7 +348,7 @@ def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
 
     assert turn.stage_timings_seconds == {
         "observing": 1.0,
-        "retrieving": 2.0,
+        "local_retrieval": 2.0,
         "generating": 4.0,
         "auditing": 1.0,
         "repairing": 5.0,
@@ -693,6 +697,100 @@ class _FakeOrchestrator:
     def run(self, problem_context, student_message, active_subject, active_stage, progress_callback=None):
         self.calls.append((problem_context, student_message, active_subject, active_stage))
         return self.result
+
+
+class _FixedOrchestrator:
+    def __init__(self, result: AgentOrchestrationResult) -> None:
+        self.result = result
+
+    def run(self, *args, **kwargs) -> AgentOrchestrationResult:
+        return self.result
+
+
+def test_creative_turn_records_no_rag_and_no_repair_call(monkeypatch) -> None:
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["可以从画面、情绪和悬念三个方向来写。你更喜欢哪一种？"],
+    )
+    orchestration = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="语文",
+            stage="初中",
+            is_new_problem=True,
+            answer_mode="guided",
+            reason="作文创作指导",
+        ),
+        rag_context=RagContext(source="none"),
+        retrieval_decision=RetrievalDecision(
+            mode="none",
+            reason="创作指导无需外部资料",
+            confidence=1.0,
+        ),
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "把这句话润色成作文开头",
+        client=client,
+        orchestrator=_FixedOrchestrator(orchestration),
+    )
+
+    assert turn.retrieval_decision.mode.value == "none"
+    assert turn.rag_hits == []
+    assert "local_retrieval" not in turn.stage_timings_seconds
+    assert "web_retrieval" not in turn.stage_timings_seconds
+    assert turn.repair_performed is False
+
+
+def test_creative_advisory_alone_does_not_trigger_repair() -> None:
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["可以从画面、情绪和悬念三个方向来写。你喜欢哪一种？要试试悬念吗？"],
+    )
+    orchestration = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="语文",
+            stage="初中",
+            is_new_problem=True,
+            answer_mode="guided",
+            reason="作文创作指导",
+        ),
+        rag_context=RagContext(source="none"),
+        retrieval_decision=RetrievalDecision(
+            mode="none",
+            reason="创作指导无需外部资料",
+            confidence=1.0,
+        ),
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "把这句话润色成作文开头",
+        client=client,
+        orchestrator=_FixedOrchestrator(orchestration),
+    )
+
+    assert turn.repair_performed is False
+    assert turn.repair_reasons == []
+    assert client.chat_calls == 1
+
+
+def test_tool_timings_are_not_hidden_inside_routing() -> None:
+    observations = [
+        ToolResult(name="search_local_knowledge", ok=True, elapsed_seconds=1.25),
+        ToolResult(name="search_web", ok=True, elapsed_seconds=2.5),
+    ]
+
+    timings = build_orchestration_timings(
+        total_seconds=4.5,
+        observations=observations,
+    )
+
+    assert timings["routing"] == 0.75
+    assert timings["local_retrieval"] == 1.25
+    assert timings["web_retrieval"] == 2.5
 
 
 def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
