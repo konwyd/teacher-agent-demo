@@ -12,41 +12,69 @@ class StatusWriter(Protocol):
     def write(self, value: str) -> object: ...
 
 
+class TraceTurn(Protocol):
+    agent_trace: list[AgentTraceEvent]
+
+
 _STAGES = {
-    "observing": (
-        1,
-        "识别题目与教学节奏",
-        "判断是否开启新题、学生是否要求完整答案，以及本轮应该推进一步还是完整回答。",
+    "classification": (
+        "Agent · 请求分类",
+        "识别学科、学段、新题/续题与学生要求的回答模式。",
     ),
-    "retrieving": (
-        2,
-        "检索教材与题库",
-        "查询本地 Chroma 教材库和题库；新题在本地有效命中不足时才尝试联网回退。",
+    "planning": (
+        "Agent · 规划",
+        "根据分类与已有工具结果选择下一步；真实决策和 Tool 结果会逐条显示。",
+    ),
+    "tool": (
+        "Agent · Tool",
+        "执行 Agent 选择的公开工具调用。",
     ),
     "generating": (
-        3,
-        "让本地模型组织教师初稿",
-        "把原题、对话历史、有效 guidance、确定性证据和有边界的 RAG 参考交给本地 DeepSeek。",
+        "Answer Guardrails · 生成回答",
+        "按教学契约生成面向学生的回答。",
     ),
-    "auditing": (
-        4,
-        "核验数学步骤与教学节奏",
-        "提取回答中的方程，运行 verifier，并检查是否越步、泄露最终答案或包含多个结尾问题。",
+    "boundary_check": (
+        "Answer Guardrails · 边界检查",
+        "核对允许内容、应用权限、答案披露权限与可验证事实。",
     ),
     "repairing": (
-        5,
-        "修正未通过审计的初稿",
-        "只把审计发现的冲突交给本地模型修正；未修正的初稿不会直接展示给学生。",
+        "Answer Guardrails · 修正",
+        "按边界审计给出的修正指令生成安全版本。",
+    ),
+    "formatting": (
+        "Answer Guardrails · Markdown 格式化",
+        "展示已持久化的规范化 Markdown，并保持块级公式完整。",
     ),
 }
 
-_COMPLETED_TITLES = {
-    "observing": "题目与节奏判断",
-    "retrieving": "教材与题库检索",
-    "generating": "教师初稿生成",
-    "auditing": "数学步骤与教学节奏核验",
-    "repairing": "安全修正",
+_STAGE_ALIASES = {
+    "observing": "classification",
+    "retrieving": "planning",
+    "auditing": "boundary_check",
 }
+
+
+def agent_trace_rows(turn: TraceTurn) -> list[dict[str, str]]:
+    """Return the explicitly public trace fields for persistent UI rendering."""
+
+    rows = []
+    for event in turn.agent_trace:
+        status = "成功" if event.ok is True else ("失败" if event.ok is False else "信息")
+        rows.append(
+            {
+                "步骤": str(event.step),
+                "类型": event.event_type,
+                "Tool": event.tool_name or "—",
+                "状态": status,
+                "耗时": (
+                    f"{event.elapsed_seconds:.3f} 秒"
+                    if event.elapsed_seconds > 0
+                    else "—"
+                ),
+                "摘要": event.summary,
+            }
+        )
+    return rows
 
 
 class LiveProgressTrace:
@@ -60,19 +88,24 @@ class LiveProgressTrace:
     ) -> None:
         self._status = status
         self._clock = clock
-        self._stage = "observing"
+        self._stage = "classification"
         self._started_at = clock()
         self._write_start(self._stage)
 
     def _write_start(self, stage: str) -> None:
-        number, title, detail = _STAGES[stage]
-        self._status.write(f"⏳ **{number}. 正在{title}**\n\n{detail}")
+        title, detail = _STAGES[stage]
+        self._status.write(f"⏳ **{title}**\n\n{detail}")
 
     def update(self, stage: str) -> None:
+        stage = _STAGE_ALIASES.get(stage, stage)
+        if stage == self._stage:
+            return
         now = self._clock()
         elapsed = now - self._started_at
-        self._status.write(f"✅ 完成{_COMPLETED_TITLES[self._stage]} · **{elapsed:.3f} 秒**")
+        title, _ = _STAGES[self._stage]
+        self._status.write(f"✅ {title}完成 · **{elapsed:.3f} 秒**")
         if stage == "complete":
+            self._status.write("✅ **Agent Loop + Answer Guardrails · 完成**")
             return
         self._stage = stage
         self._started_at = now
@@ -81,10 +114,20 @@ class LiveProgressTrace:
     def update_agent_event(self, event: AgentTraceEvent) -> None:
         """Render only the event's explicitly public summary."""
         icon = "✅" if event.ok is True else ("⚠️" if event.ok is False else "🧭")
+        event_label = {
+            "classification": "分类",
+            "decision": "规划",
+            "tool_result": "Tool",
+            "teaching_contract": "教学契约",
+            "fallback": "安全收口",
+        }.get(event.event_type, event.event_type)
         tool = f" `{event.tool_name}`" if event.tool_name else ""
         elapsed = (
             f" · {event.elapsed_seconds:.3f} 秒"
             if event.elapsed_seconds > 0
             else ""
         )
-        self._status.write(f"{icon} **Agent {event.step}**{tool}：{event.summary}{elapsed}")
+        self._status.write(
+            f"{icon} **Agent {event.step} · {event_label}**{tool}："
+            f"{event.summary}{elapsed}"
+        )

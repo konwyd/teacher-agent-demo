@@ -11,6 +11,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from app.agent.state import VerificationStatus
 from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
 from app.llm.deepseek_client import DeepSeekError, is_configured
 from app.memory.conversation_archive import (
@@ -18,21 +19,24 @@ from app.memory.conversation_archive import (
     ConversationRecord,
     get_local_conversation_store,
 )
+from prototypes.llm_led_teacher.context_usage import build_context_usage_display
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
-from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+from prototypes.llm_led_teacher.live_progress import LiveProgressTrace, agent_trace_rows
 from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
-from prototypes.llm_led_teacher.streaming import iter_display_chunks
+from prototypes.llm_led_teacher.streaming import iter_markdown_display_chunks
 
 
 _SESSION_SCHEMA_VERSION = 10
 _PROGRESS_LABELS = {
-    "observing": "正在判断题目和本轮节奏……",
-    "retrieving": "正在检索相关教材与题目……",
-    "generating": "教师正在组织讲解……",
-    "auditing": "正在核验数学步骤和教学节奏……",
-    "repairing": "检测到需要修正，正在生成安全版本……",
-    "complete": "回答已核验",
+    "observing": "Agent · 正在识别请求……",
+    "retrieving": "Agent · 正在规划与调用工具……",
+    "generating": "Answer Guardrails · 正在生成回答……",
+    "auditing": "Answer Guardrails · 正在检查教学边界……",
+    "boundary_check": "Answer Guardrails · 正在检查教学边界……",
+    "repairing": "Answer Guardrails · 正在修正回答……",
+    "formatting": "Answer Guardrails · 正在格式化 Markdown……",
+    "complete": "Agent Loop + Answer Guardrails · 完成",
 }
 
 
@@ -255,11 +259,11 @@ if not is_configured():
 
 
 _TIMING_LABELS = {
-    "observing": "Observer 判断",
-    "retrieving": "RAG 检索",
-    "generating": "教师初稿",
-    "auditing": "确定性审计",
-    "repairing": "安全修正",
+    "observing": "Agent · 请求分类",
+    "retrieving": "Agent · 规划与工具",
+    "generating": "Answer Guardrails · 生成回答",
+    "auditing": "Answer Guardrails · 边界检查",
+    "repairing": "Answer Guardrails · 修正",
 }
 
 
@@ -305,25 +309,39 @@ def render_context_usage(current_episode: PrototypeEpisode) -> None:
         else {}
     )
     configured_window = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW_TOKENS", "131072"))
-    context_window = int(
-        metadata.get("context_window_tokens", configured_window) or configured_window
+    display = build_context_usage_display(
+        metadata,
+        current_window_tokens=configured_window,
     )
-    context_used = int(metadata.get("context_used_tokens", 0) or 0)
-    usage_ratio = context_used / context_window if context_window > 0 else 0.0
     label = (
-        f"{usage_ratio:.1%} · {_format_token_count(context_used)} / "
-        f"{_format_token_count(context_window)} 上下文已使用"
+        f"{display.usage_ratio:.1%} · {_format_token_count(display.used_tokens)} / "
+        f"{_format_token_count(display.current_window_tokens)}"
     )
     with st.popover(
-        f"{usage_ratio:.1%}",
+        label,
         icon=":material/data_usage:",
-        help=label,
+        help="本轮最后一次模型请求占用 / 当前模型上限",
         type="tertiary",
         key="context_usage_popover",
     ):
-        st.markdown(f"#### {label}")
-        st.progress(min(max(usage_ratio, 0.0), 1.0))
-        st.caption("当前对话最后一次模型请求的实际上下文占用。")
+        st.markdown("#### 上下文占用")
+        st.progress(min(max(display.usage_ratio, 0.0), 1.0))
+        st.write("**本轮请求占用**", _format_token_count(display.used_tokens))
+        st.write(
+            "**当前模型上限**",
+            _format_token_count(display.current_window_tokens),
+        )
+        if display.historical_window_tokens is None:
+            historical_label = "暂无记录"
+        else:
+            historical_label = _format_token_count(display.historical_window_tokens)
+            if display.historical_limit_changed:
+                historical_label += "（旧配置记录）"
+        st.write("**该对话历史上限**", historical_label)
+        st.caption(
+            "占用值来自本轮最后一次模型请求，不是整段对话累计 Token，"
+            "也不是 GPU 显存占用。"
+        )
 
 
 def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
@@ -407,21 +425,89 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 help="包括后端处理和审计后的逐字符展示。",
             )
 
-        st.markdown("### 🧠 决策与审计摘要")
+        st.markdown("### 🧭 Agent Loop 与教学边界")
         st.caption(
-            "这里展示可复核的决策依据和审计结果；不展示模型私有的逐字思维链。"
+            "这里持久展示公开的 Agent/Tool 事件、教学契约与边界审计；"
+            "不展示 prompt、私有 details 或模型逐字思维链。"
         )
-        st.write("**观察器原始输出**", turn.observer_raw_guidance.model_dump(mode="json"))
-        st.write("**规范化后的有效 guidance**", turn.turn_guidance.model_dump(mode="json"))
-        if turn.observer_error:
-            st.warning(f"观察器已降级，但主回答未被阻断：{turn.observer_error}")
-        st.write("**证据等级**", turn.evidence_level)
-        if turn.evidence_level == "unverified":
-            st.info("当前没有可用的确定性验证证据；教师回答仍正常展示。")
-        st.write("**学生步骤验证**", turn.student_verification.status.value)
-        st.write("**verifier**", turn.student_verification.verifier_name or "none")
-        st.write("**验证摘要**", turn.student_verification.summary)
+
+        if turn.classification is not None:
+            classification = turn.classification
+            st.write(
+                "**请求分类**",
+                {
+                    "范围": classification.scope.value,
+                    "学科": (
+                        classification.subject.value
+                        if classification.subject is not None
+                        else "不适用"
+                    ),
+                    "学段": classification.stage.value,
+                    "是否新题": classification.is_new_problem,
+                    "回答模式": classification.answer_mode.value,
+                },
+            )
+
+        st.markdown("#### 教学契约")
+        teaching_contract = turn.teaching_contract
+        if teaching_contract is None:
+            st.caption("该历史记录生成于教学契约持久化之前。")
+        else:
+            st.write("**请求目标**", teaching_contract.requested_target)
+            st.write("**回答模式**", teaching_contract.response_mode.value)
+            st.write(
+                "**权限**",
+                {
+                    "可应用到当前题": teaching_contract.may_apply_to_active_problem,
+                    "可披露最终答案": teaching_contract.may_reveal_final_answer,
+                },
+            )
+            st.write("**允许内容**", teaching_contract.allowed_content or ["未列出"])
+            st.write("**禁止内容**", teaching_contract.forbidden_content or ["未列出"])
+            st.write("**契约依据**", teaching_contract.reason)
+
+        st.markdown("#### Agent / Tool Trace")
+        trace_rows = agent_trace_rows(turn)
+        if trace_rows:
+            st.table(trace_rows)
+        else:
+            st.caption("该历史记录没有持久化 Agent trace。")
+
+        st.markdown("#### 教学边界审计")
+        boundary_audit = turn.boundary_audit
+        if boundary_audit is None:
+            st.caption("该历史记录没有语义边界审计。")
+        else:
+            if boundary_audit.passed:
+                st.success("通过：回答符合本轮教学契约。")
+            else:
+                st.warning("未通过：回答已进入边界修正流程。")
+            st.write(
+                "**违规项**",
+                [violation.value for violation in boundary_audit.violations]
+                or ["无"],
+            )
+            st.write("**证据摘要**", boundary_audit.evidence or ["无"])
+            st.write("**修正指令**", boundary_audit.repair_instructions or ["无"])
+            if boundary_audit.audit_error:
+                st.warning(f"边界审计已降级：{boundary_audit.audit_error}")
+
+        st.markdown("#### 可选确定性验证")
+        verification = turn.student_verification
+        if verification.status is VerificationStatus.NOT_APPLICABLE:
+            st.info("本轮不适用确定性 verifier；这不是教学边界审计失败。")
+        elif verification.status is VerificationStatus.VERIFIED_CORRECT:
+            st.success("确定性 verifier 已确认相关数学步骤。")
+        elif verification.status is VerificationStatus.VERIFIED_INCORRECT:
+            st.warning("确定性 verifier 发现学生步骤不成立。")
+        else:
+            st.info("确定性 verifier 未能提供结论；教师回答仍受教学边界约束。")
+        st.write("**状态**", verification.status.value)
+        st.write("**Verifier**", verification.verifier_name or "none")
+        st.write("**验证摘要**", verification.summary or "未提供")
+        st.write("**验证证据**", verification.evidence or ["无"])
         st.write("**自动提取的方程**", turn.extracted_equations or [])
+        st.write("**整体证据等级**", turn.evidence_level)
         st.write(
             "**生成摘要**",
             {
@@ -430,19 +516,11 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 "是否触发修正": turn.repair_performed,
             },
         )
-        st.markdown("#### 模型处理摘要")
+        st.markdown("#### 模型生成信息")
         st.caption(
-            "原始逐字思维链不会展示；下面展示可复核的处理步骤、运行状态与 token 统计。"
+            "原始逐字思维链不会展示；这里只展示模型接口返回的运行元数据。"
         )
         model_generation_metadata = turn.model_generation_metadata
-        processing_steps = [
-            f"识别请求并确定节奏：{turn.turn_guidance.pacing.value}",
-            f"检索参考：{turn.rag_source or 'none'}，命中 {len(turn.rag_hits)} 条",
-            f"审计回答：提取 {len(turn.extracted_equations)} 个方程，"
-            f"{'执行过修正' if turn.repair_performed else '无需修正'}",
-        ]
-        for step in processing_steps:
-            st.markdown(f"- {step}")
         if model_generation_metadata:
             st.write(
                 "**生成运行信息**",
@@ -569,6 +647,18 @@ if message:
         def update_progress(stage: str | AgentTraceEvent) -> None:
             if isinstance(stage, AgentTraceEvent):
                 live_trace.update_agent_event(stage)
+                event_label = {
+                    "classification": "Agent · 请求分类",
+                    "decision": "Agent · 规划",
+                    "tool_result": "Agent · Tool",
+                    "teaching_contract": "Agent · 教学契约",
+                    "fallback": "Agent · 安全收口",
+                }.get(stage.event_type, f"Agent · {stage.event_type}")
+                progress_status.update(label=event_label)
+                return
+            if stage == "complete":
+                live_trace.update("formatting")
+                progress_status.update(label=_PROGRESS_LABELS["formatting"])
                 return
             live_trace.update(stage)
             progress_status.update(label=_PROGRESS_LABELS.get(stage, stage))
@@ -594,39 +684,24 @@ if message:
                 _save_active_conversation(episode)
             except ConversationArchiveError as exc:
                 history_save_error = str(exc)
-            progress_status.write(
-                "🧭 **Observer 结论**："
-                f"starts_new_problem={turn.turn_guidance.starts_new_problem}，"
-                f"pacing={turn.turn_guidance.pacing.value}；"
-                f"{turn.turn_guidance.reason or '未提供额外理由'}"
-            )
-            if turn.rag_source.startswith("retrieval_error"):
-                progress_status.write(
-                    f"⚠️ **RAG 已降级**：{turn.rag_source}；教学主回答未被阻断。"
-                )
-            else:
-                progress_status.write(
-                    f"📚 **RAG 结果**：来源={turn.rag_source or 'none'}，"
-                    f"命中={len(turn.rag_hits)} 条。"
-                )
-            progress_status.write(
-                f"🧮 **审计结果**：提取 {len(turn.extracted_equations)} 个方程，"
-                f"修正={'是' if turn.repair_performed else '否'}。"
-            )
+            if turn.boundary_audit is not None:
+                audit_label = "通过" if turn.boundary_audit.passed else "已触发修正"
+                progress_status.write(f"🛡️ **教学边界审计**：{audit_label}。")
             if history_save_error:
                 progress_status.write(
                     f"⚠️ **历史记录保存失败**：{history_save_error}"
                 )
             else:
                 progress_status.write("💾 **历史记录**：本轮对话已自动保存。")
+            display_started = perf_counter()
+            st.write_stream(iter_markdown_display_chunks(turn.teacher_output.response))
+            turn.display_seconds = round(perf_counter() - display_started, 3)
+            live_trace.update("complete")
             progress_status.update(
                 label=_PROGRESS_LABELS["complete"],
                 state="complete",
                 expanded=True,
             )
-            display_started = perf_counter()
-            st.write_stream(iter_display_chunks(turn.teacher_output.response))
-            turn.display_seconds = round(perf_counter() - display_started, 3)
             render_turn_token_usage(turn)
             render_turn_details(turn)
             st.rerun()
