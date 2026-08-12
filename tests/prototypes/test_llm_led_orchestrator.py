@@ -247,6 +247,29 @@ def test_provider_error_non_solve_fallback_does_not_apply_to_active_problem() ->
     assert result.teaching_contract.may_reveal_final_answer is False
 
 
+def test_provider_error_keeps_explicit_full_request_with_why_cue() -> None:
+    class _BrokenProvider:
+        def decide(self, payload):
+            raise ValueError("malformed decision")
+
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_BrokenProvider(),
+        registry=_Registry(),
+    )
+
+    result = loop.run(
+        "3x+2=11",
+        "请完整解答这道题，并解释为什么这样做",
+        "数学",
+        "初中",
+    )
+
+    assert result.teaching_contract.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert result.teaching_contract.may_apply_to_active_problem is True
+    assert result.teaching_contract.may_reveal_final_answer is True
+
+
 def test_loop_stops_after_six_decisions() -> None:
     repeated = AgentDecision(
         kind="call_tool",

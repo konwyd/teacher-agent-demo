@@ -191,6 +191,43 @@ def test_explicit_complete_solution_request_keeps_full_solution_permission() -> 
     assert normalized == proposed
 
 
+def test_explicit_full_solution_with_why_cue_keeps_full_permissions() -> None:
+    proposed = _full_solution_contract()
+
+    normalized = normalize_teaching_contract(
+        proposed,
+        "请完整解答这道题，并解释为什么这样做",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_apply_to_active_problem is True
+    assert normalized.may_reveal_final_answer is True
+
+
+def test_explicit_full_solution_with_no_answer_still_cannot_reveal() -> None:
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        "请完整解答但不要告诉答案",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is not TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_reveal_final_answer is False
+
+
+def test_explicit_full_solution_with_no_apply_cannot_apply_or_reveal() -> None:
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        "请完整解答但不要代入当前题",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is not TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_apply_to_active_problem is False
+    assert normalized.may_reveal_final_answer is False
+
+
 def test_off_topic_forces_brief_redirect_without_problem_permissions() -> None:
     classification = RequestClassification(
         scope="off_topic",
@@ -221,3 +258,14 @@ def test_shared_safe_contract_builds_concept_only_fallback() -> None:
     assert contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
     assert contract.may_apply_to_active_problem is False
     assert contract.may_reveal_final_answer is False
+
+
+def test_shared_fallback_keeps_explicit_full_request_despite_why_cue() -> None:
+    contract = teaching_policy.build_safe_teaching_contract(
+        "请完整解答这道题，并解释为什么这样做",
+        _math_classification(),
+    )
+
+    assert contract.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert contract.may_apply_to_active_problem is True
+    assert contract.may_reveal_final_answer is True

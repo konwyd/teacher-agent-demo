@@ -201,7 +201,15 @@ def normalize_teaching_contract(
     concept_request = _is_concept_request(student_message)
 
     response_mode = contract.response_mode
-    if no_apply or concept_request:
+    if no_apply:
+        response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
+    elif (
+        response_mode is TeachingResponseMode.FULL_SOLUTION
+        and explicit_full_solution
+        and not no_answer
+    ):
+        response_mode = TeachingResponseMode.FULL_SOLUTION
+    elif concept_request:
         response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
     elif response_mode is TeachingResponseMode.FULL_SOLUTION and (
         no_answer or not explicit_full_solution
@@ -246,7 +254,15 @@ def build_safe_teaching_contract(
         response_mode = TeachingResponseMode.BRIEF_REDIRECT
         may_apply = False
         allowed_content = ["简短范围说明", "回到 K9 学习的邀请"]
-    elif _has_no_apply_request(student_message) or _is_concept_request(student_message):
+    elif _has_no_apply_request(student_message):
+        response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
+        may_apply = False
+        allowed_content = ["概念定义", "通用解释"]
+    elif has_explicit_full_solution_request(student_message):
+        response_mode = TeachingResponseMode.FULL_SOLUTION
+        may_apply = True
+        allowed_content = ["完整解答", "最终答案", "步骤原因说明"]
+    elif _is_concept_request(student_message):
         response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
         may_apply = False
         allowed_content = ["概念定义", "通用解释"]
@@ -264,7 +280,9 @@ def build_safe_teaching_contract(
         allowed_content=allowed_content,
         forbidden_content=[],
         may_apply_to_active_problem=may_apply,
-        may_reveal_final_answer=False,
+        may_reveal_final_answer=(
+            response_mode is TeachingResponseMode.FULL_SOLUTION
+        ),
         reason="safe fallback derived from the original student message",
     )
     return normalize_teaching_contract(proposed, student_message, classification)
