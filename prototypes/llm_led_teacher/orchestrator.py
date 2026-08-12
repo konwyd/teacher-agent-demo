@@ -16,12 +16,15 @@ from prototypes.llm_led_teacher.orchestration_models import (
     RequestScope,
     SchoolStage,
     Subject,
+    TeachingContract,
+    TeachingResponseMode,
 )
 from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationRuntime,
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.teaching_policy import normalize_teaching_contract
 
 
 class Classifier(Protocol):
@@ -99,7 +102,15 @@ class DeepSeekActionProvider:
 规则：K9 问题优先查本地教材/题库；只有本地工具成功后且存在具体证据缺口才可联网。
 有相关本地片段即可 finish，不要求凑满五条，也不要用固定相似度阈值替代内容判断。
 同一参数不要重复调用；联网最多一次。reason 只写可公开的简短动作理由，不写思维链。
-finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。"""
+finish 必须提交 contract。response_mode 只能是以下五种：
+- concept_explanation：完整解释学生请求的概念，但不得自动套用当前题；
+- one_step：当前多步题只推进一个有意义的步骤；
+- guided_solution：引导解题，但不披露最终答案；
+- full_solution：完整求解当前题；
+- brief_redirect：题外请求的简短范围引导。
+“完整解释所问概念”不等于“完整求解当前题”。只有学生原消息明确要求完整解答或给出答案时，
+contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“怎么解”不构成授权，
+学生说“不要答案”时绝不可披露。finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。"""
 
     def __init__(self, client: DeepSeekClient) -> None:
         self.client = client
@@ -166,8 +177,15 @@ class MultisubjectAgentLoop:
             progress_callback,
         )
         if classification.scope is RequestScope.OFF_TOPIC:
+            teaching_contract = normalize_teaching_contract(
+                self._safe_contract(student_message),
+                student_message,
+                classification,
+            )
+            self._trace_contract(trace, 0, teaching_contract, progress_callback)
             return AgentOrchestrationResult(
                 classification=classification,
+                teaching_contract=teaching_contract,
                 rag_context=RagContext(source="off_topic"),
                 trace=trace,
                 termination_reason="off_topic_redirect",
@@ -189,6 +207,7 @@ class MultisubjectAgentLoop:
         rag_context = RagContext(source="none")
         termination_reason = "iteration_budget_exhausted"
         routing_guidance = {"answer_mode": classification.answer_mode.value}
+        teaching_contract: TeachingContract | None = None
 
         for step in range(1, self.max_iterations + 1):
             payload = {
@@ -230,6 +249,11 @@ class MultisubjectAgentLoop:
             )
             if decision.kind is AgentActionKind.FINISH:
                 termination_reason = "model_finished"
+                teaching_contract = normalize_teaching_contract(
+                    decision.contract,
+                    student_message,
+                    classification,
+                )
                 if decision.plan in {mode.value for mode in AnswerMode}:
                     routing_guidance["answer_mode"] = decision.plan
                 break
@@ -262,14 +286,71 @@ class MultisubjectAgentLoop:
                 progress_callback,
             )
 
+        if teaching_contract is None:
+            teaching_contract = normalize_teaching_contract(
+                self._safe_contract(student_message),
+                student_message,
+                classification,
+            )
+        self._trace_contract(
+            trace,
+            min(self.max_iterations, len(trace)),
+            teaching_contract,
+            progress_callback,
+        )
         return AgentOrchestrationResult(
             classification=classification,
+            teaching_contract=teaching_contract,
             rag_context=rag_context,
             observations=observations,
             trace=trace,
             loaded_skills=loaded_skills,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
+        )
+
+    @staticmethod
+    def _safe_contract(student_message: str) -> TeachingContract:
+        target = student_message.strip()[:300] or "当前学习问题"
+        generic_solve = any(
+            marker in student_message
+            for marker in ("怎么解", "如何解", "怎样解", "求解", "解方程", "帮我解")
+        )
+        return TeachingContract(
+            response_mode=(
+                TeachingResponseMode.ONE_STEP
+                if generic_solve
+                else TeachingResponseMode.GUIDED_SOLUTION
+            ),
+            requested_target=target,
+            allowed_content=["必要概念", "有限分步提示"],
+            forbidden_content=["未经明确请求的完整解答", "最终答案"],
+            may_apply_to_active_problem=True,
+            may_reveal_final_answer=False,
+            reason="safe fallback after the agent loop could not submit a contract",
+        )
+
+    @classmethod
+    def _trace_contract(
+        cls,
+        trace: list[AgentTraceEvent],
+        step: int,
+        contract: TeachingContract,
+        callback: Callable[[AgentTraceEvent], None] | None,
+    ) -> None:
+        cls._trace(
+            trace,
+            AgentTraceEvent(
+                step=step,
+                event_type="teaching_contract",
+                summary=(
+                    f"教学契约已确定：{contract.response_mode.value}；"
+                    f"应用当前题={'是' if contract.may_apply_to_active_problem else '否'}；"
+                    f"披露最终答案={'是' if contract.may_reveal_final_answer else '否'}"
+                ),
+                details=contract.model_dump(mode="json"),
+            ),
+            callback,
         )
 
     @staticmethod

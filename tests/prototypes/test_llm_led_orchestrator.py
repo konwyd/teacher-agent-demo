@@ -3,6 +3,8 @@ from __future__ import annotations
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentDecision,
     RequestClassification,
+    TeachingContract,
+    TeachingResponseMode,
     ToolResult,
 )
 from prototypes.llm_led_teacher.orchestrator import (
@@ -51,8 +53,25 @@ def _k9(subject: str, *, new: bool) -> RequestClassification:
     )
 
 
-def _finish() -> AgentDecision:
-    return AgentDecision(kind="finish", reason="evidence is enough", plan="guided")
+def _guided_contract() -> TeachingContract:
+    return TeachingContract(
+        response_mode="guided_solution",
+        requested_target="引导学生推进当前学习问题",
+        allowed_content=["必要概念", "分步提示"],
+        forbidden_content=["未经请求的最终答案"],
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=False,
+        reason="student did not request a complete solution",
+    )
+
+
+def _finish(contract: TeachingContract | None = None) -> AgentDecision:
+    return AgentDecision(
+        kind="finish",
+        reason="evidence is enough",
+        plan="guided",
+        contract=contract or _guided_contract(),
+    )
 
 
 def test_followup_inherits_math_subject_when_classifier_marks_same_problem() -> None:
@@ -119,6 +138,77 @@ def test_off_topic_finishes_without_knowledge_tools() -> None:
     assert provider.calls == 0
     assert result.termination_reason == "off_topic_redirect"
     assert result.routing_guidance["answer_mode"] == "brief_redirect"
+    assert result.teaching_contract.response_mode is TeachingResponseMode.BRIEF_REDIRECT
+    assert result.teaching_contract.may_apply_to_active_problem is False
+    assert result.teaching_contract.may_reveal_final_answer is False
+
+
+def test_formula_question_finishes_with_concept_only_contract() -> None:
+    proposed = TeachingContract(
+        response_mode="concept_explanation",
+        requested_target="解释求根公式",
+        allowed_content=["通用公式", "符号含义"],
+        forbidden_content=["代入当前题", "计算当前题的根"],
+        may_apply_to_active_problem=False,
+        may_reveal_final_answer=False,
+        reason="concept request",
+    )
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_Decisions([_finish(proposed)]),
+        registry=_Registry(),
+    )
+
+    result = loop.run(
+        "3x^2+2x-11=0",
+        "求根公式是什么？",
+        "数学",
+        "初中",
+    )
+
+    assert result.teaching_contract == proposed
+    assert result.trace[-1].event_type == "teaching_contract"
+    assert result.trace[-1].details == proposed.model_dump(mode="json")
+
+
+def test_finish_normalizes_untrusted_full_solution_contract() -> None:
+    proposed = TeachingContract(
+        response_mode="full_solution",
+        requested_target="解答当前题",
+        allowed_content=["完整步骤", "最终答案"],
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=True,
+        reason="model selected a full solution",
+    )
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_Decisions([_finish(proposed)]),
+        registry=_Registry(),
+    )
+
+    result = loop.run("3x+2=11", "这道题怎么解？", "数学", "初中")
+
+    assert result.teaching_contract.response_mode is TeachingResponseMode.ONE_STEP
+    assert result.teaching_contract.may_reveal_final_answer is False
+    assert result.trace[-1].details == result.teaching_contract.model_dump(mode="json")
+
+
+def test_provider_error_returns_safe_contract() -> None:
+    class _BrokenProvider:
+        def decide(self, payload):
+            raise ValueError("malformed decision")
+
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_BrokenProvider(),
+        registry=_Registry(),
+    )
+
+    result = loop.run("3x+2=11", "这道题怎么解？", "数学", "初中")
+
+    assert result.termination_reason == "provider_error"
+    assert result.teaching_contract.response_mode is TeachingResponseMode.ONE_STEP
+    assert result.teaching_contract.may_reveal_final_answer is False
 
 
 def test_loop_stops_after_six_decisions() -> None:
@@ -147,6 +237,8 @@ def test_loop_stops_after_six_decisions() -> None:
     assert len(decision_events) == 6
     assert provider.calls == 6
     assert result.termination_reason == "iteration_budget_exhausted"
+    assert result.teaching_contract.response_mode is TeachingResponseMode.GUIDED_SOLUTION
+    assert result.teaching_contract.may_reveal_final_answer is False
 
 
 def test_classifier_repairs_once_then_falls_back_off_topic() -> None:

@@ -11,6 +11,7 @@ from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
     RequestClassification,
+    TeachingContract,
 )
 
 
@@ -525,6 +526,15 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     orchestrator = _FakeOrchestrator(
         AgentOrchestrationResult(
             classification=classification,
+            teaching_contract=TeachingContract(
+                response_mode="concept_explanation",
+                requested_target="解释受力改变运动状态的原因",
+                allowed_content=["物理概念", "原因说明"],
+                forbidden_content=["套用无关数学题"],
+                may_apply_to_active_problem=False,
+                may_reveal_final_answer=False,
+                reason="student requested a concept explanation",
+            ),
             rag_context=RagContext(
                 source="local",
                 text="力可以改变运动状态",
@@ -569,6 +579,15 @@ def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
     orchestrator = _FakeOrchestrator(
         AgentOrchestrationResult(
             classification=classification,
+            teaching_contract=TeachingContract(
+                response_mode="one_step",
+                requested_target="继续当前方程的下一步",
+                allowed_content=["一个有意义的步骤"],
+                forbidden_content=["完整求解", "最终答案"],
+                may_apply_to_active_problem=True,
+                may_reveal_final_answer=False,
+                reason="student is continuing the active problem",
+            ),
             rag_context=RagContext(source="local_empty"),
             termination_reason="model_finished",
             routing_guidance={"answer_mode": "guided"},

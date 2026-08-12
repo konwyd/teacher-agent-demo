@@ -28,6 +28,10 @@ from prototypes.llm_led_teacher.orchestration_models import (
     TeachingContract,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
+from prototypes.llm_led_teacher.teaching_policy import (
+    has_explicit_full_solution_request,
+    has_no_answer_request,
+)
 
 
 class PacingMode(str, Enum):
@@ -186,26 +190,6 @@ _FIRM_CORRECTNESS_PHRASES = (
     "结果正确",
 )
 
-_NO_ANSWER_MARKERS = (
-    "不要告诉我答案",
-    "别告诉我答案",
-    "不要直接给答案",
-    "先别给答案",
-)
-
-_FULL_SOLUTION_REQUEST_MARKERS = (
-    "直接告诉我答案",
-    "直接给答案",
-    "只要答案",
-    "完整答案",
-    "完整步骤",
-    "全部步骤",
-    "完整解答",
-    "从头到尾",
-    "完整讲解",
-)
-
-
 def _verify(
     problem_context: str,
     attempt: str,
@@ -251,7 +235,7 @@ def _fallback_guidance(
     )
     active_problem = message if starts_new_problem else episode.problem_context
     asks_why = "为什么" in message or "为啥" in message
-    if _explicitly_requests_full_solution(message) or asks_why:
+    if has_explicit_full_solution_request(message) or asks_why:
         pacing = PacingMode.COMPLETE_RESPONSE
     elif mc.extract_equation(active_problem) is not None:
         pacing = PacingMode.SINGLE_MOVE
@@ -319,7 +303,7 @@ def _normalize_guidance(
     )
     if (
         (guidance.starts_new_problem or not episode.problem_context or ordinary_help)
-        and not _explicitly_requests_full_solution(message)
+        and not has_explicit_full_solution_request(message)
         and "为什么" not in message
         and "为啥" not in message
         and _is_supported_transform_problem(active_problem)
@@ -378,10 +362,6 @@ def _question_count(text: str) -> int:
     return text.count("？") + text.count("?")
 
 
-def _explicitly_requests_full_solution(message: str) -> bool:
-    return any(marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS)
-
-
 def _has_verified_final_claim(claim_audits: list[ClaimAudit]) -> bool:
     for audit in claim_audits:
         if audit.verification.status is not VerificationStatus.VERIFIED_CORRECT:
@@ -421,7 +401,7 @@ def _collect_warnings(
 
     has_verified_final = _has_verified_final_claim(claim_audits)
     if (
-        any(marker in message for marker in _NO_ANSWER_MARKERS)
+        has_no_answer_request(message)
         and has_verified_final
     ):
         warnings.append("学生明确不要答案，但回复出现了可验证的最终形式。")
@@ -430,7 +410,7 @@ def _collect_warnings(
         (guidance.starts_new_problem or not episode.turns)
         and _is_supported_transform_problem(episode.problem_context)
         and has_verified_final
-        and not _explicitly_requests_full_solution(message)
+        and not has_explicit_full_solution_request(message)
     ):
         warnings.append(
             "多步题的普通求助不是完整解答请求；本轮应只推进一个有意义的步骤。"

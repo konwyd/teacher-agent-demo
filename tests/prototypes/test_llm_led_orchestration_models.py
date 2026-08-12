@@ -117,19 +117,18 @@ def test_full_solution_contract_may_reveal_final_answer() -> None:
     assert contract.may_reveal_final_answer is True
 
 
-def test_orchestration_result_without_contract_remains_legacy_compatible() -> None:
-    result = AgentOrchestrationResult(
-        classification=RequestClassification(
-            scope="k9",
-            subject="数学",
-            stage="初中",
-            is_new_problem=False,
-            answer_mode="guided",
-            reason="legacy result",
+def test_orchestration_result_requires_teaching_contract() -> None:
+    with pytest.raises(ValidationError):
+        AgentOrchestrationResult(
+            classification=RequestClassification(
+                scope="k9",
+                subject="数学",
+                stage="初中",
+                is_new_problem=False,
+                answer_mode="guided",
+                reason="contract is required",
+            )
         )
-    )
-
-    assert result.teaching_contract is None
 
 
 def test_boundary_audit_serializes_violation_enum_values() -> None:
