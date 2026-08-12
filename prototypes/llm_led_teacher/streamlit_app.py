@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
@@ -19,6 +20,10 @@ from app.memory.conversation_archive import (
     get_local_conversation_store,
 )
 from prototypes.llm_led_teacher.context_usage import build_context_usage_display
+from prototypes.llm_led_teacher.conversation_ui import (
+    build_conversation_history,
+    episode_has_content,
+)
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
 from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
 from prototypes.llm_led_teacher.public_thinking import format_public_thinking_event
@@ -26,7 +31,7 @@ from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_display_chunks
 
 
-_SESSION_SCHEMA_VERSION = 11
+_SESSION_SCHEMA_VERSION = 12
 
 
 st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
@@ -65,23 +70,48 @@ def _activate_conversation(record: ConversationRecord) -> None:
         record.episode.get("pending_student_message", "") or ""
     )
     st.session_state.prototype_conversation_id = record.conversation_id
-    st.session_state.conversation_selector = record.conversation_id
     st.session_state.prototype_user_id = record.user_id
     st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
 
 
-def _open_latest_or_create_conversation(user_id: str) -> None:
+def _activate_draft(user_id: str) -> None:
+    st.session_state.prototype_episode = PrototypeEpisode()
+    st.session_state[_PENDING_STUDENT_MESSAGE_KEY] = ""
+    st.session_state.prototype_conversation_id = None
+    st.session_state.prototype_user_id = user_id
+    st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+
+
+def _visible_conversation_records(user_id: str) -> list[ConversationRecord]:
     conversation_store = get_local_conversation_store()
-    conversations = conversation_store.list_for_user(user_id)
-    if conversations:
-        record = conversation_store.load(user_id, conversations[0].conversation_id)
-    else:
-        episode = PrototypeEpisode()
-        record = conversation_store.create(
-            user_id,
-            episode.model_dump(mode="json"),
-        )
-    _activate_conversation(record)
+    records = [
+        conversation_store.load(user_id, summary.conversation_id)
+        for summary in conversation_store.list_for_user(user_id)
+    ]
+    return [record for record in records if episode_has_content(record.episode)]
+
+
+def _open_latest_or_draft(user_id: str) -> None:
+    records = _visible_conversation_records(user_id)
+    if records:
+        _activate_conversation(records[0])
+        return
+    _activate_draft(user_id)
+
+
+def _restore_current_or_draft(user_id: str) -> None:
+    conversation_id = st.session_state.get("prototype_conversation_id")
+    if conversation_id:
+        try:
+            record = get_local_conversation_store().load(user_id, conversation_id)
+        except ConversationArchiveError:
+            st.session_state.prototype_conversation_restore_error = (
+                "原对话无法恢复，已进入新的空白对话。"
+            )
+        else:
+            _activate_conversation(record)
+            return
+    _activate_draft(user_id)
 
 
 def _start_authenticated_session(user_id: str, username: str) -> None:
@@ -89,33 +119,69 @@ def _start_authenticated_session(user_id: str, username: str) -> None:
         "user_id": user_id,
         "username": username,
     }
-    _open_latest_or_create_conversation(user_id)
+    _open_latest_or_draft(user_id)
 
 
-def _save_active_conversation(current_episode: PrototypeEpisode) -> None:
-    get_local_conversation_store().save(
-        st.session_state.authenticated_user["user_id"],
-        st.session_state.prototype_conversation_id,
-        _episode_payload(current_episode),
-        title=current_episode.problem_context or "新对话",
-    )
+class ConversationStateError(RuntimeError):
+    """Raised when a turn tries to save into a no-longer-active conversation."""
 
 
-def _create_new_conversation() -> None:
+def _conversation_title(current_episode: PrototypeEpisode, fallback: str = "") -> str:
+    if current_episode.turns:
+        title = current_episode.turns[0].student_message
+    else:
+        title = _get_pending_student_message(current_episode) or fallback
+    normalized = " ".join(str(title or "").split()).strip()
+    return (normalized or "新对话")[:80]
+
+
+def _assert_active_target(target_conversation_id: str) -> None:
+    if st.session_state.get("prototype_conversation_id") != target_conversation_id:
+        raise ConversationStateError("会话状态已变化，请重试。")
+
+
+def _ensure_target_conversation(
+    current_episode: PrototypeEpisode,
+    first_message: str,
+) -> str:
+    conversation_id = st.session_state.get("prototype_conversation_id")
+    if conversation_id:
+        return str(conversation_id)
     user_id = st.session_state.authenticated_user["user_id"]
-    episode = PrototypeEpisode()
     record = get_local_conversation_store().create(
         user_id,
-        episode.model_dump(mode="json"),
+        _episode_payload(current_episode),
+        title=first_message,
     )
-    _activate_conversation(record)
+    st.session_state.prototype_conversation_id = record.conversation_id
+    st.session_state.prototype_user_id = user_id
+    st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+    return record.conversation_id
 
 
-def _switch_conversation() -> None:
+def _save_conversation(
+    target_conversation_id: str,
+    current_episode: PrototypeEpisode,
+    *,
+    fallback_title: str = "",
+) -> None:
+    _assert_active_target(target_conversation_id)
+    get_local_conversation_store().save(
+        st.session_state.authenticated_user["user_id"],
+        target_conversation_id,
+        _episode_payload(current_episode),
+        title=_conversation_title(current_episode, fallback_title),
+    )
+
+
+def _activate_conversation_by_id(conversation_id: str) -> None:
     user_id = st.session_state.authenticated_user["user_id"]
-    conversation_id = st.session_state.conversation_selector
-    record = get_local_conversation_store().load(user_id, conversation_id)
-    _activate_conversation(record)
+    try:
+        record = get_local_conversation_store().load(user_id, conversation_id)
+    except ConversationArchiveError as exc:
+        st.session_state.prototype_conversation_switch_error = str(exc)
+    else:
+        _activate_conversation(record)
 
 
 def _render_auth_gate() -> None:
@@ -181,9 +247,12 @@ if (
     st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION
     or st.session_state.get("prototype_user_id") != authenticated_user["user_id"]
 ):
-    _open_latest_or_create_conversation(authenticated_user["user_id"])
+    if st.session_state.get("prototype_user_id") != authenticated_user["user_id"]:
+        _open_latest_or_draft(authenticated_user["user_id"])
+    else:
+        _restore_current_or_draft(authenticated_user["user_id"])
 elif "prototype_episode" not in st.session_state:
-    _open_latest_or_create_conversation(authenticated_user["user_id"])
+    _restore_current_or_draft(authenticated_user["user_id"])
 
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
@@ -193,7 +262,8 @@ st.caption("九学科 Agent Loop + 本地知识优先 · 确定性验证与审�
 with st.sidebar:
     st.subheader(f"你好，{authenticated_user['username']}")
     st.caption(f"学生 ID：{authenticated_user['user_id']}")
-    st.caption(f"当前对话：{st.session_state.prototype_conversation_id}")
+    current_conversation_id = st.session_state.get("prototype_conversation_id")
+    st.caption(f"当前对话：{current_conversation_id or '尚未保存'}")
     if st.button("退出登录", use_container_width=True):
         for key in (
             "authenticated_user",
@@ -201,7 +271,6 @@ with st.sidebar:
             "prototype_conversation_id",
             "prototype_user_id",
             "prototype_session_schema_version",
-            "conversation_selector",
             _PENDING_STUDENT_MESSAGE_KEY,
             _JUST_GENERATED_TURN_KEY,
         ):
@@ -210,24 +279,35 @@ with st.sidebar:
     st.divider()
     st.subheader("历史对话")
     st.button(
-        "新建对话",
+        "开启新对话",
         use_container_width=True,
-        on_click=_create_new_conversation,
+        on_click=_activate_draft,
+        args=(authenticated_user["user_id"],),
     )
-    conversation_summaries = get_local_conversation_store().list_for_user(
+    conversation_records = _visible_conversation_records(
         authenticated_user["user_id"]
     )
-    conversation_labels = {
-        summary.conversation_id: summary.title
-        for summary in conversation_summaries
-    }
-    st.selectbox(
-        "选择要继续的对话",
-        options=[summary.conversation_id for summary in conversation_summaries],
-        format_func=lambda conversation_id: conversation_labels[conversation_id],
-        key="conversation_selector",
-        on_change=_switch_conversation,
+    history_items = build_conversation_history(
+        conversation_records,
+        now=datetime.now(timezone.utc),
     )
+    last_group = ""
+    for item in history_items:
+        if item.group != last_group:
+            st.caption(item.group)
+            last_group = item.group
+        st.button(
+            item.title,
+            key=f"history_{item.conversation_id}",
+            type=(
+                "primary"
+                if item.conversation_id == current_conversation_id
+                else "tertiary"
+            ),
+            use_container_width=True,
+            on_click=_activate_conversation_by_id,
+            args=(item.conversation_id,),
+        )
     st.divider()
     st.subheader("RAG 知识检索")
     st.write("📚 本地教材库 + 题库")
@@ -586,8 +666,13 @@ if message:
 
     _set_pending_student_message(episode, message)
     try:
-        _save_active_conversation(episode)
-    except ConversationArchiveError as exc:
+        target_conversation_id = _ensure_target_conversation(episode, message)
+        _save_conversation(
+            target_conversation_id,
+            episode,
+            fallback_title=message,
+        )
+    except (ConversationArchiveError, ConversationStateError) as exc:
         st.error(f"消息保存失败，已停止生成以避免内容丢失：{exc}")
         st.stop()
 
@@ -612,8 +697,12 @@ if message:
             _set_pending_student_message(episode, "")
             history_save_error = ""
             try:
-                _save_active_conversation(episode)
-            except ConversationArchiveError as exc:
+                _save_conversation(
+                    target_conversation_id,
+                    episode,
+                    fallback_title=message,
+                )
+            except (ConversationArchiveError, ConversationStateError) as exc:
                 history_save_error = str(exc)
             if history_save_error:
                 st.warning(f"历史记录保存失败：{history_save_error}")

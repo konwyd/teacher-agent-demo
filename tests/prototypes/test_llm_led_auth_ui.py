@@ -36,6 +36,29 @@ class LegacyPrototypeEpisode(BaseModel):
     turns: list = Field(default_factory=list)
 
 
+def _turn(message: str, response: str = "测试回答") -> PrototypeTurnRecord:
+    return PrototypeTurnRecord(
+        turn_id=1,
+        student_message=message,
+        teacher_output=TeacherResponse(response=response),
+        student_verification=VerificationResult(
+            status=VerificationStatus.UNABLE_TO_VERIFY,
+            summary="测试中不运行确定性验证。",
+            verifier_name="none",
+        ),
+        evidence_level="unverified",
+    )
+
+
+def _successful_turn(episode, message, **kwargs):
+    if not episode.problem_context:
+        episode.problem_context = message
+    turn = _turn(message, response=f"讲解：{message}")
+    turn.turn_id = len(episode.turns) + 1
+    episode.turns.append(turn)
+    return turn
+
+
 def test_logged_out_page_shows_login_and_registration_without_teacher_ui(
     tmp_path,
     monkeypatch,
@@ -82,6 +105,7 @@ def test_login_restores_the_users_most_recent_conversation(
         problem_context="历史题目：物体受力",
         active_subject="物理",
         active_stage="初中",
+        turns=[_turn("历史题目：物体受力")],
     )
     conversation = LocalConversationStore(conversation_db).create(
         account.user_id,
@@ -182,6 +206,14 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
         "legacy_session_student",
         "history-password",
     )
+    conversation = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(
+            problem_context="旧会话里的题目",
+            turns=[_turn("旧会话里的题目")],
+        ).model_dump(mode="json"),
+        title="旧会话里的题目",
+    )
 
     def interrupted_turn(episode, message, **kwargs):
         raise DeepSeekError("模拟连接中断")
@@ -207,7 +239,7 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
     assert not app.exception
     saved = LocalConversationStore(conversation_db).load(
         account.user_id,
-        app.session_state.prototype_conversation_id,
+        conversation.conversation_id,
     )
     assert saved.episode["pending_student_message"] == "旧会话热更新后发送的消息"
 
@@ -289,3 +321,162 @@ def test_new_public_thinking_stays_expanded_for_one_rerun_then_collapses(
     ]
     assert len(thinking_expanders) == 1
     assert thinking_expanders[0].proto.expanded is False
+
+
+def test_new_chat_remains_an_unpersisted_draft_across_reruns(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    account = LocalAccountStore(account_db).register("draft_student", "history-password")
+    old = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(problem_context="你好", turns=[_turn("你好")]).model_dump(
+            mode="json"
+        ),
+        title="你好",
+    )
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("draft_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    assert app.session_state.prototype_conversation_id == old.conversation_id
+    next(button for button in app.button if button.label == "开启新对话").click().run()
+
+    assert app.session_state.prototype_conversation_id is None
+    assert app.session_state.prototype_episode.turns == []
+    assert len(LocalConversationStore(conversation_db).list_for_user(account.user_id)) == 1
+
+    app.run()
+    app.run()
+
+    assert app.session_state.prototype_conversation_id is None
+    assert app.session_state.prototype_episode.turns == []
+    assert len(LocalConversationStore(conversation_db).list_for_user(account.user_id)) == 1
+
+
+def test_first_message_and_follow_up_stay_isolated_in_the_new_conversation(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    monkeypatch.setattr(logic, "run_turn", _successful_turn)
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    account = LocalAccountStore(account_db).register("follow_student", "history-password")
+    old = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(problem_context="你好", turns=[_turn("你好")]).model_dump(
+            mode="json"
+        ),
+        title="你好",
+    )
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("follow_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    next(button for button in app.button if button.label == "开启新对话").click().run()
+    app.chat_input[0].set_value("数学有什么非常毒的定理吗").run()
+    new_id = app.session_state.prototype_conversation_id
+    app.chat_input[0].set_value("我想让你给我讲一下").run()
+
+    assert new_id is not None
+    assert new_id != old.conversation_id
+    assert app.session_state.prototype_conversation_id == new_id
+    saved = LocalConversationStore(conversation_db).load(account.user_id, new_id)
+    assert saved.title == "数学有什么非常毒的定理吗"
+    assert [turn["student_message"] for turn in saved.episode["turns"]] == [
+        "数学有什么非常毒的定理吗",
+        "我想让你给我讲一下",
+    ]
+    original = LocalConversationStore(conversation_db).load(
+        account.user_id,
+        old.conversation_id,
+    )
+    assert [turn["student_message"] for turn in original.episode["turns"]] == ["你好"]
+
+
+def test_history_switch_and_schema_reload_preserve_one_authoritative_id(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    account = LocalAccountStore(account_db).register("switch_student", "history-password")
+    older = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(
+            problem_context="旧会话问题",
+            turns=[_turn("旧会话消息")],
+        ).model_dump(mode="json"),
+        title="旧会话问题",
+    )
+    newer = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(
+            problem_context="杨辉三角是什么",
+            turns=[_turn("杨辉三角是什么")],
+        ).model_dump(mode="json"),
+        title="杨辉三角是什么",
+    )
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("switch_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    assert app.session_state.prototype_conversation_id == newer.conversation_id
+    next(button for button in app.button if button.label == "旧会话问题").click().run()
+
+    assert app.session_state.prototype_conversation_id == older.conversation_id
+    assert any(markdown.value == "旧会话消息" for markdown in app.markdown)
+    assert not any(markdown.value == "杨辉三角是什么" for markdown in app.markdown)
+
+    app.session_state.prototype_session_schema_version = 0
+    app.run()
+
+    assert app.session_state.prototype_conversation_id == older.conversation_id
+    assert any(markdown.value == "旧会话消息" for markdown in app.markdown)
