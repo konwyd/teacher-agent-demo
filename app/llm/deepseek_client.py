@@ -7,8 +7,10 @@ API key is read from environment / .env — never hard-coded, never printed.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
-from typing import Type, TypeVar
+from typing import Iterator, Type, TypeVar
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -21,6 +23,27 @@ load_dotenv()
 T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
+_LLAMA_SLOT_ID: ContextVar[int | None] = ContextVar("llama_slot_id", default=None)
+
+
+@contextmanager
+def llama_slot(slot_id: int | None) -> Iterator[None]:
+    """Temporarily route OpenAI-compatible requests to one llama-server slot."""
+
+    if slot_id is not None and slot_id < 0:
+        raise ValueError("slot_id must be zero or greater")
+    token = _LLAMA_SLOT_ID.set(slot_id)
+    try:
+        yield
+    finally:
+        _LLAMA_SLOT_ID.reset(token)
+
+
+def _request_slot_extra_body() -> dict[str, object] | None:
+    slot_id = _LLAMA_SLOT_ID.get()
+    if slot_id is None:
+        return None
+    return {"id_slot": slot_id, "cache_prompt": True}
 
 
 class DeepSeekError(RuntimeError):
@@ -175,6 +198,9 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
+            slot_extra_body = _request_slot_extra_body()
+            if slot_extra_body is not None:
+                request_args["extra_body"] = slot_extra_body
             resp = self._client.chat.completions.create(
                 **request_args,
             )
@@ -216,6 +242,9 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
+            slot_extra_body = _request_slot_extra_body()
+            if slot_extra_body is not None:
+                request_args["extra_body"] = slot_extra_body
             resp = self._client.chat.completions.create(
                 **request_args,
             )

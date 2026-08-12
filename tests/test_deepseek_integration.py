@@ -142,6 +142,49 @@ def test_chat_json_forwards_optional_max_tokens() -> None:
     assert completions.calls[-1]["max_tokens"] == 450
 
 
+def test_llama_slot_context_routes_chat_and_resets_after_exit() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings, llama_slot
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    with llama_slot(3):
+        client.chat("system", "user")
+    client.chat("system", "next")
+
+    assert completions.calls[0]["extra_body"] == {
+        "id_slot": 3,
+        "cache_prompt": True,
+    }
+    assert "extra_body" not in completions.calls[1]
+
+
+def test_llama_slot_context_routes_json_chat() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings, llama_slot
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    with llama_slot(1):
+        reply = client.chat_json("system", "user", _ReplySchema)
+
+    assert reply.text == "ok"
+    assert completions.calls[0]["extra_body"] == {
+        "id_slot": 1,
+        "cache_prompt": True,
+    }
+
+
+def test_llama_slot_rejects_negative_slot() -> None:
+    from app.llm.deepseek_client import llama_slot
+
+    with pytest.raises(ValueError, match="slot_id"):
+        with llama_slot(-1):
+            pass
+
+
 def test_chat_records_reasoning_usage_without_retaining_raw_reasoning() -> None:
     from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
 
