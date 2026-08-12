@@ -743,6 +743,39 @@ def test_creative_turn_records_no_rag_and_no_repair_call(monkeypatch) -> None:
     assert turn.repair_performed is False
 
 
+def test_turn_copies_exact_orchestration_retrieval_decision() -> None:
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["这条回答用于验证检索决策元数据。"],
+    )
+    orchestration = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="道法",
+            stage="初中",
+            is_new_problem=True,
+            answer_mode="complete",
+            reason="需要核对当前资料",
+        ),
+        rag_context=RagContext(source="none"),
+        retrieval_decision=RetrievalDecision(
+            mode="local_then_web",
+            reason="sentinel current-information decision",
+            confidence=0.37,
+            needs_current_information=True,
+        ),
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "今天最新的课程政策是什么？",
+        client=client,
+        orchestrator=_FixedOrchestrator(orchestration),
+    )
+
+    assert turn.retrieval_decision == orchestration.retrieval_decision
+
+
 def test_creative_advisory_alone_does_not_trigger_repair() -> None:
     client = _ScriptedClient(
         TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
