@@ -89,6 +89,66 @@ def test_auditor_allows_complete_concept_explanation_without_solving_problem():
     assert result.passed
 
 
+def test_auditor_fails_closed_when_passed_result_contains_violations():
+    result = SemanticBoundaryAuditor(
+        ScriptedAuditClient(
+            BoundaryAudit(
+                passed=True,
+                violations=[BoundaryViolation.FINAL_ANSWER_LEAK],
+            )
+        )
+    ).audit(
+        "求根公式是什么？",
+        "3x^2+2x-11=0",
+        concept_contract(),
+        "代入得到 x=(-1±√34)/3",
+    )
+
+    assert not result.passed
+    assert result.audit_error == "ValueError"
+    assert result.evidence == []
+    assert result.repair_instructions == [
+        "边界检查不可用，按教学契约保守重写回答。"
+    ]
+
+
+def test_auditor_fails_closed_when_passed_result_contains_audit_error():
+    result = SemanticBoundaryAuditor(
+        ScriptedAuditClient(
+            BoundaryAudit(passed=True, audit_error="UpstreamValidationError")
+        )
+    ).audit(
+        "求根公式是什么？",
+        "3x^2+2x-11=0",
+        concept_contract(),
+        "对于 ax²+bx+c=0，求根公式是……",
+    )
+
+    assert not result.passed
+    assert result.audit_error == "ValueError"
+
+
+def test_auditor_allows_failed_result_with_repair_only():
+    result = SemanticBoundaryAuditor(
+        ScriptedAuditClient(
+            BoundaryAudit(
+                passed=False,
+                repair_instructions=["只保留契约允许的概念解释"],
+            )
+        )
+    ).audit(
+        "求根公式是什么？",
+        "3x^2+2x-11=0",
+        concept_contract(),
+        "对于 ax²+bx+c=0，求根公式是……",
+    )
+
+    assert not result.passed
+    assert result.violations == []
+    assert result.audit_error == ""
+    assert result.repair_instructions == ["只保留契约允许的概念解释"]
+
+
 def test_auditor_sends_only_boundary_inputs_as_strict_json():
     client = ScriptedAuditClient(BoundaryAudit(passed=True))
     contract = concept_contract()
@@ -143,7 +203,7 @@ def test_hard_recheck_matches_normalized_forbidden_application_marker():
     assert violations == [BoundaryViolation.APPLIED_WITHOUT_PERMISSION]
 
 
-def test_hard_recheck_blocks_explicit_final_answer_metadata_without_solving():
+def test_hard_recheck_does_not_trust_final_answer_json_in_problem_context():
     violations = hard_boundary_recheck(
         json.dumps(
             {
@@ -156,7 +216,49 @@ def test_hard_recheck_blocks_explicit_final_answer_metadata_without_solving():
         "最终可写成：公元前 221 年。",
     )
 
+    assert violations == []
+
+
+def test_hard_recheck_classifies_complete_solution_before_application():
+    violations = hard_boundary_recheck(
+        "3x^2+2x-11=0",
+        concept_contract(),
+        "下面完整解答当前题。",
+    )
+
     assert violations == [BoundaryViolation.FINAL_ANSWER_LEAK]
+
+
+def test_hard_recheck_classifies_from_start_to_finish_as_too_many_steps():
+    contract = concept_contract().model_copy(
+        update={"forbidden_content": ["从头到尾解当前题"]}
+    )
+
+    violations = hard_boundary_recheck(
+        "3x^2+2x-11=0",
+        contract,
+        "下面从头到尾，解当前题。",
+    )
+
+    assert violations == [BoundaryViolation.TOO_MANY_STEPS]
+
+
+def test_hard_recheck_respects_active_problem_application_permission():
+    contract = concept_contract().model_copy(
+        update={
+            "response_mode": TeachingResponseMode.GUIDED_SOLUTION,
+            "forbidden_content": ["解答当前题"],
+            "may_apply_to_active_problem": True,
+        }
+    )
+
+    violations = hard_boundary_recheck(
+        "3x^2+2x-11=0",
+        contract,
+        "现在解答当前题。",
+    )
+
+    assert violations == [BoundaryViolation.OFF_TARGET]
 
 
 def test_hard_recheck_does_not_infer_answer_from_plain_problem_text():

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import unicodedata
-from collections.abc import Iterable
-from typing import Any
 
 from app.llm.deepseek_client import DeepSeekClient
 from prototypes.llm_led_teacher.orchestration_models import (
@@ -23,9 +21,6 @@ _AUDIT_SYSTEM_PROMPT = """你是跨学科教学回答的语义边界审计器。
 
 _CONSERVATIVE_REPAIR = "边界检查不可用，按教学契约保守重写回答。"
 
-_FINAL_ANSWER_KEYS = frozenset(
-    {"final_answer", "final_answers", "expected_final_answer", "最终答案"}
-)
 _FINAL_MARKERS = (
     "最终答案",
     "披露最终答案",
@@ -41,7 +36,14 @@ _APPLICATION_MARKERS = (
     "解答当前题",
     "解当前题",
 )
-_MULTI_STEP_MARKERS = ("全部步骤", "多个步骤", "多步", "从头到尾")
+_MULTI_STEP_MARKERS = (
+    "完整解答",
+    "完整求解",
+    "全部步骤",
+    "多个步骤",
+    "多步",
+    "从头到尾",
+)
 _NO_ANSWER_MARKERS = ("不要答案", "别给答案", "不披露答案")
 _OFF_TARGET_MARKERS = ("题外", "偏题", "展开题外内容")
 
@@ -66,13 +68,16 @@ class SemanticBoundaryAuditor:
             "draft": draft,
         }
         try:
-            return self.client.chat_json(
+            result = self.client.chat_json(
                 system=_AUDIT_SYSTEM_PROMPT,
                 user=json.dumps(payload, ensure_ascii=False),
                 schema=BoundaryAudit,
                 temperature=0.0,
                 max_tokens=700,
             )
+            if result.passed and (result.violations or result.audit_error):
+                raise ValueError("passed audit cannot contain violations or audit_error")
+            return result
         except Exception as exc:  # noqa: BLE001 - every audit outage fails closed
             return safe_boundary_fallback(contract, exc)
 
@@ -99,24 +104,21 @@ def hard_boundary_recheck(
 ) -> list[BoundaryViolation]:
     """Find only literal high-confidence leaks after a semantic repair.
 
-    This is not a solver or a universal factual verifier. Plain problem text is
-    never interpreted. Final answers are checked only when ``problem_context``
-    is explicit JSON metadata containing a recognized final-answer field.
+    This is not a solver or a universal factual verifier. ``problem_context``
+    is an untyped string and is never treated as trusted answer provenance.
     """
 
+    del problem_context
     normalized_response = _normalize_public_text(response)
     violations: list[BoundaryViolation] = []
 
     for marker in contract.forbidden_content:
         normalized_marker = _normalize_public_text(marker)
         if normalized_marker and normalized_marker in normalized_response:
-            _append_unique(violations, _violation_for_forbidden_marker(marker))
-
-    if not contract.may_reveal_final_answer:
-        for answer in _explicit_final_answers(problem_context):
-            normalized_answer = _normalize_public_text(answer)
-            if len(normalized_answer) >= 2 and normalized_answer in normalized_response:
-                _append_unique(violations, BoundaryViolation.FINAL_ANSWER_LEAK)
+            _append_unique(
+                violations,
+                _violation_for_forbidden_marker(marker, contract),
+            )
 
     return violations
 
@@ -131,14 +133,12 @@ def _normalize_public_text(value: str) -> str:
     )
 
 
-def _violation_for_forbidden_marker(marker: str) -> BoundaryViolation:
+def _violation_for_forbidden_marker(
+    marker: str,
+    contract: TeachingContract,
+) -> BoundaryViolation:
     normalized_marker = _normalize_public_text(marker)
-    if any(
-        _normalize_public_text(token) in normalized_marker
-        for token in _APPLICATION_MARKERS
-    ):
-        return BoundaryViolation.APPLIED_WITHOUT_PERMISSION
-    if any(
+    if not contract.may_reveal_final_answer and any(
         _normalize_public_text(token) in normalized_marker for token in _FINAL_MARKERS
     ):
         return BoundaryViolation.FINAL_ANSWER_LEAK
@@ -147,6 +147,11 @@ def _violation_for_forbidden_marker(marker: str) -> BoundaryViolation:
         for token in _MULTI_STEP_MARKERS
     ):
         return BoundaryViolation.TOO_MANY_STEPS
+    if not contract.may_apply_to_active_problem and any(
+        _normalize_public_text(token) in normalized_marker
+        for token in _APPLICATION_MARKERS
+    ):
+        return BoundaryViolation.APPLIED_WITHOUT_PERMISSION
     if any(
         _normalize_public_text(token) in normalized_marker
         for token in _NO_ANSWER_MARKERS
@@ -158,34 +163,6 @@ def _violation_for_forbidden_marker(marker: str) -> BoundaryViolation:
     ):
         return BoundaryViolation.OFF_TARGET
     return BoundaryViolation.OFF_TARGET
-
-
-def _explicit_final_answers(problem_context: str) -> list[str]:
-    try:
-        payload = json.loads(problem_context)
-    except (TypeError, json.JSONDecodeError):
-        return []
-    if not isinstance(payload, dict):
-        return []
-
-    containers = [payload]
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        containers.append(metadata)
-
-    answers: list[str] = []
-    for container in containers:
-        for key in _FINAL_ANSWER_KEYS:
-            answers.extend(_answer_strings(container.get(key)))
-    return answers
-
-
-def _answer_strings(value: Any) -> Iterable[str]:
-    if isinstance(value, str) and value.strip():
-        return [value]
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, str) and item.strip()]
-    return []
 
 
 def _append_unique(
