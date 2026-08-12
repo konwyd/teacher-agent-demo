@@ -211,6 +211,42 @@ def test_provider_error_returns_safe_contract() -> None:
     assert result.teaching_contract.may_reveal_final_answer is False
 
 
+def test_provider_error_concept_question_returns_non_applying_contract() -> None:
+    class _BrokenProvider:
+        def decide(self, payload):
+            raise ValueError("malformed decision")
+
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_BrokenProvider(),
+        registry=_Registry(),
+    )
+
+    result = loop.run("3x^2+2x-11=0", "求根公式是什么？", "数学", "初中")
+
+    assert result.teaching_contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert result.teaching_contract.may_apply_to_active_problem is False
+    assert result.teaching_contract.may_reveal_final_answer is False
+
+
+def test_provider_error_non_solve_fallback_does_not_apply_to_active_problem() -> None:
+    class _BrokenProvider:
+        def decide(self, payload):
+            raise ValueError("malformed decision")
+
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=_BrokenProvider(),
+        registry=_Registry(),
+    )
+
+    result = loop.run("3x+2=11", "给我一点提示", "数学", "初中")
+
+    assert result.teaching_contract.response_mode is TeachingResponseMode.GUIDED_SOLUTION
+    assert result.teaching_contract.may_apply_to_active_problem is False
+    assert result.teaching_contract.may_reveal_final_answer is False
+
+
 def test_loop_stops_after_six_decisions() -> None:
     repeated = AgentDecision(
         kind="call_tool",
@@ -237,7 +273,8 @@ def test_loop_stops_after_six_decisions() -> None:
     assert len(decision_events) == 6
     assert provider.calls == 6
     assert result.termination_reason == "iteration_budget_exhausted"
-    assert result.teaching_contract.response_mode is TeachingResponseMode.GUIDED_SOLUTION
+    assert result.teaching_contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert result.teaching_contract.may_apply_to_active_problem is False
     assert result.teaching_contract.may_reveal_final_answer is False
 
 

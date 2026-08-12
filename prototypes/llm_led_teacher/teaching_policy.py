@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from prototypes.llm_led_teacher.orchestration_models import (
     RequestClassification,
     RequestScope,
@@ -32,7 +34,6 @@ _FULL_SOLUTION_REQUEST_MARKERS = (
     "全部步骤",
     "完整解答",
     "从头到尾",
-    "完整讲解",
 )
 
 _GENERIC_SOLVE_REQUEST_MARKERS = (
@@ -44,49 +45,134 @@ _GENERIC_SOLVE_REQUEST_MARKERS = (
     "帮我解",
 )
 
+_CONCEPT_ONLY_MARKERS = (
+    "只讲公式",
+    "只讲概念",
+    "只解释公式",
+    "只解释概念",
+    "只说明公式",
+    "只说明概念",
+)
+
+_NEGATED_ANSWER_PATTERN = re.compile(
+    r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}(?:答案|最终结果)"
+)
+_NEGATED_APPLICATION_PATTERN = re.compile(
+    r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}"
+    r"(?:代入|套用|应用|用于|计算|解答)(?:到|在|于)?(?:当前题|本题)?"
+)
+_CONCEPT_EXPLANATION_PATTERN = re.compile(
+    r"(?:解释|讲解|讲讲|说明).{0,10}(?:公式|概念|定义|原理)"
+)
+
+_ANSWER_CONTENT_MARKERS = (
+    "答案",
+    "完整",
+    "全部步骤",
+    "从头到尾",
+    "当前题的根",
+)
+_APPLICATION_CONTENT_MARKERS = (
+    "代入",
+    "套用",
+    "应用当前题",
+    "应用本题",
+    "计算当前题",
+    "解答当前题",
+    "解当前题",
+)
+
 
 def has_explicit_full_solution_request(message: str) -> bool:
     """Return whether the student's own message clearly asks for a full answer."""
 
-    return not has_no_answer_request(message) and any(
-        marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS
+    return (
+        not has_no_answer_request(message)
+        and not _has_no_apply_request(message)
+        and any(marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS)
     )
 
 
 def has_no_answer_request(message: str) -> bool:
     """Return whether the student's own message explicitly forbids answer disclosure."""
 
-    return any(marker in message for marker in _NO_ANSWER_MARKERS)
+    return bool(_NEGATED_ANSWER_PATTERN.search(message)) or any(
+        marker in message for marker in _NO_ANSWER_MARKERS
+    )
 
 
 def _is_generic_solve_request(message: str) -> bool:
     return any(marker in message for marker in _GENERIC_SOLVE_REQUEST_MARKERS)
 
 
-def _without_answer_permissions(
+def _has_no_apply_request(message: str) -> bool:
+    return bool(_NEGATED_APPLICATION_PATTERN.search(message)) or any(
+        marker in message for marker in _CONCEPT_ONLY_MARKERS
+    )
+
+
+def _is_concept_request(message: str) -> bool:
+    return (
+        any(marker in message for marker in ("是什么", "什么意思", "概念", "定义", "原理", "为什么"))
+        or any(marker in message for marker in _CONCEPT_ONLY_MARKERS)
+        or bool(_CONCEPT_EXPLANATION_PATTERN.search(message))
+    )
+
+
+def _has_boundary(items: list[str], markers: tuple[str, ...]) -> bool:
+    return any(marker in item for item in items for marker in markers)
+
+
+def _append_required_prohibitions(
+    existing: list[str],
+    required: list[str],
+) -> list[str]:
+    preserved = [item for item in existing if item not in required]
+    return preserved[: 5 - len(required)] + required
+
+
+def _normalize_permissions(
     contract: TeachingContract,
+    *,
     response_mode: TeachingResponseMode,
+    may_apply: bool,
+    may_reveal: bool,
 ) -> TeachingContract:
-    allowed_content = [
-        item
-        for item in contract.allowed_content
-        if not any(
-            marker in item for marker in ("答案", "完整", "全部步骤", "从头到尾")
-        )
-    ]
-    required_prohibitions = ["完整解答当前题", "最终答案"]
-    existing_prohibitions = [
-        item
-        for item in contract.forbidden_content
-        if item not in required_prohibitions
-    ]
-    forbidden_content = existing_prohibitions[:3] + required_prohibitions
+    allowed_content = list(contract.allowed_content)
+    required_prohibitions: list[str] = []
+    if not may_reveal:
+        allowed_content = [
+            item
+            for item in allowed_content
+            if not any(marker in item for marker in _ANSWER_CONTENT_MARKERS)
+        ]
+        if not _has_boundary(
+            contract.forbidden_content,
+            ("答案", "完整解答", "完整求解", "当前题的根"),
+        ):
+            required_prohibitions.extend(["完整解答当前题", "最终答案"])
+    if not may_apply:
+        allowed_content = [
+            item
+            for item in allowed_content
+            if not any(marker in item for marker in _APPLICATION_CONTENT_MARKERS)
+        ]
+        if not _has_boundary(
+            contract.forbidden_content,
+            ("代入", "套用", "应用当前题", "应用本题", "当前题的根"),
+        ):
+            required_prohibitions.append("代入或套用当前题")
+    forbidden_content = _append_required_prohibitions(
+        contract.forbidden_content,
+        required_prohibitions,
+    )
     return contract.model_copy(
         update={
             "response_mode": response_mode,
             "allowed_content": allowed_content,
             "forbidden_content": forbidden_content,
-            "may_reveal_final_answer": False,
+            "may_apply_to_active_problem": may_apply,
+            "may_reveal_final_answer": may_reveal,
         }
     )
 
@@ -111,17 +197,74 @@ def normalize_teaching_contract(
 
     no_answer = has_no_answer_request(student_message)
     explicit_full_solution = has_explicit_full_solution_request(student_message)
-    if contract.response_mode is TeachingResponseMode.FULL_SOLUTION and (
+    no_apply = _has_no_apply_request(student_message)
+    concept_request = _is_concept_request(student_message)
+
+    response_mode = contract.response_mode
+    if no_apply or concept_request:
+        response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
+    elif response_mode is TeachingResponseMode.FULL_SOLUTION and (
         no_answer or not explicit_full_solution
     ):
-        safe_mode = (
+        response_mode = (
             TeachingResponseMode.ONE_STEP
             if _is_generic_solve_request(student_message) and not no_answer
             else TeachingResponseMode.GUIDED_SOLUTION
         )
-        return _without_answer_permissions(contract, safe_mode)
 
-    if no_answer:
-        return _without_answer_permissions(contract, contract.response_mode)
+    may_reveal = bool(
+        contract.may_reveal_final_answer
+        and response_mode is TeachingResponseMode.FULL_SOLUTION
+        and explicit_full_solution
+        and not no_answer
+    )
+    may_apply = bool(
+        contract.may_apply_to_active_problem
+        and response_mode
+        not in {
+            TeachingResponseMode.CONCEPT_EXPLANATION,
+            TeachingResponseMode.BRIEF_REDIRECT,
+        }
+        and not no_apply
+    )
+    return _normalize_permissions(
+        contract,
+        response_mode=response_mode,
+        may_apply=may_apply,
+        may_reveal=may_reveal,
+    )
 
-    return contract
+
+def build_safe_teaching_contract(
+    student_message: str,
+    classification: RequestClassification,
+) -> TeachingContract:
+    """Build a conservative fallback contract from trusted request evidence."""
+
+    target = student_message.strip()[:300] or "当前学习问题"
+    if classification.scope is RequestScope.OFF_TOPIC:
+        response_mode = TeachingResponseMode.BRIEF_REDIRECT
+        may_apply = False
+        allowed_content = ["简短范围说明", "回到 K9 学习的邀请"]
+    elif _has_no_apply_request(student_message) or _is_concept_request(student_message):
+        response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
+        may_apply = False
+        allowed_content = ["概念定义", "通用解释"]
+    elif _is_generic_solve_request(student_message):
+        response_mode = TeachingResponseMode.ONE_STEP
+        may_apply = True
+        allowed_content = ["必要概念", "一个有意义的步骤"]
+    else:
+        response_mode = TeachingResponseMode.GUIDED_SOLUTION
+        may_apply = False
+        allowed_content = ["必要概念", "一般性提示"]
+    proposed = TeachingContract(
+        response_mode=response_mode,
+        requested_target=target,
+        allowed_content=allowed_content,
+        forbidden_content=[],
+        may_apply_to_active_problem=may_apply,
+        may_reveal_final_answer=False,
+        reason="safe fallback derived from the original student message",
+    )
+    return normalize_teaching_contract(proposed, student_message, classification)

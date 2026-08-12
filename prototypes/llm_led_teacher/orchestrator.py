@@ -17,14 +17,16 @@ from prototypes.llm_led_teacher.orchestration_models import (
     SchoolStage,
     Subject,
     TeachingContract,
-    TeachingResponseMode,
 )
 from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationRuntime,
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
-from prototypes.llm_led_teacher.teaching_policy import normalize_teaching_contract
+from prototypes.llm_led_teacher.teaching_policy import (
+    build_safe_teaching_contract,
+    normalize_teaching_contract,
+)
 
 
 class Classifier(Protocol):
@@ -177,8 +179,7 @@ class MultisubjectAgentLoop:
             progress_callback,
         )
         if classification.scope is RequestScope.OFF_TOPIC:
-            teaching_contract = normalize_teaching_contract(
-                self._safe_contract(student_message),
+            teaching_contract = build_safe_teaching_contract(
                 student_message,
                 classification,
             )
@@ -287,8 +288,7 @@ class MultisubjectAgentLoop:
             )
 
         if teaching_contract is None:
-            teaching_contract = normalize_teaching_contract(
-                self._safe_contract(student_message),
+            teaching_contract = build_safe_teaching_contract(
                 student_message,
                 classification,
             )
@@ -307,27 +307,6 @@ class MultisubjectAgentLoop:
             loaded_skills=loaded_skills,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
-        )
-
-    @staticmethod
-    def _safe_contract(student_message: str) -> TeachingContract:
-        target = student_message.strip()[:300] or "当前学习问题"
-        generic_solve = any(
-            marker in student_message
-            for marker in ("怎么解", "如何解", "怎样解", "求解", "解方程", "帮我解")
-        )
-        return TeachingContract(
-            response_mode=(
-                TeachingResponseMode.ONE_STEP
-                if generic_solve
-                else TeachingResponseMode.GUIDED_SOLUTION
-            ),
-            requested_target=target,
-            allowed_content=["必要概念", "有限分步提示"],
-            forbidden_content=["未经明确请求的完整解答", "最终答案"],
-            may_apply_to_active_problem=True,
-            may_reveal_final_answer=False,
-            reason="safe fallback after the agent loop could not submit a contract",
         )
 
     @classmethod

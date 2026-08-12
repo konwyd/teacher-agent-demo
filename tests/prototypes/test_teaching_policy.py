@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from prototypes.llm_led_teacher import teaching_policy
 from prototypes.llm_led_teacher.orchestration_models import (
     RequestClassification,
     TeachingContract,
@@ -42,6 +45,21 @@ def test_request_marker_predicates_use_original_student_message() -> None:
     assert has_no_answer_request("讲讲思路，但不要告诉我答案") is True
     assert has_no_answer_request("讲完整思路，但不要答案") is True
     assert has_explicit_full_solution_request("请完整解答，但不要答案") is False
+    assert has_explicit_full_solution_request("请完整解答，但只讲公式") is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "不要直接告诉我答案",
+        "别直接告诉我答案",
+        "不用告诉我答案",
+        "先不公布最终答案",
+    ],
+)
+def test_negated_disclosure_window_cannot_grant_full_solution(message: str) -> None:
+    assert has_no_answer_request(message) is True
+    assert has_explicit_full_solution_request(message) is False
 
 
 def test_no_answer_phrase_overrides_model_full_solution_contract() -> None:
@@ -66,6 +84,24 @@ def test_no_answer_request_wins_when_message_also_says_complete_solution() -> No
 
     assert normalized.response_mode is TeachingResponseMode.GUIDED_SOLUTION
     assert normalized.may_reveal_final_answer is False
+
+
+def test_complete_concept_explanation_is_not_a_full_problem_solution() -> None:
+    normalized = normalize_teaching_contract(
+        _full_solution_contract().model_copy(
+            update={
+                "allowed_content": ["求根公式", "代入当前题", "最终答案"],
+            }
+        ),
+        "请完整讲解求根公式，但不要代入当前题",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert normalized.may_apply_to_active_problem is False
+    assert normalized.may_reveal_final_answer is False
+    assert "代入当前题" not in normalized.allowed_content
+    assert "最终答案" not in normalized.allowed_content
 
 
 def test_full_solution_requires_explicit_complete_solution_marker() -> None:
@@ -95,6 +131,52 @@ def test_normalization_keeps_required_prohibitions_with_full_forbidden_list() ->
     assert len(normalized.forbidden_content) == 5
     assert "完整解答当前题" in normalized.forbidden_content
     assert "最终答案" in normalized.forbidden_content
+
+
+def test_guided_contract_cannot_hide_answer_permission_in_allowed_content() -> None:
+    proposed = TeachingContract(
+        response_mode="guided_solution",
+        requested_target="给学生一个提示",
+        allowed_content=["分步提示", "完整解答", "最终答案"],
+        forbidden_content=[],
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=False,
+        reason="model proposed guided mode with contradictory content",
+    )
+
+    normalized = normalize_teaching_contract(
+        proposed,
+        "给我一点提示",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is TeachingResponseMode.GUIDED_SOLUTION
+    assert normalized.allowed_content == ["分步提示"]
+    assert "完整解答当前题" in normalized.forbidden_content
+    assert "最终答案" in normalized.forbidden_content
+
+
+def test_no_apply_intent_cleans_application_permission_and_allowed_content() -> None:
+    proposed = TeachingContract(
+        response_mode="guided_solution",
+        requested_target="解释求根公式",
+        allowed_content=["通用公式", "套用本题"],
+        forbidden_content=[],
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=False,
+        reason="model proposed applying the formula",
+    )
+
+    normalized = normalize_teaching_contract(
+        proposed,
+        "只讲公式，不要套用到本题",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert normalized.may_apply_to_active_problem is False
+    assert normalized.allowed_content == ["通用公式"]
+    assert "代入或套用当前题" in normalized.forbidden_content
 
 
 def test_explicit_complete_solution_request_keeps_full_solution_permission() -> None:
@@ -128,3 +210,14 @@ def test_off_topic_forces_brief_redirect_without_problem_permissions() -> None:
     assert normalized.response_mode is TeachingResponseMode.BRIEF_REDIRECT
     assert normalized.may_apply_to_active_problem is False
     assert normalized.may_reveal_final_answer is False
+
+
+def test_shared_safe_contract_builds_concept_only_fallback() -> None:
+    contract = teaching_policy.build_safe_teaching_contract(
+        "求根公式是什么？",
+        _math_classification(),
+    )
+
+    assert contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert contract.may_apply_to_active_problem is False
+    assert contract.may_reveal_final_answer is False
