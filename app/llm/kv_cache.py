@@ -211,10 +211,18 @@ class KvCacheLease:
             self.status.restore_status = "restored"
             self.status.filename = version.name
             self.status.restored_tokens = int(
-                payload.get("n_restored_tokens", payload.get("n_tokens", 0)) or 0
+                payload.get(
+                    "n_restored",
+                    payload.get("n_restored_tokens", payload.get("n_tokens", 0)),
+                )
+                or 0
             )
             self.status.restored_bytes = int(
-                payload.get("n_read_bytes", payload.get("n_bytes", 0)) or 0
+                payload.get(
+                    "n_read",
+                    payload.get("n_read_bytes", payload.get("n_bytes", 0)),
+                )
+                or 0
             )
             self.status.error = ""
             return True
@@ -243,10 +251,18 @@ class KvCacheLease:
         self.status.save_status = "saved"
         self.status.filename = filename
         self.status.saved_tokens = int(
-            payload.get("n_saved_tokens", payload.get("n_tokens", 0)) or 0
+            payload.get(
+                "n_saved",
+                payload.get("n_saved_tokens", payload.get("n_tokens", 0)),
+            )
+            or 0
         )
         self.status.saved_bytes = int(
-            payload.get("n_written_bytes", payload.get("n_bytes", 0)) or 0
+            payload.get(
+                "n_written",
+                payload.get("n_written_bytes", payload.get("n_bytes", 0)),
+            )
+            or 0
         )
         self.status.error = ""
         self.prune_versions()

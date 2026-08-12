@@ -198,3 +198,27 @@ def test_status_metadata_contains_no_raw_student_identifiers(tmp_path: Path):
     assert metadata["kv_persistence_slot"] == 0
     assert "usr_private" not in repr(metadata)
     assert "conv_private" not in repr(metadata)
+
+
+def test_current_llama_server_counter_names_are_recorded(tmp_path: Path):
+    from app.llm.kv_cache import KvCacheIdentity, KvCacheManager
+
+    identity = KvCacheIdentity("usr_a", "conv_a")
+    opener = _RecordingOpener(
+        [
+            {"id_slot": 0, "n_restored": 21, "n_read": 99},
+            {"id_slot": 0, "n_saved": 34, "n_written": 144},
+        ]
+    )
+    manager = KvCacheManager(_settings(tmp_path, parallel=1), opener=opener)
+    prefix = manager.cache_prefix(identity)
+    (tmp_path / f"{prefix}_100.bin").write_bytes(b"state")
+
+    with manager.lease(identity) as lease:
+        assert lease.restore() is True
+        assert lease.save() is True
+
+    assert lease.status.restored_tokens == 21
+    assert lease.status.restored_bytes == 99
+    assert lease.status.saved_tokens == 34
+    assert lease.status.saved_bytes == 144
