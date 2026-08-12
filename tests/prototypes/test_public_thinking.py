@@ -284,9 +284,63 @@ def test_repeated_updates_stay_consolidated_and_keep_legacy_callback() -> None:
 
     assert len(recorder.sections) == 3
     assert [section.title for section in recorder.sections] == ["写法", "资料", "成稿"]
-    assert recorder.sections[0].details == [
-        "先验证学生步骤，再给下一步提示"
-    ]
+    assert recorder.sections[0].details == ["先验证学生步骤，再给下一步提示"]
     assert recorder.sections[-1].elapsed_seconds == 1.25
     assert emitted == recorder.events
     assert any(event.summary == "已确定本轮处理方式。" for event in emitted)
+
+
+def test_section_subslots_preserve_safe_details_in_stable_order() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.strategy("先验证学生步骤，再给下一步提示")
+    recorder.verification(
+        VerificationResult(
+            status=VerificationStatus.VERIFIED_CORRECT,
+            summary="PRIVATE VERIFIER SUMMARY",
+            verifier_name="linear_equation",
+        )
+    )
+    recorder.agent(
+        AgentTraceEvent(
+            step=2,
+            event_type="tool_result",
+            tool_name="search_local_knowledge",
+            ok=True,
+            summary="PRIVATE TOOL SUMMARY",
+            elapsed_seconds=0.25,
+            details={"hit_count": 2, "reasoning_content": "PRIVATE COT"},
+        )
+    )
+    recorder.retrieval(
+        source="local",
+        hit_count=2,
+        online_triggered=False,
+        online_status="not_triggered",
+    )
+    recorder.retrieval_decision(mode="local", reason="需要课程内定义")
+    recorder.composition("先回应当前步骤，再给下一步提示")
+    recorder.audit(repair_performed=True, remaining_warning_count=0)
+    recorder.complete(1.5)
+
+    assert [section.title for section in recorder.sections] == [
+        "写法",
+        "资料",
+        "成稿",
+    ]
+    assert recorder.sections[0].details == [
+        "先验证学生步骤，再给下一步提示",
+        "学生当前步骤已经通过确定性验证。",
+    ]
+    assert recorder.sections[1].details == [
+        "使用本地 RAG",
+        "需要课程内定义",
+        "找到 2 条可用的本地参考。 · 0.250 秒",
+        "找到 2 条可用参考",
+    ]
+    assert recorder.sections[2].details == [
+        "先回应当前步骤，再给下一步提示",
+        "修正后的成稿已通过审计",
+    ]
+    assert recorder.sections[2].elapsed_seconds == 1.5
+    assert "PRIVATE" not in repr(recorder.sections)

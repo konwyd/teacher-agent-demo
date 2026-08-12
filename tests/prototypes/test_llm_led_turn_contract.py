@@ -814,11 +814,92 @@ def test_agent_turn_persists_four_safe_specific_public_sections() -> None:
     ]
     assert turn.sections[0].details == ["语文新题", "引导完成当前题目"]
     assert turn.sections[1].details == [
+        "先确认题意，再分步讲解",
         "当前题型暂无确定性验证，回答将保留必要的不确定性说明。"
     ]
     assert turn.sections[2].details == ["未使用 RAG", "创作指导无需外部资料"]
-    assert turn.sections[3].details == ["成稿已通过内容与节奏审计"]
+    assert turn.sections[3].details == [
+        "先给结论，再解释依据",
+        "成稿已通过内容与节奏审计",
+    ]
     assert "PRIVATE CLASSIFIER REASON" not in repr(turn.sections)
+
+
+def test_agent_turn_keeps_strategy_structure_tool_metrics_and_repair_audit() -> None:
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        [
+            "两边减9得到2x=5，再除以2得到x=5/2。你会验算吗？",
+            "先在等式两边同时减去9，得到2x=5。下一步该怎么做？",
+        ],
+    )
+    orchestration = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="数学",
+            stage="初中",
+            is_new_problem=True,
+            answer_mode="guided",
+            reason="PRIVATE CLASSIFIER REASON",
+        ),
+        rag_context=RagContext(
+            source="local",
+            hits=[
+                {"document": "PRIVATE DOCUMENT 1"},
+                {"document": "PRIVATE DOCUMENT 2"},
+            ],
+        ),
+        retrieval_decision=RetrievalDecision(
+            mode="local",
+            reason="需要课程内定义",
+            confidence=1.0,
+        ),
+        trace=[
+            AgentTraceEvent(
+                step=2,
+                event_type="tool_result",
+                tool_name="search_local_knowledge",
+                ok=True,
+                summary="PRIVATE TOOL SUMMARY",
+                elapsed_seconds=0.25,
+                details={
+                    "hit_count": 2,
+                    "system_prompt": "PRIVATE SYSTEM PROMPT",
+                },
+            )
+        ],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "2x+9=14，这道题怎么解",
+        client=client,
+        orchestrator=_FixedOrchestrator(orchestration),
+    )
+
+    assert [section.title for section in turn.sections] == [
+        "题意",
+        "写法",
+        "资料",
+        "成稿",
+    ]
+    assert turn.sections[0].details == ["数学新题", "引导完成当前题目"]
+    assert turn.sections[1].details == [
+        "先验证学生步骤，再给下一步提示",
+        "当前题型暂无确定性验证，回答将保留必要的不确定性说明。",
+    ]
+    assert turn.sections[2].details == [
+        "使用本地 RAG",
+        "需要课程内定义",
+        "找到 2 条可用的本地参考。 · 0.250 秒",
+        "找到 2 条可用参考",
+    ]
+    assert turn.sections[3].details == [
+        "先回应当前步骤，再给下一步提示",
+        "修正后的成稿已通过审计",
+    ]
+    assert turn.repair_performed is True
+    assert "PRIVATE" not in repr(turn.sections)
 
 
 def test_turn_copies_exact_orchestration_retrieval_decision() -> None:

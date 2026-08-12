@@ -111,6 +111,12 @@ _ROUTE_MODE_COPY = {
     "local_then_web": "先查本地 RAG，必要时联网补充",
 }
 _SECTION_ORDER = {"题意": 0, "写法": 1, "资料": 2, "成稿": 3}
+_SLOT_ORDER = {
+    "题意": ("classification",),
+    "写法": ("strategy", "skill", "context", "verification"),
+    "资料": ("route", "local_tool", "web_tool", "retrieval"),
+    "成稿": ("composition", "audit", "completion"),
+}
 _TOOL_START_COPY = {
     "load_skill": (PublicThinkingKind.SKILL, "正在准备合适的教学方法……"),
     "inspect_student_context": (
@@ -134,12 +140,14 @@ class PublicThinkingRecorder:
     def __init__(self, callback: ThinkingEventCallback | None = None) -> None:
         self.events: list[PublicThinkingEvent] = []
         self.sections: list[PublicThinkingSection] = []
+        self._section_slots: dict[str, dict[str, list[str]]] = {}
         self._callback = callback
         self._audit_has_warnings = False
 
     def _upsert_section(
         self,
         *,
+        slot: str,
         kind: PublicThinkingKind,
         title: Literal["题意", "写法", "资料", "成稿"],
         summary: str,
@@ -147,11 +155,18 @@ class PublicThinkingRecorder:
         status: PublicThinkingStatus,
         elapsed_seconds: float = 0.0,
     ) -> None:
+        slots = self._section_slots.setdefault(title, {})
+        slots[slot] = details
+        ordered_details = [
+            detail
+            for slot_name in _SLOT_ORDER[title]
+            for detail in slots.get(slot_name, [])
+        ][:4]
         section = PublicThinkingSection(
             kind=kind,
             title=title,
             summary=summary,
-            details=details,
+            details=ordered_details,
             status=status,
             elapsed_seconds=max(float(elapsed_seconds), 0.0),
         )
@@ -215,6 +230,7 @@ class PublicThinkingRecorder:
             details = ["题目类型已确认"]
         summary = "已确认题目与作答目标。"
         self._upsert_section(
+            slot="classification",
             kind=PublicThinkingKind.CLASSIFICATION,
             title="题意",
             summary=summary,
@@ -235,6 +251,7 @@ class PublicThinkingRecorder:
         )
         summary = "已确定本轮处理方式。"
         self._upsert_section(
+            slot="strategy",
             kind=PublicThinkingKind.STRATEGY,
             title="写法",
             summary=summary,
@@ -261,8 +278,11 @@ class PublicThinkingRecorder:
                 details.append(public_reason)
         else:
             details = ["资料使用方式已确定"]
+        if mode == "none":
+            self._section_slots.setdefault("资料", {}).pop("retrieval", None)
         summary = "已确定本轮资料使用方式。"
         self._upsert_section(
+            slot="route",
             kind=PublicThinkingKind.RETRIEVAL,
             title="资料",
             summary=summary,
@@ -283,6 +303,7 @@ class PublicThinkingRecorder:
         )
         summary = "已确定回答的公开结构。"
         self._upsert_section(
+            slot="composition",
             kind=PublicThinkingKind.GENERATION,
             title="成稿",
             summary=summary,
@@ -334,6 +355,7 @@ class PublicThinkingRecorder:
             if isinstance(intent, str) and intent in _PUBLIC_INTENTS:
                 section_details.append(intent)
             self._upsert_section(
+                slot="classification",
                 kind=PublicThinkingKind.CLASSIFICATION,
                 title="题意",
                 summary="已确认题目与作答目标。",
@@ -348,6 +370,7 @@ class PublicThinkingRecorder:
             return
         if scope == "off_topic":
             self._upsert_section(
+                slot="classification",
                 kind=PublicThinkingKind.CLASSIFICATION,
                 title="题意",
                 summary="已确认题目与作答目标。",
@@ -361,6 +384,7 @@ class PublicThinkingRecorder:
             )
             return
         self._upsert_section(
+            slot="classification",
             kind=PublicThinkingKind.CLASSIFICATION,
             title="题意",
             summary="已确认题目与作答目标。",
@@ -398,10 +422,25 @@ class PublicThinkingRecorder:
                 else "写法"
             )
             self._upsert_section(
+                slot=(
+                    "local_tool"
+                    if event.tool_name == "search_local_knowledge"
+                    else "web_tool"
+                    if event.tool_name == "search_web"
+                    else "skill"
+                    if event.tool_name == "load_skill"
+                    else "context"
+                ),
                 kind=kind,
                 title=title,
                 summary=summary,
-                details=[summary],
+                details=[
+                    (
+                        f"{summary} · {event.elapsed_seconds:.3f} 秒"
+                        if event.elapsed_seconds > 0
+                        else summary
+                    )
+                ],
                 status=PublicThinkingStatus.WARNING,
                 elapsed_seconds=event.elapsed_seconds,
             )
@@ -424,10 +463,25 @@ class PublicThinkingRecorder:
         summary = successes[event.tool_name]
         title = "资料" if kind is PublicThinkingKind.RETRIEVAL else "写法"
         self._upsert_section(
+            slot=(
+                "local_tool"
+                if event.tool_name == "search_local_knowledge"
+                else "web_tool"
+                if event.tool_name == "search_web"
+                else "skill"
+                if event.tool_name == "load_skill"
+                else "context"
+            ),
             kind=kind,
             title=title,
             summary=summary,
-            details=[summary],
+            details=[
+                (
+                    f"{summary} · {event.elapsed_seconds:.3f} 秒"
+                    if event.elapsed_seconds > 0
+                    else summary
+                )
+            ],
             status=PublicThinkingStatus.COMPLETED,
             elapsed_seconds=event.elapsed_seconds,
         )
@@ -452,6 +506,7 @@ class PublicThinkingRecorder:
             status = PublicThinkingStatus.WARNING
             summary = "当前题型暂无确定性验证，回答将保留必要的不确定性说明。"
         self._upsert_section(
+            slot="verification",
             kind=PublicThinkingKind.VERIFICATION,
             title="写法",
             summary="已确定本轮处理方式。",
@@ -490,6 +545,7 @@ class PublicThinkingRecorder:
             summary = f"已找到 {safe_count} 条可用参考。"
             details = [f"找到 {safe_count} 条可用参考"]
         self._upsert_section(
+            slot="retrieval",
             kind=PublicThinkingKind.RETRIEVAL,
             title="资料",
             summary="已整理本轮可用资料。",
@@ -513,6 +569,7 @@ class PublicThinkingRecorder:
             summary = "最终回答已经通过教学内容与节奏审计。"
             detail = "成稿已通过内容与节奏审计"
         self._upsert_section(
+            slot="audit",
             kind=PublicThinkingKind.AUDIT,
             title="成稿",
             summary="已完成回答整理与公开审计。",
@@ -532,19 +589,17 @@ class PublicThinkingRecorder:
             if self._audit_has_warnings
             else "思考过程已完成。"
         )
-        current_details = next(
-            (
-                section.details
-                for section in self.sections
-                if section.title == "成稿"
-            ),
-            ["回答已组织完成"],
+        completion_details = (
+            []
+            if self._section_slots.get("成稿")
+            else ["回答已组织完成"]
         )
         self._upsert_section(
+            slot="completion",
             kind=PublicThinkingKind.COMPLETE,
             title="成稿",
             summary=summary,
-            details=current_details,
+            details=completion_details,
             status=status,
             elapsed_seconds=elapsed_seconds,
         )

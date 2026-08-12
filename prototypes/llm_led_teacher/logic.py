@@ -61,6 +61,14 @@ _PUBLIC_INTENT_BY_ANSWER_MODE = {
     AnswerMode.COMPLETE: "给出完整解答",
     AnswerMode.BRIEF_REDIRECT: "直接回应并简短说明",
 }
+_PUBLIC_STRATEGY_BY_PACING = {
+    PacingMode.SINGLE_MOVE: "先验证学生步骤，再给下一步提示",
+    PacingMode.COMPLETE_RESPONSE: "先确认题意，再分步讲解",
+}
+_PUBLIC_COMPOSITION_BY_PACING = {
+    PacingMode.SINGLE_MOVE: "先回应当前步骤，再给下一步提示",
+    PacingMode.COMPLETE_RESPONSE: "先给结论，再解释依据",
+}
 
 
 class ClaimAudit(BaseModel):
@@ -698,6 +706,7 @@ def _run_turn_impl(
             enter_stage("retrieving")
             rag = retrieve_context(episode.problem_context, online_mode="off")
 
+    thinking.strategy(_PUBLIC_STRATEGY_BY_PACING[guidance.pacing])
     thinking.verification(verification)
     thinking.retrieval(
         source=rag.source,
@@ -710,6 +719,7 @@ def _run_turn_impl(
             mode=orchestration_result.retrieval_decision.mode.value,
             reason=orchestration_result.retrieval_decision.reason,
         )
+    thinking.composition(_PUBLIC_COMPOSITION_BY_PACING[guidance.pacing])
     payload = _teacher_payload(
         episode,
         clean_message,
