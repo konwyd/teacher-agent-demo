@@ -27,8 +27,10 @@ from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_markdown_display_chunks
 
 
-_SESSION_SCHEMA_VERSION = 10
+_SESSION_SCHEMA_VERSION = 11
 _PROGRESS_LABELS = {
+    "classification": "Agent · 正在识别请求……",
+    "planning": "Agent · 正在规划与调用工具……",
     "observing": "Agent · 正在识别请求……",
     "retrieving": "Agent · 正在规划与调用工具……",
     "generating": "Answer Guardrails · 正在生成回答……",
@@ -63,7 +65,7 @@ def _set_pending_student_message(current_episode: object, message: str) -> None:
         setattr(current_episode, "pending_student_message", message)
 
 
-def _episode_payload(current_episode: PrototypeEpisode) -> dict[str, object]:
+def _episode_payload(current_episode: object) -> dict[str, object]:
     payload = current_episode.model_dump(mode="json")
     payload["pending_student_message"] = _get_pending_student_message(current_episode)
     return payload
@@ -187,11 +189,16 @@ if "authenticated_user" not in st.session_state:
 authenticated_user = st.session_state.authenticated_user
 warmup_status = warmup_rag()
 
-if (
-    st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION
-    or st.session_state.get("prototype_user_id") != authenticated_user["user_id"]
-):
+if st.session_state.get("prototype_user_id") != authenticated_user["user_id"]:
     _open_latest_or_create_conversation(authenticated_user["user_id"])
+elif st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION:
+    if "prototype_episode" in st.session_state:
+        st.session_state.prototype_episode = PrototypeEpisode.model_validate(
+            _episode_payload(st.session_state.prototype_episode)
+        )
+        st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+    else:
+        _open_latest_or_create_conversation(authenticated_user["user_id"])
 elif "prototype_episode" not in st.session_state:
     _open_latest_or_create_conversation(authenticated_user["user_id"])
 
@@ -259,8 +266,10 @@ if not is_configured():
 
 
 _TIMING_LABELS = {
-    "observing": "Agent · 请求分类",
-    "retrieving": "Agent · 规划与工具",
+    "classification": "Agent · 请求分类",
+    "planning": "Agent · 规划与工具",
+    "observing": "Legacy Observer 判断",
+    "retrieving": "Legacy RAG 检索",
     "generating": "Answer Guardrails · 生成回答",
     "auditing": "Answer Guardrails · 边界检查",
     "repairing": "Answer Guardrails · 修正",
@@ -431,8 +440,8 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
             "不展示 prompt、私有 details 或模型逐字思维链。"
         )
 
-        if turn.classification is not None:
-            classification = turn.classification
+        classification = getattr(turn, "classification", None)
+        if classification is not None:
             st.write(
                 "**请求分类**",
                 {
@@ -449,7 +458,7 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
             )
 
         st.markdown("#### 教学契约")
-        teaching_contract = turn.teaching_contract
+        teaching_contract = getattr(turn, "teaching_contract", None)
         if teaching_contract is None:
             st.caption("该历史记录生成于教学契约持久化之前。")
         else:
@@ -474,7 +483,7 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
             st.caption("该历史记录没有持久化 Agent trace。")
 
         st.markdown("#### 教学边界审计")
-        boundary_audit = turn.boundary_audit
+        boundary_audit = getattr(turn, "boundary_audit", None)
         if boundary_audit is None:
             st.caption("该历史记录没有语义边界审计。")
         else:
@@ -641,7 +650,7 @@ if message:
         st.stop()
 
     with st.chat_message("assistant"):
-        progress_status = st.status(_PROGRESS_LABELS["observing"], expanded=True)
+        progress_status = st.status(_PROGRESS_LABELS["classification"], expanded=True)
         live_trace = LiveProgressTrace(progress_status)
 
         def update_progress(stage: str | AgentTraceEvent) -> None:

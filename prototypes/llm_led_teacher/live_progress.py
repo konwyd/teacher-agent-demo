@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from string import punctuation
 from time import perf_counter
 from typing import Callable, Protocol
 
@@ -54,11 +55,20 @@ _STAGE_ALIASES = {
 }
 
 
+def escape_markdown_text(value: object) -> str:
+    """Escape untrusted text before interpolating it into Streamlit Markdown."""
+
+    return "".join(
+        f"\\{character}" if character in punctuation else character
+        for character in str(value)
+    )
+
+
 def agent_trace_rows(turn: TraceTurn) -> list[dict[str, str]]:
     """Return the explicitly public trace fields for persistent UI rendering."""
 
     rows = []
-    for event in turn.agent_trace:
+    for event in getattr(turn, "agent_trace", []) or []:
         status = "成功" if event.ok is True else ("失败" if event.ok is False else "信息")
         rows.append(
             {
@@ -121,7 +131,13 @@ class LiveProgressTrace:
             "teaching_contract": "教学契约",
             "fallback": "安全收口",
         }.get(event.event_type, event.event_type)
-        tool = f" `{event.tool_name}`" if event.tool_name else ""
+        event_label = escape_markdown_text(event_label)
+        tool = (
+            f" · Tool: {escape_markdown_text(event.tool_name)}"
+            if event.tool_name
+            else ""
+        )
+        summary = escape_markdown_text(event.summary)
         elapsed = (
             f" · {event.elapsed_seconds:.3f} 秒"
             if event.elapsed_seconds > 0
@@ -129,5 +145,5 @@ class LiveProgressTrace:
         )
         self._status.write(
             f"{icon} **Agent {event.step} · {event_label}**{tool}："
-            f"{event.summary}{elapsed}"
+            f"{summary}{elapsed}"
         )

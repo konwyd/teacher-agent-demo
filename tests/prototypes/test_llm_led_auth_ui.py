@@ -13,6 +13,8 @@ from app.memory.conversation_archive import (
 from prototypes.llm_led_teacher.logic import PrototypeEpisode
 from prototypes.llm_led_teacher import logic, rag_hook
 from app.llm.deepseek_client import DeepSeekError
+from app.agent.state import VerificationResult
+from prototypes.llm_led_teacher.logic import TeacherResponse
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +26,20 @@ class LegacyPrototypeEpisode(BaseModel):
     problem_context: str = ""
     previous_verified_step: str = ""
     turns: list = Field(default_factory=list)
+
+
+class LegacyPrototypeTurn(BaseModel):
+    """Turn created before public Agent boundary fields were persisted."""
+
+    turn_id: int
+    student_message: str
+    teacher_output: TeacherResponse
+    student_verification: VerificationResult
+    evidence_level: str
+    stage_timings_seconds: dict[str, float] = Field(default_factory=dict)
+    backend_total_seconds: float = 0.0
+    display_seconds: float = 0.0
+    model_generation_metadata: dict[str, object] = Field(default_factory=dict)
 
 
 def test_logged_out_page_shows_login_and_registration_without_teacher_ui(
@@ -187,12 +203,31 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
     app.button[0].click().run()
 
     app.session_state.prototype_episode = LegacyPrototypeEpisode(
-        problem_context="旧会话里的题目"
+        problem_context="旧会话里的题目",
+        turns=[
+            LegacyPrototypeTurn(
+                turn_id=1,
+                student_message="旧提问",
+                teacher_output=TeacherResponse(response="旧回答"),
+                student_verification=VerificationResult(),
+                evidence_level="unverified",
+            )
+        ],
     )
     app.session_state.prototype_session_schema_version = 10
     app.run()
 
     assert not app.exception
+    assert isinstance(app.session_state.prototype_episode, PrototypeEpisode)
+    migrated_turn = app.session_state.prototype_episode.turns[0]
+    assert migrated_turn.classification is None
+    assert migrated_turn.teaching_contract is None
+    assert migrated_turn.agent_trace == []
+    assert migrated_turn.boundary_audit is None
+    captions = [caption.value for caption in app.caption]
+    assert "该历史记录生成于教学契约持久化之前。" in captions
+    assert "该历史记录没有持久化 Agent trace。" in captions
+    assert "该历史记录没有语义边界审计。" in captions
     app.chat_input[0].set_value("旧会话热更新后发送的消息").run()
     assert not app.exception
     saved = LocalConversationStore(conversation_db).load(

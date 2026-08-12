@@ -899,6 +899,71 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     assert client.teacher_payloads[0]["loaded_skills"] == ["concept_explanation"]
 
 
+def test_agent_turn_records_classification_and_planning_as_distinct_stages() -> None:
+    classification = RequestClassification(
+        scope="k9",
+        subject="物理",
+        stage="初中",
+        is_new_problem=True,
+        answer_mode="complete",
+        reason="new physics question",
+    )
+    classification_event = AgentTraceEvent(
+        step=0,
+        event_type="classification",
+        summary="识别为初中物理新题",
+    )
+    result = AgentOrchestrationResult(
+        classification=classification,
+        teaching_contract=TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释力与运动状态",
+            allowed_content=["物理概念"],
+            forbidden_content=["无关数学题"],
+            may_apply_to_active_problem=False,
+            may_reveal_final_answer=False,
+            reason="student requested a concept explanation",
+        ),
+        rag_context=RagContext(source="none"),
+        trace=[classification_event],
+        termination_reason="model_finished",
+    )
+
+    class ProgressOrchestrator(_FakeOrchestrator):
+        def run(self, *args, progress_callback=None, **kwargs):
+            progress_callback("classification")
+            progress_callback(classification_event)
+            progress_callback("planning")
+            return super().run(*args, progress_callback=progress_callback, **kwargs)
+
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["力可以改变物体的运动状态。"],
+    )
+    progress: list[str | AgentTraceEvent] = []
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "力为什么能改变物体的运动状态？",
+        client=client,
+        orchestrator=ProgressOrchestrator(result),
+        progress_callback=progress.append,
+    )
+
+    assert progress == [
+        "classification",
+        classification_event,
+        "planning",
+        "generating",
+        "auditing",
+        "complete",
+    ]
+    assert "classification" in turn.stage_timings_seconds
+    assert "planning" in turn.stage_timings_seconds
+    assert "observing" not in turn.stage_timings_seconds
+    assert "retrieving" not in turn.stage_timings_seconds
+
+
 def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
     classification = RequestClassification(
         scope="k9",

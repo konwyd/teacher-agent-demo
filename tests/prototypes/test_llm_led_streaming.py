@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from prototypes.llm_led_teacher.live_progress import agent_trace_rows
+from prototypes.llm_led_teacher import live_progress
 from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
 from prototypes.llm_led_teacher import streaming
 from prototypes.llm_led_teacher.streaming import (
@@ -275,5 +276,70 @@ def test_live_progress_renders_public_agent_event_without_private_payload() -> N
 
     rendered = "\n".join(status.lines)
     assert "本地物理教材命中 4 条" in rendered
-    assert "search_local_knowledge" in rendered
+    assert "search\\_local\\_knowledge" in rendered
     assert "must never render" not in rendered
+
+
+def test_escape_markdown_text_neutralizes_links_images_and_headings() -> None:
+    malicious = "[点击](https://evil.test) ![](https://evil.test/x) # 标题"
+
+    escaped = live_progress.escape_markdown_text(malicious)
+
+    assert "[点击](" not in escaped
+    assert "![](" not in escaped
+    assert "\\[点击\\]" in escaped
+    assert "\\!\\[\\]" in escaped
+    assert "\\# 标题" in escaped
+
+
+def test_live_progress_escapes_every_dynamic_agent_event_field() -> None:
+    from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+
+    class FakeStatus:
+        def __init__(self):
+            self.lines = []
+
+        def write(self, value):
+            self.lines.append(value)
+
+    malicious = "[点击](https://evil.test) ![](https://evil.test/x) # 标题"
+    status = FakeStatus()
+    trace = LiveProgressTrace(status, clock=lambda: 1.0)
+
+    trace.update_agent_event(
+        AgentTraceEvent(
+            step=2,
+            event_type=malicious,
+            summary=malicious,
+            tool_name=malicious,
+            ok=True,
+        )
+    )
+
+    rendered = "\n".join(status.lines)
+    assert rendered.count("\\[点击\\]") == 3
+    assert "[点击](" not in rendered
+    assert "![](" not in rendered
+    assert rendered.count("\\# 标题") == 3
+
+
+def test_persisted_trace_table_keeps_untrusted_text_as_plain_cell_values() -> None:
+    malicious = "[点击](https://evil.test) ![](https://evil.test/x) # 标题"
+    turn = SimpleNamespace(
+        agent_trace=[
+            AgentTraceEvent(
+                step=1,
+                event_type=malicious,
+                summary=malicious,
+                tool_name=malicious,
+            )
+        ]
+    )
+
+    rows = agent_trace_rows(turn)
+
+    assert rows[0]["类型"] == malicious
+    assert rows[0]["Tool"] == malicious
+    assert rows[0]["摘要"] == malicious
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+    assert "st.table(trace_rows)" in source

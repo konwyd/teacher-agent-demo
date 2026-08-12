@@ -547,9 +547,15 @@ def run_turn(
     persisted_episode = episode
     episode = episode.model_copy(update={"turns": list(episode.turns)})
 
+    active_client = client or DeepSeekClient()
+    if enable_agent_loop and orchestrator is None:
+        from prototypes.llm_led_teacher.orchestrator import MultisubjectAgentLoop
+
+        orchestrator = MultisubjectAgentLoop(client=active_client)
+
     started_at = clock()
     stage_started_at = started_at
-    current_stage = "observing"
+    current_stage = "classification" if orchestrator is not None else "observing"
     stage_timings: dict[str, float] = {}
 
     def enter_stage(stage: str) -> None:
@@ -560,17 +566,13 @@ def run_turn(
         stage_started_at = now
         _report_progress(progress_callback, stage)
 
-    active_client = client or DeepSeekClient()
     usage_history = getattr(active_client, "usage_history", None)
     usage_history_offset = (
         len(usage_history) if isinstance(usage_history, list) else None
     )
-    _report_progress(progress_callback, "observing")
+    if orchestrator is None:
+        _report_progress(progress_callback, "observing")
     orchestration_result: AgentOrchestrationResult | None = None
-    if enable_agent_loop and orchestrator is None:
-        from prototypes.llm_led_teacher.orchestrator import MultisubjectAgentLoop
-
-        orchestrator = MultisubjectAgentLoop(client=active_client)
 
     if orchestrator is None:
         raw_guidance, observer_error = _observe_turn(
@@ -586,13 +588,24 @@ def run_turn(
 
     if orchestrator is not None:
         previous_problem = episode.problem_context
-        enter_stage("retrieving")
+
+        def report_orchestration_progress(
+            event: str | AgentTraceEvent,
+        ) -> None:
+            if isinstance(event, str):
+                if event == current_stage:
+                    _report_progress(progress_callback, event)
+                else:
+                    enter_stage(event)
+                return
+            _report_progress(progress_callback, event)
+
         orchestration_result = orchestrator.run(
             previous_problem,
             clean_message,
             episode.active_subject,
             episode.active_stage,
-            progress_callback=lambda event: _report_progress(progress_callback, event),
+            progress_callback=report_orchestration_progress,
         )
         classification = orchestration_result.classification
         starts_new_problem = (

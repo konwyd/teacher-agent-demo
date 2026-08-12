@@ -74,6 +74,48 @@ def _finish(contract: TeachingContract | None = None) -> AgentDecision:
     )
 
 
+def test_loop_reports_real_phase_before_each_agent_component_runs() -> None:
+    timeline: list[str] = []
+
+    class RecordingClassifier(_Classifier):
+        def classify(self, *args, **kwargs) -> RequestClassification:
+            timeline.append("classifier_call")
+            return super().classify(*args, **kwargs)
+
+    class RecordingDecisions(_Decisions):
+        def decide(self, payload) -> AgentDecision:
+            timeline.append("decision_call")
+            return super().decide(payload)
+
+    def record_progress(event: str | object) -> None:
+        if isinstance(event, str):
+            timeline.append(event)
+        else:
+            timeline.append(f"event:{event.event_type}")
+
+    loop = MultisubjectAgentLoop(
+        classifier=RecordingClassifier(_k9("数学", new=False)),
+        action_provider=RecordingDecisions([_finish()]),
+        registry=_Registry(),
+    )
+
+    loop.run(
+        "3x+2=11",
+        "给我一点提示",
+        "数学",
+        "初中",
+        progress_callback=record_progress,
+    )
+
+    assert timeline[:5] == [
+        "classification",
+        "classifier_call",
+        "event:classification",
+        "planning",
+        "decision_call",
+    ]
+
+
 def test_followup_inherits_math_subject_when_classifier_marks_same_problem() -> None:
     loop = MultisubjectAgentLoop(
         classifier=_Classifier(_k9("数学", new=False)),

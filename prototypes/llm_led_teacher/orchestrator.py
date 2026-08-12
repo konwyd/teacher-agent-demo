@@ -153,8 +153,9 @@ class MultisubjectAgentLoop:
         student_message: str,
         active_subject: str,
         active_stage: str,
-        progress_callback: Callable[[AgentTraceEvent], None] | None = None,
+        progress_callback: Callable[[str | AgentTraceEvent], None] | None = None,
     ) -> AgentOrchestrationResult:
+        self._report_phase(progress_callback, "classification")
         classification = self.classifier.classify(
             student_message,
             problem_context,
@@ -193,6 +194,7 @@ class MultisubjectAgentLoop:
                 routing_guidance={"answer_mode": AnswerMode.BRIEF_REDIRECT.value},
             )
 
+        self._report_phase(progress_callback, "planning")
         runtime = OrchestrationRuntime(
             classification=classification,
             problem_context=problem_context,
@@ -315,7 +317,7 @@ class MultisubjectAgentLoop:
         trace: list[AgentTraceEvent],
         step: int,
         contract: TeachingContract,
-        callback: Callable[[AgentTraceEvent], None] | None,
+        callback: Callable[[str | AgentTraceEvent], None] | None,
     ) -> None:
         cls._trace(
             trace,
@@ -383,11 +385,22 @@ class MultisubjectAgentLoop:
     def _trace(
         trace: list[AgentTraceEvent],
         event: AgentTraceEvent,
-        callback: Callable[[AgentTraceEvent], None] | None,
+        callback: Callable[[str | AgentTraceEvent], None] | None,
     ) -> None:
         trace.append(event)
         if callback is not None:
             try:
                 callback(event)
+            except Exception:  # noqa: BLE001 - UI progress must not block teaching
+                pass
+
+    @staticmethod
+    def _report_phase(
+        callback: Callable[[str | AgentTraceEvent], None] | None,
+        phase: str,
+    ) -> None:
+        if callback is not None:
+            try:
+                callback(phase)
             except Exception:  # noqa: BLE001 - UI progress must not block teaching
                 pass
