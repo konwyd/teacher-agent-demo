@@ -140,6 +140,39 @@ def test_model_environment_contains_memory_safe_runtime_defaults():
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
+def test_kv_environment_reuses_existing_model_address_and_parallel(tmp_path):
+    from scripts.run_llm_led_teacher import build_model_env, build_service_env
+
+    service_env = build_service_env(
+        {},
+        rag_host="127.0.0.1",
+        rag_port=8002,
+        model_host="10.0.0.8",
+        model_port=9099,
+        kv_cache_dir=tmp_path,
+        parallel=4,
+    )
+    model_env = build_model_env(
+        {},
+        model_host="10.0.0.8",
+        model_port=9099,
+        ctx_size=131072,
+        parallel=4,
+        batch_size=128,
+        ubatch_size=128,
+        cache_type_k="q8_0",
+        cache_type_v="q4_0",
+        kv_cache_dir=tmp_path,
+    )
+
+    assert service_env["DEEPSEEK_BASE_URL"] == "http://10.0.0.8:9099/v1"
+    assert service_env["TEACHER_KV_SERVER_URL"] == "http://10.0.0.8:9099"
+    assert service_env["TEACHER_LLAMA_PARALLEL"] == "4"
+    assert service_env["TEACHER_KV_PERSIST"] == "1"
+    assert service_env["TEACHER_KV_CACHE_DIR"] == str(tmp_path.resolve())
+    assert model_env["KV_SLOT_SAVE_PATH"] == f"{tmp_path.resolve()}/"
+
+
 def test_model_health_requires_health_expected_alias_and_real_inference():
     from scripts.run_llm_led_teacher import model_server_ready
 

@@ -21,6 +21,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "data" / "china_textbook_k9_vectordb"
 DEFAULT_MODEL_SCRIPT = ROOT.parent / "run_deepseek_v4_8x4080.sh"
+DEFAULT_KV_CACHE_DIR = ROOT / "data" / "runtime" / "kv-states"
 DEFAULT_MODEL_HOST = "127.0.0.1"
 DEFAULT_MODEL_PORT = 8080
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -85,6 +86,7 @@ def build_model_env(
     ubatch_size: int,
     cache_type_k: str,
     cache_type_v: str,
+    kv_cache_dir: Path = DEFAULT_KV_CACHE_DIR,
 ) -> dict[str, str]:
     env = dict(base)
     env["PORT"] = str(model_port)
@@ -94,6 +96,7 @@ def build_model_env(
     env["UBATCH_SIZE"] = str(ubatch_size)
     env["LLAMA_ARG_CACHE_TYPE_K"] = cache_type_k
     env["LLAMA_ARG_CACHE_TYPE_V"] = cache_type_v
+    env["KV_SLOT_SAVE_PATH"] = f"{kv_cache_dir.resolve()}/"
     no_proxy = {
         item.strip()
         for item in (env.get("NO_PROXY") or env.get("no_proxy") or "").split(",")
@@ -114,6 +117,8 @@ def build_service_env(
     model_name: str = DEFAULT_MODEL_NAME,
     request_timeout: float = 300.0,
     context_window_tokens: int = 131072,
+    kv_cache_dir: Path = DEFAULT_KV_CACHE_DIR,
+    parallel: int = DEFAULT_PARALLEL,
 ) -> dict[str, str]:
     env = dict(base)
     env["CHROMA_HOST"] = rag_host
@@ -124,6 +129,10 @@ def build_service_env(
     env["DEEPSEEK_MODEL"] = model_name
     env["DEEPSEEK_TIMEOUT_SECONDS"] = str(request_timeout)
     env["DEEPSEEK_CONTEXT_WINDOW_TOKENS"] = str(context_window_tokens)
+    env["TEACHER_KV_PERSIST"] = "1"
+    env["TEACHER_KV_CACHE_DIR"] = str(kv_cache_dir.resolve())
+    env["TEACHER_KV_SERVER_URL"] = f"http://{model_host}:{model_port}"
+    env["TEACHER_LLAMA_PARALLEL"] = str(parallel)
     env.setdefault("TEACHER_RAG_DEVICE", "cpu")
     env.setdefault("TEACHER_RAG_CPU_THREADS", "4")
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -302,6 +311,8 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
+    DEFAULT_KV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
     model_env = build_model_env(
         os.environ.copy(),
         model_host=args.model_host,
@@ -312,6 +323,7 @@ def main() -> int:
         ubatch_size=args.ubatch_size,
         cache_type_k=args.cache_type_k,
         cache_type_v=args.cache_type_v,
+        kv_cache_dir=DEFAULT_KV_CACHE_DIR,
     )
     print(
         "启动或复用本地 DeepSeek-V4："
@@ -381,6 +393,8 @@ def main() -> int:
         model_name=args.model_name,
         request_timeout=args.llm_request_timeout,
         context_window_tokens=args.ctx_size,
+        kv_cache_dir=DEFAULT_KV_CACHE_DIR,
+        parallel=args.parallel,
     )
     print(
         "启动 LLM-led Teacher Prototype："
