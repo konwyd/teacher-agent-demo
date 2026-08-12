@@ -17,7 +17,14 @@ from pydantic import BaseModel, Field
 from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
 from app.agent.state import VerificationResult, VerificationStatus
-from app.llm.deepseek_client import DeepSeekClient
+from app.llm.deepseek_client import DeepSeekClient, summarize_usage_metadata
+from prototypes.llm_led_teacher.orchestration_models import (
+    AgentOrchestrationResult,
+    AgentTraceEvent,
+    AnswerMode,
+    RequestClassification,
+    RequestScope,
+)
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
 
 
@@ -73,15 +80,22 @@ class PrototypeTurnRecord(BaseModel):
     repair_performed: bool = False
     draft_character_count: int = 0
     final_character_count: int = 0
+    classification: RequestClassification | None = None
+    agent_trace: list[AgentTraceEvent] = Field(default_factory=list)
+    loaded_skills: list[str] = Field(default_factory=list)
+    agent_termination_reason: str = ""
 
 
 class PrototypeEpisode(BaseModel):
     problem_context: str = ""
     previous_verified_step: str = ""
+    active_subject: str = ""
+    active_stage: str = ""
     turns: list[PrototypeTurnRecord] = Field(default_factory=list)
+    pending_student_message: str = ""
 
 
-ProgressCallback = Callable[[str], None]
+ProgressCallback = Callable[[str | AgentTraceEvent], None]
 
 
 def _report_progress(callback: ProgressCallback | None, stage: str) -> None:
@@ -112,7 +126,18 @@ class StructuredTeacherClient(Protocol):
     ) -> TurnGuidance: ...
 
 
-_SYSTEM_PROMPT = """你是一名中文初中数学老师，由你自主完成整轮教学。
+class TurnOrchestrator(Protocol):
+    def run(
+        self,
+        problem_context: str,
+        student_message: str,
+        active_subject: str,
+        active_stage: str,
+        progress_callback=None,
+    ) -> AgentOrchestrationResult: ...
+
+
+_SYSTEM_PROMPT = """你是一名中文九年义务教育老师，由你自主完成整轮教学。
 
 你要自己理解题目、判断学生当前需要、选择方法、控制讲解深度，并生成自然的教师回复。
 不存在外部 Planner、策略卡或掌握度规则来指挥你。
@@ -123,7 +148,7 @@ RAG 知识库：输入中可能包含 retrieval_reference。它只是有边界�
 必须遵守：
 1. 始终围绕 problem_context 和真实对话历史，不要丢失原题。
 2. deterministic_verification 是工具证据，优先级高于你的判断；不得与它冲突。
-3. 没有确定性验证时可以正常推理和教学，但对正确性的表述使用"看起来""按当前计算"等合适措辞。
+3. 数学问题没有确定性验证时可以正常推理和教学，但对正确性的表述使用"看起来""按当前计算"等合适措辞；其他学科根据可靠证据自然教学。
 4. 不要因为缺少 verifier 就退回"我不假设题型"或让学生重新说明已经清楚的信息。
 5. 学生问为什么时直接解释原因；学生跳步时按实际内容回应。
 6. 每轮最多提出一个真正必要的问题，也可以不提问；不要为了格式机械追问或要求反复复述依据。
@@ -133,6 +158,7 @@ RAG 知识库：输入中可能包含 retrieval_reference。它只是有边界�
 10. 由你判断是否披露局部结果或最终答案；学生明确说不要答案时不得给最终答案。
 11. 只输出直接面向学生的自然语言教师回复，不要输出 JSON、字段名、分类标签、置信度或内部理由。
 12. 输入中的 turn_guidance 是独立观察器给出的节奏提示：single_move 时本轮只能推进一个产生新结果的步骤；complete_response 时可以完整回答概念、原因或直接事实。
+13. request_classification 会标出当前学科；不得把物理、化学等问题误当成数学题。off_topic 时只做简短概括并邀请学生回到 K9 学习问题，不检索也不展开研究。
 """
 
 
@@ -303,6 +329,7 @@ def _teacher_payload(
     verification: VerificationResult,
     guidance: TurnGuidance,
     rag: RagContext | None = None,
+    orchestration: AgentOrchestrationResult | None = None,
 ) -> str:
     base: dict = {
         "problem_context": episode.problem_context,
@@ -313,6 +340,11 @@ def _teacher_payload(
         "previous_verified_step": episode.previous_verified_step,
         "turn_guidance": guidance.model_dump(mode="json"),
     }
+    if orchestration is not None:
+        base["request_classification"] = orchestration.classification.model_dump(
+            mode="json"
+        )
+        base["loaded_skills"] = orchestration.loaded_skills
     if rag is not None and rag.text:
         base["retrieval_reference"] = {
             "content": rag.text,
@@ -469,6 +501,8 @@ def run_turn(
     message: str,
     *,
     client: StructuredTeacherClient | None = None,
+    orchestrator: TurnOrchestrator | None = None,
+    enable_agent_loop: bool = False,
     progress_callback: ProgressCallback | None = None,
     clock: Callable[[], float] = perf_counter,
 ) -> PrototypeTurnRecord:
@@ -492,37 +526,102 @@ def run_turn(
         _report_progress(progress_callback, stage)
 
     active_client = client or DeepSeekClient()
+    usage_history = getattr(active_client, "usage_history", None)
+    usage_history_offset = (
+        len(usage_history) if isinstance(usage_history, list) else None
+    )
     _report_progress(progress_callback, "observing")
     raw_guidance, observer_error = _observe_turn(active_client, episode, clean_message)
     guidance = raw_guidance
-    if not episode.problem_context and not guidance.starts_new_problem:
-        guidance = guidance.model_copy(update={"starts_new_problem": True})
-    guidance = _normalize_guidance(episode, clean_message, guidance)
-    starts_new_problem = guidance.starts_new_problem or not episode.problem_context
-    if starts_new_problem:
-        episode.problem_context = clean_message
-        episode.previous_verified_step = ""
+    orchestration_result: AgentOrchestrationResult | None = None
+    if enable_agent_loop and orchestrator is None:
+        from prototypes.llm_led_teacher.orchestrator import MultisubjectAgentLoop
 
-    if starts_new_problem:
-        verification = VerificationResult(
-            status=VerificationStatus.UNABLE_TO_VERIFY,
-            summary="当前消息开启新的 active problem，不把题目本身当作学生步骤判定。",
-            verifier_name="none",
-        )
-        # 新题触发 RAG 检索：本地 + 联网（auto 模式）
+        orchestrator = MultisubjectAgentLoop(client=active_client)
+
+    if orchestrator is not None:
+        previous_problem = episode.problem_context
         enter_stage("retrieving")
-        rag = retrieve_context(episode.problem_context, online_mode="auto")
-    else:
-        verification = _verify(
-            episode.problem_context,
+        orchestration_result = orchestrator.run(
+            previous_problem,
             clean_message,
-            episode.previous_verified_step,
+            episode.active_subject,
+            episode.active_stage,
+            progress_callback=lambda event: _report_progress(progress_callback, event),
         )
-        # 追问时也用 RAG，但不做联网检索避免延迟
-        enter_stage("retrieving")
-        rag = retrieve_context(episode.problem_context, online_mode="off")
+        classification = orchestration_result.classification
+        starts_new_problem = (
+            classification.scope is RequestScope.K9
+            and (classification.is_new_problem or not previous_problem)
+        )
+        pacing = (
+            PacingMode.COMPLETE_RESPONSE
+            if classification.answer_mode in {AnswerMode.COMPLETE, AnswerMode.BRIEF_REDIRECT}
+            else guidance.pacing
+        )
+        guidance = guidance.model_copy(
+            update={"starts_new_problem": starts_new_problem, "pacing": pacing}
+        )
+        guidance = _normalize_guidance(episode, clean_message, guidance)
+        if classification.scope is RequestScope.K9:
+            if classification.subject is not None:
+                episode.active_subject = classification.subject.value
+            episode.active_stage = classification.stage.value
+        if starts_new_problem:
+            episode.problem_context = clean_message
+            episode.previous_verified_step = ""
+            verification = VerificationResult(
+                status=VerificationStatus.UNABLE_TO_VERIFY,
+                summary="当前消息开启新的 active problem，不把题目本身当作学生步骤判定。",
+                verifier_name="none",
+            )
+        elif classification.scope is RequestScope.OFF_TOPIC:
+            verification = VerificationResult(
+                status=VerificationStatus.NOT_APPLICABLE,
+                summary="非 K9 请求不运行数学 verifier。",
+                verifier_name="none",
+            )
+        else:
+            verification = _verify(
+                episode.problem_context,
+                clean_message,
+                episode.previous_verified_step,
+            )
+        rag = orchestration_result.rag_context or RagContext(source="none")
+    else:
+        if not episode.problem_context and not guidance.starts_new_problem:
+            guidance = guidance.model_copy(update={"starts_new_problem": True})
+        guidance = _normalize_guidance(episode, clean_message, guidance)
+        starts_new_problem = guidance.starts_new_problem or not episode.problem_context
+        if starts_new_problem:
+            episode.problem_context = clean_message
+            episode.previous_verified_step = ""
 
-    payload = _teacher_payload(episode, clean_message, verification, guidance, rag)
+        if starts_new_problem:
+            verification = VerificationResult(
+                status=VerificationStatus.UNABLE_TO_VERIFY,
+                summary="当前消息开启新的 active problem，不把题目本身当作学生步骤判定。",
+                verifier_name="none",
+            )
+            enter_stage("retrieving")
+            rag = retrieve_context(episode.problem_context, online_mode="auto")
+        else:
+            verification = _verify(
+                episode.problem_context,
+                clean_message,
+                episode.previous_verified_step,
+            )
+            enter_stage("retrieving")
+            rag = retrieve_context(episode.problem_context, online_mode="off")
+
+    payload = _teacher_payload(
+        episode,
+        clean_message,
+        verification,
+        guidance,
+        rag,
+        orchestration_result,
+    )
     enter_stage("generating")
     output = _chat_teaching_turn(
         active_client,
@@ -570,6 +669,11 @@ def run_turn(
         output.response,
         claim_audits,
     )
+    if usage_history_offset is not None:
+        current_history = getattr(active_client, "usage_history", [])
+        model_generation_metadata = summarize_usage_metadata(
+            current_history[usage_history_offset:]
+        )
     finished_at = clock()
     stage_timings[current_stage] = round(finished_at - stage_started_at, 3)
     backend_total_seconds = round(finished_at - started_at, 3)
@@ -602,6 +706,14 @@ def run_turn(
         repair_performed=bool(repair_reasons),
         draft_character_count=draft_character_count,
         final_character_count=len(output.response),
+        classification=(
+            orchestration_result.classification if orchestration_result else None
+        ),
+        agent_trace=(orchestration_result.trace if orchestration_result else []),
+        loaded_skills=(orchestration_result.loaded_skills if orchestration_result else []),
+        agent_termination_reason=(
+            orchestration_result.termination_reason if orchestration_result else ""
+        ),
     )
     episode.turns.append(record)
     _report_progress(progress_callback, "complete")

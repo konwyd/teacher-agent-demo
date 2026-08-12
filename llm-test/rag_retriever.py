@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import os
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -597,6 +598,82 @@ def _get_exercise_rag() -> ExerciseRAG | None:
 # ============================================================
 # 主检索入口
 # ============================================================
+
+_EXERCISE_SUBJECTS = {
+    "数学": "Math",
+    "物理": "Physics",
+    "化学": "Chemistry",
+    "英语": "English",
+    "语文": "Chinese",
+    "历史": "History",
+    "道法": "Politics",
+    "生物": "Biology",
+    "地理": "Geography",
+}
+
+
+def retrieve_local_hits(
+    problem: str,
+    subject: str,
+    stage: str,
+    topk: int,
+    sources: tuple[str, ...] = ("textbook", "exercise"),
+) -> dict[str, Any]:
+    """Return threshold-free local candidates and never import online RAG."""
+    started = time.perf_counter()
+    subject_clean = subject.removeprefix("初中").removeprefix("小学").strip()
+    keywords = _extract_keywords(problem, max_len=300)
+    query = f"{subject_clean} {stage} {keywords}" if keywords else problem[:200]
+    hits: list[dict[str, Any]] = []
+
+    if "textbook" in sources:
+        textbook = _get_textbook_rag()
+        if textbook is not None:
+            textbook_stage = stage if stage in ("小学", "初中") else None
+            hits.extend(
+                textbook.retrieve(
+                    query,
+                    topk=topk,
+                    subject=subject_clean,
+                    stage=textbook_stage,
+                )
+            )
+
+    if "exercise" in sources:
+        exercise = _get_exercise_rag()
+        if exercise is not None:
+            hits.extend(
+                exercise.retrieve(
+                    query,
+                    topk=topk,
+                    subject=_EXERCISE_SUBJECTS.get(subject_clean, subject_clean),
+                )
+            )
+
+    normalized: list[dict[str, Any]] = []
+    for hit in hits:
+        normalized.append(
+            {
+                "text": hit.get("text", ""),
+                "metadata": hit.get("meta", {}) or {},
+                "source": hit.get("source", "local"),
+                "vec_sim": float(hit.get("vec_sim", 0.0)),
+                "bm25_score": float(hit.get("bm25_score", 0.0)),
+                "rrf_normalized": float(hit.get("rrf_normalized", 0.0)),
+                "sim": float(hit.get("sim", 1.0 - hit.get("distance", 1.0))),
+            }
+        )
+    normalized.sort(key=lambda item: item["sim"], reverse=True)
+    return {
+        "query": query,
+        "filters": {
+            "textbook": {"subject": subject_clean, "stage": stage},
+            "exercise": {"subject": _EXERCISE_SUBJECTS.get(subject_clean, subject_clean)},
+            "sources": list(sources),
+        },
+        "hits": normalized[:topk],
+        "elapsed_seconds": round(time.perf_counter() - started, 3),
+    }
 
 def retrieve_for_exam(
     paper_content: str,

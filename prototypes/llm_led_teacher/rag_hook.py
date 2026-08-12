@@ -25,6 +25,9 @@ if str(_LLM_TEST_DIR) not in sys.path:
 # 0.65 联网回退和 0.44 最终过滤均由 llm-test/rag_retriever 统一负责。
 from rag_device import configure_cpu_threads, resolve_rag_device
 from rag_retriever import retrieve_for_exam as _original_retrieve_for_exam
+from rag_retriever import retrieve_local_hits as _retrieve_local_hits
+
+from prototypes.llm_led_teacher.orchestration_models import SchoolStage, Subject
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,18 @@ BGE_MODEL_PATH = os.environ.get(
     "TEACHER_RAG_EMBED_MODEL",
     "/home/dockerContainerSave/.cache/modelscope/BAAI/bge-m3",
 )
+
+_EXERCISE_SUBJECTS = {
+    Subject.MATH: "Math",
+    Subject.CHINESE: "Chinese",
+    Subject.ENGLISH: "English",
+    Subject.PHYSICS: "Physics",
+    Subject.CHEMISTRY: "Chemistry",
+    Subject.BIOLOGY: "Biology",
+    Subject.HISTORY: "History",
+    Subject.GEOGRAPHY: "Geography",
+    Subject.POLITICS: "Politics",
+}
 
 
 @lru_cache(maxsize=1)
@@ -88,6 +103,7 @@ class RagContext:
         online_reason: str = "",
         local_threshold: float = LOCAL_SIMILARITY_THRESHOLD,
         local_top_score: float = 0.0,
+        diagnostics: dict[str, object] | None = None,
     ) -> None:
         self.text = text
         self.refs: list[str] = refs or []
@@ -99,6 +115,116 @@ class RagContext:
         self.online_reason = online_reason
         self.local_threshold = local_threshold
         self.local_top_score = local_top_score
+        self.diagnostics = diagnostics or {}
+
+
+def subject_metadata_filters(
+    subject: Subject,
+    stage: SchoolStage,
+) -> dict[str, dict[str, str]]:
+    """Translate orchestration enums to collection metadata without routing."""
+    return {
+        "textbook": {"subject": subject.value, "stage": stage.value},
+        "exercise": {"subject": _EXERCISE_SUBJECTS[subject]},
+    }
+
+
+def retrieve_local_context(
+    problem: str,
+    *,
+    subject: Subject,
+    stage: SchoolStage,
+    topk: int = TOPK,
+    sources: tuple[str, ...] = ("textbook", "exercise"),
+) -> RagContext:
+    """Retrieve only local evidence using caller-selected subject and stage."""
+    if not problem.strip():
+        return RagContext(source="empty_problem")
+    try:
+        result = _retrieve_local_hits(
+            problem,
+            subject.value,
+            stage.value,
+            topk,
+            sources,
+        )
+    except Exception as exc:  # noqa: BLE001 - tool errors are recoverable
+        return RagContext(
+            source=f"retrieval_error: {type(exc).__name__}",
+            diagnostics={"error": str(exc), "error_type": type(exc).__name__},
+        )
+
+    raw_hits = list(result.get("hits", []))
+    text_parts: list[str] = []
+    refs: list[str] = []
+    hits: list[dict] = []
+    used = 0
+    for index, raw in enumerate(raw_hits, 1):
+        document = str(raw.get("text", ""))
+        if not document:
+            continue
+        excerpt = document[:600] + ("…" if len(document) > 600 else "")
+        metadata = raw.get("metadata", {}) or {}
+        source = str(raw.get("source", "local"))
+        title = metadata.get("chapter") or metadata.get("knowledges") or metadata.get("source_file", "")
+        reference = (
+            f"[{source}:{index}] {metadata.get('subject', subject.value)} · "
+            f"{metadata.get('stage', stage.value)} · {str(title)[:80]}"
+        )
+        chunk = f"{reference}\n{excerpt}"
+        if used + len(chunk) > 2400:
+            break
+        refs.append(reference)
+        text_parts.append(chunk)
+        hits.append(
+            {
+                **raw,
+                "document": excerpt,
+                "similarity": float(raw.get("sim", 0.0)),
+                "reference": reference,
+            }
+        )
+        used += len(chunk)
+
+    diagnostics = {
+        "query": result.get("query", problem),
+        "filters": result.get("filters", subject_metadata_filters(subject, stage)),
+        "hit_count": len(hits),
+        "elapsed_seconds": float(result.get("elapsed_seconds", 0.0)),
+    }
+    return RagContext(
+        text="\n\n".join(text_parts),
+        refs=refs,
+        source="local" if hits else "local_empty",
+        hits=hits,
+        online_triggered=False,
+        online_status="not_triggered",
+        diagnostics=diagnostics,
+        local_top_score=max((float(hit.get("sim", 0.0)) for hit in hits), default=0.0),
+    )
+
+
+def retrieve_web_context(
+    query: str,
+    *,
+    subject: Subject,
+    stage: SchoolStage,
+    evidence_gap: str,
+    topk: int = 3,
+) -> RagContext:
+    """Run web-only retrieval after the tool registry has enforced its gate."""
+    results = _tavily_search(f"{stage.value}{subject.value} {query}", max_results=topk)
+    text, refs, hits = _format_results(results)
+    return RagContext(
+        text=text,
+        refs=refs,
+        source="online" if hits else "online_empty",
+        hits=hits,
+        online_triggered=True,
+        online_status="used" if hits else "no_results",
+        online_reason=evidence_gap,
+        diagnostics={"query": query, "hit_count": len(hits), "evidence_gap": evidence_gap},
+    )
 
 
 @lru_cache(maxsize=1)

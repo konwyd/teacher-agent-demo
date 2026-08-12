@@ -5,6 +5,8 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Callable, Protocol
 
+from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
+
 
 class StatusWriter(Protocol):
     def write(self, value: str) -> object: ...
@@ -75,3 +77,14 @@ class LiveProgressTrace:
         self._stage = stage
         self._started_at = now
         self._write_start(stage)
+
+    def update_agent_event(self, event: AgentTraceEvent) -> None:
+        """Render only the event's explicitly public summary."""
+        icon = "✅" if event.ok is True else ("⚠️" if event.ok is False else "🧭")
+        tool = f" `{event.tool_name}`" if event.tool_name else ""
+        elapsed = (
+            f" · {event.elapsed_seconds:.3f} 秒"
+            if event.elapsed_seconds > 0
+            else ""
+        )
+        self._status.write(f"{icon} **Agent {event.step}**{tool}：{event.summary}{elapsed}")

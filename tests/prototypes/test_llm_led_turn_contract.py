@@ -7,6 +7,11 @@ from prototypes.llm_led_teacher.logic import (
     run_turn,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.orchestration_models import (
+    AgentOrchestrationResult,
+    AgentTraceEvent,
+    RequestClassification,
+)
 
 
 class _ObservedClient:
@@ -241,6 +246,79 @@ def test_turn_records_safe_generation_metadata_without_raw_reasoning(monkeypatch
     assert "chain_of_thought" not in turn.model_dump()
 
 
+def test_turn_aggregates_observer_and_teacher_token_usage(monkeypatch):
+    _no_rag(monkeypatch)
+
+    class UsageClient(_ScriptedClient):
+        def __init__(self):
+            super().__init__(
+                TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+                ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
+            )
+            self.usage_history = []
+
+        def chat_json(self, system, user, schema, temperature=0.0, max_tokens=None):
+            result = super().chat_json(system, user, schema, temperature, max_tokens)
+            self.usage_history.append(
+                {
+                    "prompt_tokens": 100,
+                    "prompt_cache_hit_tokens": 20,
+                    "prompt_cache_miss_tokens": 80,
+                    "completion_tokens": 10,
+                    "response_tokens": 10,
+                    "reasoning_tokens": 0,
+                    "total_tokens": 110,
+                    "context_used_tokens": 110,
+                    "context_window_tokens": 524288,
+                    "cache_usage_available": True,
+                    "finish_reason": "stop",
+                }
+            )
+            return result
+
+        def chat(self, system, user, temperature=0.0, max_tokens=None):
+            result = super().chat(system, user, temperature, max_tokens)
+            self.usage_history.append(
+                {
+                    "prompt_tokens": 900,
+                    "prompt_cache_hit_tokens": 580,
+                    "prompt_cache_miss_tokens": 320,
+                    "completion_tokens": 190,
+                    "response_tokens": 140,
+                    "reasoning_tokens": 50,
+                    "total_tokens": 1090,
+                    "context_used_tokens": 1090,
+                    "context_window_tokens": 524288,
+                    "cache_usage_available": True,
+                    "finish_reason": "stop",
+                }
+            )
+            return result
+
+    turn = run_turn(PrototypeEpisode(), "2x+9=14，这道题怎么解", client=UsageClient())
+    usage = turn.model_generation_metadata
+
+    assert usage["llm_call_count"] == 2
+    assert usage["prompt_tokens"] == 1000
+    assert usage["prompt_cache_hit_tokens"] == 600
+    assert usage["prompt_cache_miss_tokens"] == 400
+    assert usage["cache_hit_rate"] == 0.6
+    assert usage["completion_tokens"] == 200
+    assert usage["reasoning_tokens"] == 50
+    assert usage["response_tokens"] == 150
+    assert usage["total_tokens"] == 1200
+    assert usage["context_used_tokens"] == 1090
+    assert usage["context_window_tokens"] == 524288
+
+
+def test_episode_preserves_pending_student_message_across_serialization():
+    episode = PrototypeEpisode(pending_student_message="上一条还没有生成完")
+
+    restored = PrototypeEpisode.model_validate(episode.model_dump(mode="json"))
+
+    assert restored.pending_student_message == "上一条还没有生成完"
+
+
 def test_progress_callback_failure_does_not_block_teacher_response(monkeypatch):
     _no_rag(monkeypatch)
     client = _ScriptedClient(
@@ -412,3 +490,103 @@ def test_rag_auto_uses_original_retriever_auto_mode(monkeypatch):
     assert result.online_triggered is True
     assert result.online_status == "used"
     assert result.local_top_score == 0.56
+
+
+class _FakeOrchestrator:
+    def __init__(self, result: AgentOrchestrationResult) -> None:
+        self.result = result
+        self.calls = []
+
+    def run(self, problem_context, student_message, active_subject, active_stage, progress_callback=None):
+        self.calls.append((problem_context, student_message, active_subject, active_stage))
+        return self.result
+
+
+def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["力可以改变物体速度的大小或方向。你想看一个生活中的例子吗？"],
+    )
+    classification = RequestClassification(
+        scope="k9",
+        subject="物理",
+        stage="初中",
+        is_new_problem=True,
+        answer_mode="complete",
+        reason="new physics question",
+    )
+    trace = [
+        AgentTraceEvent(
+            step=0,
+            event_type="classification",
+            summary="识别为初中物理新题",
+        )
+    ]
+    orchestrator = _FakeOrchestrator(
+        AgentOrchestrationResult(
+            classification=classification,
+            rag_context=RagContext(
+                source="local",
+                text="力可以改变运动状态",
+                refs=["物理教材"],
+            ),
+            trace=trace,
+            loaded_skills=["concept_explanation"],
+            termination_reason="model_finished",
+            routing_guidance={"answer_mode": "complete"},
+        )
+    )
+    episode = PrototypeEpisode(active_subject="数学", active_stage="初中")
+
+    turn = run_turn(
+        episode,
+        "物体受力后运动状态为什么会改变？",
+        client=client,
+        orchestrator=orchestrator,
+    )
+
+    assert episode.active_subject == "物理"
+    assert episode.active_stage == "初中"
+    assert episode.problem_context == "物体受力后运动状态为什么会改变？"
+    assert turn.classification == classification
+    assert turn.agent_trace == trace
+    assert turn.loaded_skills == ["concept_explanation"]
+    assert turn.agent_termination_reason == "model_finished"
+    assert turn.rag_source == "local"
+    assert client.teacher_payloads[0]["request_classification"]["subject"] == "物理"
+    assert client.teacher_payloads[0]["loaded_skills"] == ["concept_explanation"]
+
+
+def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
+    classification = RequestClassification(
+        scope="k9",
+        subject="数学",
+        stage="初中",
+        is_new_problem=False,
+        answer_mode="guided",
+        reason="math follow-up",
+    )
+    orchestrator = _FakeOrchestrator(
+        AgentOrchestrationResult(
+            classification=classification,
+            rag_context=RagContext(source="local_empty"),
+            termination_reason="model_finished",
+            routing_guidance={"answer_mode": "guided"},
+        )
+    )
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=False, pacing=PacingMode.SINGLE_MOVE),
+        ["两边减3以后得到2x=4。下一步你会怎么做？"],
+    )
+    episode = PrototypeEpisode(
+        problem_context="解方程 2x+3=7",
+        active_subject="数学",
+        active_stage="初中",
+    )
+
+    turn = run_turn(episode, "2x=4", client=client, orchestrator=orchestrator)
+
+    assert turn.student_verification.status.value == "verified_correct"
+    assert episode.problem_context == "解方程 2x+3=7"
+    assert episode.active_subject == "数学"
+    assert turn.claim_audits

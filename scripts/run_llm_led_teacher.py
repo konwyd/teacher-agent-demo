@@ -15,7 +15,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 from typing import Callable
-from urllib.request import Request, urlopen as _urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,10 +24,24 @@ DEFAULT_MODEL_SCRIPT = ROOT.parent / "run_deepseek_v4_8x4080.sh"
 DEFAULT_MODEL_HOST = "127.0.0.1"
 DEFAULT_MODEL_PORT = 8080
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_CTX_SIZE = 131072
+DEFAULT_PARALLEL = 1
+DEFAULT_BATCH_SIZE = 128
+DEFAULT_UBATCH_SIZE = 128
+
+
+def direct_urlopen(request: Request, timeout: float):
+    """Open a local service request without environment proxy routing."""
+
+    return build_opener(ProxyHandler({})).open(request, timeout=timeout)
 
 
 class ModelStartupError(RuntimeError):
     """The required local model could not be safely started or reused."""
+
+
+class AppStartupError(RuntimeError):
+    """The Streamlit application cannot be safely started."""
 
 
 def load_service_base_env(
@@ -49,12 +63,26 @@ def port_open(host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
+def ensure_app_port_available(
+    app_port: int,
+    *,
+    port_check: Callable[[str, int], bool] = port_open,
+) -> None:
+    if port_check("127.0.0.1", app_port):
+        raise AppStartupError(
+            f"页面端口 {app_port} 已被占用；请复用现有页面或先停止旧启动器。"
+        )
+
+
 def build_model_env(
     base: dict[str, str],
     *,
+    model_host: str = DEFAULT_MODEL_HOST,
     model_port: int,
     ctx_size: int,
     parallel: int,
+    batch_size: int,
+    ubatch_size: int,
     cache_type_k: str,
     cache_type_v: str,
 ) -> dict[str, str]:
@@ -62,8 +90,17 @@ def build_model_env(
     env["PORT"] = str(model_port)
     env["CTX_SIZE"] = str(ctx_size)
     env["PARALLEL"] = str(parallel)
+    env["BATCH_SIZE"] = str(batch_size)
+    env["UBATCH_SIZE"] = str(ubatch_size)
     env["LLAMA_ARG_CACHE_TYPE_K"] = cache_type_k
     env["LLAMA_ARG_CACHE_TYPE_V"] = cache_type_v
+    no_proxy = {
+        item.strip()
+        for item in (env.get("NO_PROXY") or env.get("no_proxy") or "").split(",")
+        if item.strip()
+    }
+    no_proxy.update({"127.0.0.1", "localhost", model_host})
+    env["NO_PROXY"] = env["no_proxy"] = ",".join(sorted(no_proxy))
     return env
 
 
@@ -76,6 +113,7 @@ def build_service_env(
     model_port: int = DEFAULT_MODEL_PORT,
     model_name: str = DEFAULT_MODEL_NAME,
     request_timeout: float = 300.0,
+    context_window_tokens: int = 131072,
 ) -> dict[str, str]:
     env = dict(base)
     env["CHROMA_HOST"] = rag_host
@@ -85,6 +123,7 @@ def build_service_env(
     env["DEEPSEEK_BASE_URL"] = f"http://{model_host}:{model_port}/v1"
     env["DEEPSEEK_MODEL"] = model_name
     env["DEEPSEEK_TIMEOUT_SECONDS"] = str(request_timeout)
+    env["DEEPSEEK_CONTEXT_WINDOW_TOKENS"] = str(context_window_tokens)
     env.setdefault("TEACHER_RAG_DEVICE", "cpu")
     env.setdefault("TEACHER_RAG_CPU_THREADS", "4")
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -104,8 +143,9 @@ def model_server_ready(
     port: int,
     model_name: str,
     *,
-    urlopen: Callable = _urlopen,
+    urlopen: Callable = direct_urlopen,
     timeout: float = 2.0,
+    inference_timeout: float = 30.0,
 ) -> bool:
     base_url = f"http://{host}:{port}"
     try:
@@ -117,13 +157,38 @@ def model_server_ready(
             if not 200 <= int(getattr(response, "status", 200)) < 300:
                 return False
             payload = json.loads(response.read().decode("utf-8"))
+        models = payload.get("data", []) if isinstance(payload, dict) else []
+        if not any(
+            isinstance(model, dict) and model.get("id") == model_name
+            for model in models
+        ):
+            return False
+
+        probe_body = json.dumps(
+            {
+                "model": model_name,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+                "temperature": 0,
+            }
+        ).encode("utf-8")
+        probe = Request(
+            f"{base_url}/v1/chat/completions",
+            data=probe_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(probe, timeout=inference_timeout) as response:
+            if not 200 <= int(getattr(response, "status", 200)) < 300:
+                return False
+            probe_payload = json.loads(response.read().decode("utf-8"))
     except Exception:
         return False
 
-    models = payload.get("data", []) if isinstance(payload, dict) else []
-    return any(
-        isinstance(model, dict) and model.get("id") == model_name
-        for model in models
+    return bool(
+        isinstance(probe_payload, dict)
+        and isinstance(probe_payload.get("choices"), list)
+        and probe_payload["choices"]
     )
 
 
@@ -194,8 +259,15 @@ def main() -> int:
     parser.add_argument("--model-script", type=Path, default=DEFAULT_MODEL_SCRIPT)
     parser.add_argument("--model-startup-timeout", type=float, default=900.0)
     parser.add_argument("--llm-request-timeout", type=float, default=300.0)
-    parser.add_argument("--ctx-size", type=int, default=524288)
-    parser.add_argument("--parallel", type=int, default=1)
+    parser.add_argument("--ctx-size", type=int, default=DEFAULT_CTX_SIZE)
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=DEFAULT_PARALLEL,
+        help="llama-server slots; keep 1 on 8x16 GB GPUs to avoid deferred CUDA OOM",
+    )
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
+    parser.add_argument("--ubatch-size", type=int, default=DEFAULT_UBATCH_SIZE)
     parser.add_argument("--cache-type-k", default="q8_0")
     parser.add_argument("--cache-type-v", default="q4_0")
     parser.add_argument("--rag-port", type=int, default=8002)
@@ -203,7 +275,14 @@ def main() -> int:
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB)
     args = parser.parse_args()
 
+    try:
+        ensure_app_port_available(args.app_port)
+    except AppStartupError as exc:
+        print(f"页面启动失败：{exc}", file=sys.stderr)
+        return 1
+
     owned: list[subprocess.Popen] = []
+    owned_names: list[str] = []
 
     def stop_owned() -> None:
         for proc in reversed(owned):
@@ -225,16 +304,20 @@ def main() -> int:
 
     model_env = build_model_env(
         os.environ.copy(),
+        model_host=args.model_host,
         model_port=args.model_port,
         ctx_size=args.ctx_size,
         parallel=args.parallel,
+        batch_size=args.batch_size,
+        ubatch_size=args.ubatch_size,
         cache_type_k=args.cache_type_k,
         cache_type_v=args.cache_type_v,
     )
     print(
         "启动或复用本地 DeepSeek-V4："
         f"http://{args.model_host}:{args.model_port} "
-        f"(model={args.model_name}, ctx={args.ctx_size}, timeout={args.model_startup_timeout:g}s)"
+        f"(model={args.model_name}, ctx={args.ctx_size}, parallel={args.parallel}, "
+        f"batch={args.batch_size}/{args.ubatch_size}, timeout={args.model_startup_timeout:g}s)"
     )
     try:
         model_process = ensure_model_server(
@@ -253,6 +336,7 @@ def main() -> int:
         print(f"复用已有本地模型：{args.model_host}:{args.model_port}")
     else:
         owned.append(model_process)
+        owned_names.append("本地模型")
         print(f"本地模型健康检查通过：{args.model_host}:{args.model_port}")
 
     if not port_open("127.0.0.1", args.rag_port):
@@ -272,6 +356,7 @@ def main() -> int:
                 cwd=ROOT,
             )
         )
+        owned_names.append("Chroma")
         for _ in range(30):
             if port_open("127.0.0.1", args.rag_port):
                 break
@@ -295,6 +380,7 @@ def main() -> int:
         model_port=args.model_port,
         model_name=args.model_name,
         request_timeout=args.llm_request_timeout,
+        context_window_tokens=args.ctx_size,
     )
     print(
         "启动 LLM-led Teacher Prototype："
@@ -315,11 +401,18 @@ def main() -> int:
             env=env,
         )
     )
+    owned_names.append("Streamlit")
     try:
         while True:
-            for proc in owned:
-                if proc.poll() is not None:
-                    return proc.returncode or 0
+            for name, proc in zip(owned_names, owned):
+                exit_code = proc.poll()
+                if exit_code is not None:
+                    print(
+                        f"{name} 进程意外退出，exit_code={exit_code}；"
+                        "正在停止本启动器拥有的其余服务。",
+                        file=sys.stderr,
+                    )
+                    return exit_code or 1
             time.sleep(1)
     finally:
         stop_owned()

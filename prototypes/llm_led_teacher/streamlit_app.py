@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -10,14 +11,21 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
 from app.llm.deepseek_client import DeepSeekError, is_configured
+from app.memory.conversation_archive import (
+    ConversationArchiveError,
+    ConversationRecord,
+    get_local_conversation_store,
+)
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
 from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_display_chunks
 
 
-_SESSION_SCHEMA_VERSION = 6
+_SESSION_SCHEMA_VERSION = 10
 _PROGRESS_LABELS = {
     "observing": "正在判断题目和本轮节奏……",
     "retrieving": "正在检索相关教材与题目……",
@@ -29,20 +37,203 @@ _PROGRESS_LABELS = {
 
 
 st.set_page_config(page_title="LLM-led Teacher Prototype", page_icon="🧪", layout="wide")
+
+_PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
+
+
+def _get_pending_student_message(current_episode: object) -> str:
+    """Read pending text from both current and pre-hot-reload episode objects."""
+
+    model_value = getattr(current_episode, "pending_student_message", None)
+    if model_value is not None:
+        return str(model_value)
+    return str(st.session_state.get(_PENDING_STUDENT_MESSAGE_KEY, ""))
+
+
+def _set_pending_student_message(current_episode: object, message: str) -> None:
+    """Keep pending text writable when Streamlit retains an older Pydantic model."""
+
+    st.session_state[_PENDING_STUDENT_MESSAGE_KEY] = message
+    model_fields = getattr(type(current_episode), "model_fields", {})
+    if "pending_student_message" in model_fields:
+        setattr(current_episode, "pending_student_message", message)
+
+
+def _episode_payload(current_episode: PrototypeEpisode) -> dict[str, object]:
+    payload = current_episode.model_dump(mode="json")
+    payload["pending_student_message"] = _get_pending_student_message(current_episode)
+    return payload
+
+
+def _activate_conversation(record: ConversationRecord) -> None:
+    st.session_state.prototype_episode = PrototypeEpisode.model_validate(record.episode)
+    st.session_state[_PENDING_STUDENT_MESSAGE_KEY] = str(
+        record.episode.get("pending_student_message", "") or ""
+    )
+    st.session_state.prototype_conversation_id = record.conversation_id
+    st.session_state.conversation_selector = record.conversation_id
+    st.session_state.prototype_user_id = record.user_id
+    st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+
+
+def _open_latest_or_create_conversation(user_id: str) -> None:
+    conversation_store = get_local_conversation_store()
+    conversations = conversation_store.list_for_user(user_id)
+    if conversations:
+        record = conversation_store.load(user_id, conversations[0].conversation_id)
+    else:
+        episode = PrototypeEpisode()
+        record = conversation_store.create(
+            user_id,
+            episode.model_dump(mode="json"),
+        )
+    _activate_conversation(record)
+
+
+def _start_authenticated_session(user_id: str, username: str) -> None:
+    st.session_state.authenticated_user = {
+        "user_id": user_id,
+        "username": username,
+    }
+    _open_latest_or_create_conversation(user_id)
+
+
+def _save_active_conversation(current_episode: PrototypeEpisode) -> None:
+    get_local_conversation_store().save(
+        st.session_state.authenticated_user["user_id"],
+        st.session_state.prototype_conversation_id,
+        _episode_payload(current_episode),
+        title=current_episode.problem_context or "新对话",
+    )
+
+
+def _create_new_conversation() -> None:
+    user_id = st.session_state.authenticated_user["user_id"]
+    episode = PrototypeEpisode()
+    record = get_local_conversation_store().create(
+        user_id,
+        episode.model_dump(mode="json"),
+    )
+    _activate_conversation(record)
+
+
+def _switch_conversation() -> None:
+    user_id = st.session_state.authenticated_user["user_id"]
+    conversation_id = st.session_state.conversation_selector
+    record = get_local_conversation_store().load(user_id, conversation_id)
+    _activate_conversation(record)
+
+
+def _render_auth_gate() -> None:
+    st.title("📚 Teacher Agent")
+    st.caption("登录后进入你的专属学习空间")
+    login_tab, register_tab = st.tabs(["登录", "注册"])
+    account_store = get_local_account_store()
+
+    with login_tab:
+        with st.form("login_form"):
+            username = st.text_input("用户名", key="login_username")
+            password = st.text_input("密码", type="password", key="login_password")
+            submitted = st.form_submit_button("登录", use_container_width=True)
+        if submitted:
+            try:
+                account = account_store.authenticate(username, password)
+            except AuthenticationError as exc:
+                st.error(str(exc))
+            else:
+                _start_authenticated_session(account.user_id, account.username)
+                st.rerun()
+
+    with register_tab:
+        with st.form("register_form"):
+            username = st.text_input(
+                "设置用户名",
+                help="2–32 个字符，可使用中文、字母、数字、下划线、短横线或点。",
+                key="register_username",
+            )
+            password = st.text_input(
+                "设置密码",
+                type="password",
+                help="至少 8 个字符。密码只保存加盐哈希，不保存明文。",
+                key="register_password",
+            )
+            password_confirm = st.text_input(
+                "再次输入密码",
+                type="password",
+                key="register_password_confirm",
+            )
+            submitted = st.form_submit_button("注册并登录", use_container_width=True)
+        if submitted:
+            if password != password_confirm:
+                st.error("两次输入的密码不一致。")
+            else:
+                try:
+                    account = account_store.register(username, password)
+                except AccountError as exc:
+                    st.error(str(exc))
+                else:
+                    _start_authenticated_session(account.user_id, account.username)
+                    st.rerun()
+
+
+if "authenticated_user" not in st.session_state:
+    _render_auth_gate()
+    st.stop()
+
+authenticated_user = st.session_state.authenticated_user
 warmup_status = warmup_rag()
 
-if st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION:
-    st.session_state.prototype_episode = PrototypeEpisode()
-    st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
+if (
+    st.session_state.get("prototype_session_schema_version") != _SESSION_SCHEMA_VERSION
+    or st.session_state.get("prototype_user_id") != authenticated_user["user_id"]
+):
+    _open_latest_or_create_conversation(authenticated_user["user_id"])
 elif "prototype_episode" not in st.session_state:
-    st.session_state.prototype_episode = PrototypeEpisode()
+    _open_latest_or_create_conversation(authenticated_user["user_id"])
 
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
 st.title("🧪 LLM 主导 Teacher Prototype")
-st.caption("LLM 回合观察 + DeepSeek 纯文本教学 · 验证缺失不阻断")
+st.caption("九学科 Agent Loop + 本地知识优先 · 确定性验证与审计不绕过")
 
 with st.sidebar:
+    st.subheader(f"你好，{authenticated_user['username']}")
+    st.caption(f"学生 ID：{authenticated_user['user_id']}")
+    st.caption(f"当前对话：{st.session_state.prototype_conversation_id}")
+    if st.button("退出登录", use_container_width=True):
+        for key in (
+            "authenticated_user",
+            "prototype_episode",
+            "prototype_conversation_id",
+            "prototype_user_id",
+            "prototype_session_schema_version",
+            "conversation_selector",
+            _PENDING_STUDENT_MESSAGE_KEY,
+        ):
+            st.session_state.pop(key, None)
+        st.rerun()
+    st.divider()
+    st.subheader("历史对话")
+    st.button(
+        "新建对话",
+        use_container_width=True,
+        on_click=_create_new_conversation,
+    )
+    conversation_summaries = get_local_conversation_store().list_for_user(
+        authenticated_user["user_id"]
+    )
+    conversation_labels = {
+        summary.conversation_id: summary.title
+        for summary in conversation_summaries
+    }
+    st.selectbox(
+        "选择要继续的对话",
+        options=[summary.conversation_id for summary in conversation_summaries],
+        format_func=lambda conversation_id: conversation_labels[conversation_id],
+        key="conversation_selector",
+        on_change=_switch_conversation,
+    )
+    st.divider()
     st.subheader("RAG 知识检索")
     st.write("📚 本地教材库 + 题库")
     st.write("🌐 联网搜索（新题触发）")
@@ -52,11 +243,6 @@ with st.sidebar:
         )
     else:
         st.caption(f"⚠️ RAG 预热失败，已降级：{warmup_status['error']}")
-    if st.button("新建对话", use_container_width=True):
-        st.session_state.prototype_episode = PrototypeEpisode()
-        st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
-        st.rerun()
-    st.divider()
     st.write("**当前 active problem**")
     st.write(episode.problem_context or "尚未开始")
     st.write("**回合数**", len(episode.turns))
@@ -75,6 +261,127 @@ _TIMING_LABELS = {
     "auditing": "确定性审计",
     "repairing": "安全修正",
 }
+
+
+def _format_token_count(value: int) -> str:
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return f"{value:,}"
+
+
+_CONTEXT_USAGE_STYLE = """
+<style>
+.st-key-context_usage_control {
+    position: absolute;
+    right: 4.35rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: max-content !important;
+    z-index: 10;
+}
+.st-key-context_usage_control [data-testid="stPopover"] > button {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: rgba(49, 51, 63, 0.72);
+    padding: 0.3rem 0.45rem;
+}
+.st-key-context_usage_control [data-testid="stPopover"] > button:hover {
+    background: rgba(151, 166, 195, 0.12);
+    color: rgb(49, 51, 63);
+}
+</style>
+"""
+
+
+def render_context_usage(current_episode: PrototypeEpisode) -> None:
+    """Render the conversation context meter inside Streamlit's bottom root."""
+
+    metadata = (
+        current_episode.turns[-1].model_generation_metadata
+        if current_episode.turns
+        else {}
+    )
+    configured_window = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW_TOKENS", "131072"))
+    context_window = int(
+        metadata.get("context_window_tokens", configured_window) or configured_window
+    )
+    context_used = int(metadata.get("context_used_tokens", 0) or 0)
+    usage_ratio = context_used / context_window if context_window > 0 else 0.0
+    label = (
+        f"{usage_ratio:.1%} · {_format_token_count(context_used)} / "
+        f"{_format_token_count(context_window)} 上下文已使用"
+    )
+    with st.popover(
+        f"{usage_ratio:.1%}",
+        icon=":material/data_usage:",
+        help=label,
+        type="tertiary",
+        key="context_usage_popover",
+    ):
+        st.markdown(f"#### {label}")
+        st.progress(min(max(usage_ratio, 0.0), 1.0))
+        st.caption("当前对话最后一次模型请求的实际上下文占用。")
+
+
+def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
+    """Show token and KV-cache counters belonging only to this reply turn."""
+
+    metadata = turn.model_generation_metadata
+    if not metadata:
+        return
+
+    total_tokens = int(metadata.get("total_tokens", 0) or 0)
+    prompt_tokens = int(metadata.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(metadata.get("completion_tokens", 0) or 0)
+    reasoning_tokens = int(metadata.get("reasoning_tokens", 0) or 0)
+    response_tokens = int(
+        metadata.get(
+            "response_tokens",
+            max(completion_tokens - reasoning_tokens, 0),
+        )
+        or 0
+    )
+    cache_hits = int(metadata.get("prompt_cache_hit_tokens", 0) or 0)
+    cache_misses = int(metadata.get("prompt_cache_miss_tokens", 0) or 0)
+    cache_denominator = cache_hits + cache_misses
+    cache_rate = cache_hits / cache_denominator if cache_denominator else 0.0
+    cache_label = (
+        f"缓存 {cache_rate:.1%}"
+        if metadata.get("cache_usage_available")
+        else "缓存暂无数据"
+    )
+
+    with st.popover(f"🪙 Tokens: {total_tokens:,}　⚡ {cache_label}"):
+        st.markdown("#### 本轮 Token 消耗")
+        st.caption(
+            f"仅统计这条教师回复对应的一轮，共 "
+            f"{int(metadata.get('llm_call_count', 1) or 1)} 次模型调用。"
+        )
+        st.write("**输入**", f"{prompt_tokens:,}")
+        st.write("　🟩 缓存命中", f"{cache_hits:,}")
+        st.write("　🟥 缓存未命中", f"{cache_misses:,}")
+        if metadata.get("cache_write_tokens") is not None:
+            st.write("　🟨 缓存写入", f"{int(metadata['cache_write_tokens'] or 0):,}")
+        st.divider()
+        st.write("**输出**", f"{completion_tokens:,}")
+        st.write("　思考过程", f"{reasoning_tokens:,}")
+        st.write("　回复内容", f"{response_tokens:,}")
+        st.divider()
+        st.markdown("#### ⚡ 本轮 KV 缓存命中")
+        if metadata.get("cache_usage_available"):
+            if cache_hits > 0:
+                st.success(f"命中 {cache_hits:,} token（{cache_rate:.1%}）")
+            else:
+                st.info("本轮未命中。新对话的首轮请求通常不会命中。")
+            st.progress(min(max(cache_rate, 0.0), 1.0))
+        else:
+            st.caption("模型服务没有返回这一轮的缓存统计。")
+        st.caption(
+            "命中指显存中的 KV/prompt cache 前缀复用，不代表模型权重是否已装入显存。"
+        )
 
 
 def render_turn_details(turn: PrototypeTurnRecord) -> None:
@@ -221,18 +528,48 @@ for turn in episode.turns:
         st.markdown(turn.student_message)
     with st.chat_message("assistant"):
         st.markdown(turn.teacher_output.response)
+        render_turn_token_usage(turn)
         render_turn_details(turn)
 
-message = st.chat_input("输入一道初中数学题或继续回答……", disabled=not is_configured())
-if message:
+retry_message: str | None = None
+pending_student_message = _get_pending_student_message(episode)
+if pending_student_message:
     with st.chat_message("user"):
-        st.markdown(message)
+        st.markdown(pending_student_message)
+    st.warning("上一条消息的回复生成被中断，消息已经保留。")
+    if st.button("重新生成上一条消息", type="secondary"):
+        retry_message = pending_student_message
+
+st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
+with st.bottom:
+    with st.container(key="context_usage_control", width="content"):
+        render_context_usage(episode)
+    message = st.chat_input(
+        "输入一道小学或初中学习问题，或继续追问……",
+        disabled=not is_configured(),
+    )
+message = retry_message or message
+if message:
+    is_retry = retry_message is not None
+    if not is_retry:
+        with st.chat_message("user"):
+            st.markdown(message)
+
+    _set_pending_student_message(episode, message)
+    try:
+        _save_active_conversation(episode)
+    except ConversationArchiveError as exc:
+        st.error(f"消息保存失败，已停止生成以避免内容丢失：{exc}")
+        st.stop()
 
     with st.chat_message("assistant"):
         progress_status = st.status(_PROGRESS_LABELS["observing"], expanded=True)
         live_trace = LiveProgressTrace(progress_status)
 
-        def update_progress(stage: str) -> None:
+        def update_progress(stage: str | AgentTraceEvent) -> None:
+            if isinstance(stage, AgentTraceEvent):
+                live_trace.update_agent_event(stage)
+                return
             live_trace.update(stage)
             progress_status.update(label=_PROGRESS_LABELS.get(stage, stage))
 
@@ -240,6 +577,7 @@ if message:
             turn = run_turn(
                 episode,
                 message,
+                enable_agent_loop=True,
                 progress_callback=update_progress,
             )
         except (DeepSeekError, ValueError) as exc:
@@ -250,6 +588,12 @@ if message:
             )
             st.error(str(exc))
         else:
+            _set_pending_student_message(episode, "")
+            history_save_error = ""
+            try:
+                _save_active_conversation(episode)
+            except ConversationArchiveError as exc:
+                history_save_error = str(exc)
             progress_status.write(
                 "🧭 **Observer 结论**："
                 f"starts_new_problem={turn.turn_guidance.starts_new_problem}，"
@@ -269,6 +613,12 @@ if message:
                 f"🧮 **审计结果**：提取 {len(turn.extracted_equations)} 个方程，"
                 f"修正={'是' if turn.repair_performed else '否'}。"
             )
+            if history_save_error:
+                progress_status.write(
+                    f"⚠️ **历史记录保存失败**：{history_save_error}"
+                )
+            else:
+                progress_status.write("💾 **历史记录**：本轮对话已自动保存。")
             progress_status.update(
                 label=_PROGRESS_LABELS["complete"],
                 state="complete",
@@ -277,4 +627,6 @@ if message:
             display_started = perf_counter()
             st.write_stream(iter_display_chunks(turn.teacher_output.response))
             turn.display_seconds = round(perf_counter() - display_started, 3)
+            render_turn_token_usage(turn)
             render_turn_details(turn)
+            st.rerun()

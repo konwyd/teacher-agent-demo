@@ -179,6 +179,85 @@ def test_chat_records_reasoning_usage_without_retaining_raw_reasoning() -> None:
     assert "不应保存" not in repr(client.last_chat_metadata)
 
 
+def test_chat_records_context_and_prompt_cache_usage() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    class Completions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="stop",
+                        message=SimpleNamespace(content="面向学生的回答"),
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=1000,
+                    completion_tokens=200,
+                    total_tokens=1200,
+                    prompt_tokens_details=SimpleNamespace(cached_tokens=600),
+                    completion_tokens_details=SimpleNamespace(reasoning_tokens=50),
+                ),
+            )
+
+    client = DeepSeekClient(
+        settings=DeepSeekSettings(
+            deepseek_api_key="test-key",
+            deepseek_context_window_tokens=524288,
+        )
+    )
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=Completions())
+    )
+
+    assert client.chat("system", "user") == "面向学生的回答"
+    assert client.last_chat_metadata["prompt_tokens"] == 1000
+    assert client.last_chat_metadata["prompt_cache_hit_tokens"] == 600
+    assert client.last_chat_metadata["prompt_cache_miss_tokens"] == 400
+    assert client.last_chat_metadata["cache_hit_rate"] == pytest.approx(0.6)
+    assert client.last_chat_metadata["completion_tokens"] == 200
+    assert client.last_chat_metadata["reasoning_tokens"] == 50
+    assert client.last_chat_metadata["response_tokens"] == 150
+    assert client.last_chat_metadata["total_tokens"] == 1200
+    assert client.last_chat_metadata["context_used_tokens"] == 1200
+    assert client.last_chat_metadata["context_window_tokens"] == 524288
+    assert client.last_chat_metadata["cache_usage_available"] is True
+    assert client.usage_history == [client.last_chat_metadata]
+
+
+def test_chat_json_also_records_usage_for_turn_level_aggregation() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    class Completions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="stop",
+                        message=SimpleNamespace(content='{"text":"ok"}'),
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=80,
+                    completion_tokens=20,
+                    total_tokens=100,
+                    prompt_tokens_details=SimpleNamespace(cached_tokens=30),
+                ),
+            )
+
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=Completions())
+    )
+
+    reply = client.chat_json("system", "user", _ReplySchema)
+
+    assert reply.text == "ok"
+    assert client.last_chat_metadata["prompt_tokens"] == 80
+    assert client.last_chat_metadata["prompt_cache_hit_tokens"] == 30
+    assert len(client.usage_history) == 1
+
+
 def test_client_can_disable_transport_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.llm import deepseek_client
 

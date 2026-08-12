@@ -1,6 +1,6 @@
-# LLM-led Teacher — 中文初中数学教师原型
+# LLM-led Teacher — 中文 K9 多学科教师原型
 
-这是一个面向中文初中数学的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：DeepSeek 负责自然语言教学，Agent 只在关键边界维护题目上下文、控制教学节奏，并用确定性数学检查器审计可验证的步骤。
+这是一个面向中文小学、初中九学科的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：有界 Agent Loop 识别学科并按需调用 Skill、本地知识和联网工具，DeepSeek 负责自然语言教学，确定性数学检查器继续审计可验证步骤。
 
 项目关注的不是让模型一次性给出答案，而是让它在普通求助场景中每轮只推进一个有意义步骤。
 
@@ -10,7 +10,8 @@
 - 一键启动：`python3 scripts/run_llm_led_teacher.py`
 - 教师模型：本地 DeepSeek-V4 Flash GGUF（llama.cpp OpenAI-compatible 服务）
 - 本地检索：bge-m3 + Chroma Server + BM25 + RRF
-- 教学防线：observer 软判断 + 本地节奏规范化 + math_checker 后置审计/修正
+- 学科范围：数学、语文、英语、物理、化学、生物、历史、地理、道法
+- 教学防线：六步 Agent Loop + 工具门禁 + observer 节奏规范化 + math_checker 后置审计/修正
 - 展示方式：先完成审计，再将最终安全回答逐字符显示
 
 旧的结构化 Teacher Agent 仍保留为研究 baseline，入口为 Streamlit `8501` 和 FastAPI `8000`，但它不是当前默认演示。
@@ -22,9 +23,11 @@
   ↓
 observer 判断是否换题及建议本轮节奏
   ↓
-本地规则规范化有效 guidance
+Agent 强制分类学科、学段、是否新题
   ↓
-RAG 检索教材/题库参考
+有界 Loop 按需加载 Skill、检索本地知识，必要时受控联网
+  ↓
+本地规则规范化有效 guidance
   ↓
 DeepSeek 生成教师初稿
   ↓
@@ -49,14 +52,14 @@ RAG 在服务端运行，用户浏览器不需要下载向量库或嵌入模型�
   ├─ Chroma Server：通过服务器内部 HTTP API 查询本地 HNSW 索引
   ├─ BM25：关键词召回
   ├─ RRF：融合语义与关键词排序
-  └─ 本地有效命中不足时：按原项目策略尝试 Tavily 联网搜索
+  └─ Agent 判断存在具体证据缺口时：通过门禁后至多调用一次 Tavily
 ```
 
 - `bge-m3` 是本地 embedding 模型，不是 Chroma 自带模型，也不是付费 embedding API。
 - Chroma 既是 Python 包，也能作为独立服务运行。本项目由启动脚本执行 `chroma run`，应用再通过 `chromadb.HttpClient` 访问它。
 - Chroma 的 HNSW 检索当前主要使用 CPU；GPU 用于加速 bge-m3 查询向量和联网结果重排。
-- 本地策略复用 `llm-test/rag_retriever.py`：教材库与题库检索、BM25、bge-m3、RRF、`0.65` 有效命中阈值、联网回退以及 `0.44` 最终过滤。
-- 自动联网不是只看“最高相似度低于 65%”，而是有效命中数量少于 `topk` 时触发；没有有效 Tavily 配置时会无阻断降级为本地结果。
+- 8502 的本地工具复用 `llm-test/rag_retriever.py` 的教材/题库、BM25、bge-m3 和 RRF，但不应用固定阈值，也绝不会隐式联网；raw vector、BM25、RRF 和融合分会作为诊断返回 Agent。
+- 联网只能用于 K9 请求，并且本轮必须已经成功执行本地检索、提供具体证据缺口；每轮最多一次。非 K9 请求不调用本地库或联网，只简短回答并引导回学习内容。
 
 RAG 是有边界的参考数据：它只进入教师生成请求，不进入 observer 请求，不能覆盖 `turn_guidance`，也不能替换当前 `active problem`。检索内容与题目无关时，教师可以忽略。
 
@@ -125,7 +128,16 @@ python3 scripts/run_llm_led_teacher.py
 
 启动成功后只需访问 `http://localhost:8502`。默认向量库路径为 `data/china_textbook_k9_vectordb`。
 
-模型默认使用单会话 `524288` 上下文、K=`q8_0`、V=`q4_0`。首次加载可能需要数分钟，启动器最多等待 900 秒。模型端口被未知或不健康服务占用、模型提前退出或健康检查超时时，整套启动直接失败，不会调用 DeepSeek 付费 API。
+首次打开页面会先看到“登录 / 注册”窗口。新用户在注册页输入用户名和至少 8 位密码，
+系统会自动创建不可重复的内部学生 ID 并立即登录；之后使用同一用户名和密码登录即可。
+本地账号默认保存在 `data/runtime/users.sqlite3`，密码只保存加盐哈希，不保存明文。
+该功能是本地演示级账号系统，不包含短信验证码、找回密码或公网生产级安全防护。
+
+每轮成功回答会自动把完整对话保存到
+`data/runtime/conversations.sqlite3`。重新登录后自动打开最近一次对话，也可以在侧边栏
+“历史对话”中切换或新建；查询始终同时校验内部学生 ID 和对话 ID，不同账号不能读取彼此记录。
+
+模型默认使用 `131072` 上下文、单并发槽、K=`q8_0`、V=`q4_0`，并把 batch/ubatch 都限制为 `128`。这套配置已在当前 8×16 GiB GPU 环境完成真实长提示词回归；旧的 `262144 / parallel=-1 / batch=512` 配置会在首轮计算时使 GPU4 OOM。首次加载可能需要数分钟，启动器最多等待 900 秒，并在开放网页前执行一次最小真实推理来验证 CUDA 计算可用。模型端口被未知或不健康服务占用、模型提前退出或健康检查超时时，整套启动直接失败，不会调用 DeepSeek 付费 API。
 
 ## 端口与对外访问
 
@@ -166,7 +178,7 @@ python3 scripts/run_llm_led_teacher.py \
 
 ## 回答速度与流式展示
 
-一次普通回合通常包括 observer、RAG 和教师生成；触发安全修正时还会多一次模型调用。页面会显示“判断节奏、检索、生成、审计、修正”等阶段状态。
+一次普通回合通常包括 observer、请求分类、若干有界 Agent 决策和教师生成；触发安全修正时还会多一次模型调用。页面会显示分类、工具、生成、审计和修正等真实阶段状态。
 
 回答生成期间，展开的状态框会实时追加每个后台阶段正在做的工作，并在阶段结束时显示耗时；完成后还会追加 Observer、RAG 和审计摘要。
 
@@ -192,6 +204,8 @@ python scripts/run_eval.py
 - 明确索要完整答案和直接事实题仍可使用 `complete_response`；
 - observer 异常或缺少 verifier 时，学生回答仍正常显示；
 - RAG 不进入 observer payload，也不改变 active problem。
+- 九学科新题可以自动切换，追问继承当前学科和学段；
+- 非 K9 请求以及未先查本地的联网动作会被工具门禁拒绝。
 
 ## 旧结构化 Agent baseline
 
@@ -206,7 +220,7 @@ streamlit run app/ui/streamlit_app.py --server.port 8501
 
 ## 本地 DeepSeek-V4 运行参数
 
-当前网页默认使用 `DeepSeek-V4-Flash-GGUF-IQ3_XXS`。一键脚本复用现有 8-GPU 模型启动脚本，并自动传入已经验证的 512K 单会话与混合量化 KV cache 配置：
+当前网页默认使用 `DeepSeek-V4-Flash-GGUF-IQ3_XXS`。一键脚本复用现有 8-GPU 模型启动脚本，并自动传入已在当前 8 张 RTX 4080 上验证的 256K 总上下文、4 个共享 KV 槽位与混合量化 KV cache 配置：
 
 ```bash
 python3 scripts/run_llm_led_teacher.py
@@ -223,7 +237,10 @@ app/
   llm/deepseek_client.py         DeepSeek OpenAI-compatible 统一客户端
 prototypes/llm_led_teacher/
   logic.py                       LLM-led 编排、规范化与审计
-  rag_hook.py                    原 RAG 策略适配层
+  orchestrator.py                九学科强制分类与六步 Agent Loop
+  orchestration_tools.py         本地/联网/Skill 工具及确定性门禁
+  orchestration_models.py        可持久化分类、动作和公开 trace 契约
+  rag_hook.py                    纯本地和纯联网 RAG 适配层
   streaming.py                   审计后逐字符展示
   streamlit_app.py               当前 8502 页面
 scripts/

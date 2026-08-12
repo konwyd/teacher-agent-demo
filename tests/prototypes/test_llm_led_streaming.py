@@ -116,3 +116,56 @@ def test_streamlit_shows_generation_and_online_fallback_metadata_not_raw_thought
     assert "online_reason" in source
     assert "原始逐字思维链不会展示" in source
     assert "reasoning_content" not in source
+
+
+def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+
+    assert "def render_context_usage(" in source
+    assert "with st.bottom:" in source
+    assert 'key="context_usage_control"' in source
+    assert "st-key-context_usage_control" in source
+    assert "context_usage_slot" not in source
+    assert "position-anchor" not in source
+    assert "上下文已使用" in source
+    assert "def render_turn_token_usage(" in source
+    assert "本轮 KV 缓存命中" in source
+    assert "prompt_cache_hit_tokens" in source
+    assert "prompt_cache_miss_tokens" in source
+    assert "st.progress(" in source
+    assert source.count("render_context_usage(episode)") == 1
+    assert source.count("render_turn_token_usage(turn)") == 2
+    assert "_render_auth_gate()" in source
+    assert "_save_active_conversation(episode)" in source
+    assert "_get_pending_student_message(episode)" in source
+    assert "enable_agent_loop=True" in source
+
+
+def test_live_progress_renders_public_agent_event_without_private_payload() -> None:
+    from prototypes.llm_led_teacher.live_progress import LiveProgressTrace
+    from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
+
+    class FakeStatus:
+        def __init__(self):
+            self.lines = []
+
+        def write(self, value):
+            self.lines.append(value)
+
+    status = FakeStatus()
+    trace = LiveProgressTrace(status, clock=lambda: 1.0)
+    trace.update_agent_event(
+        AgentTraceEvent(
+            step=2,
+            event_type="tool_result",
+            summary="本地物理教材命中 4 条",
+            tool_name="search_local_knowledge",
+            ok=True,
+            details={"secret_prompt": "must never render"},
+        )
+    )
+
+    rendered = "\n".join(status.lines)
+    assert "本地物理教材命中 4 条" in rendered
+    assert "search_local_knowledge" in rendered
+    assert "must never render" not in rendered

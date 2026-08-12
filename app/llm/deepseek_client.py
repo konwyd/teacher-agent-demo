@@ -34,6 +34,7 @@ class DeepSeekSettings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    deepseek_context_window_tokens: int = 131072
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -68,6 +69,7 @@ class DeepSeekClient:
     ) -> None:
         self.settings = settings or DeepSeekSettings()
         self.last_chat_metadata: dict[str, object] = {}
+        self.usage_history: list[dict[str, object]] = []
         if not self.settings.deepseek_api_key:
             raise DeepSeekError(
                 "DEEPSEEK_API_KEY 未设置。请复制 .env.example 为 .env 并填写 key。"
@@ -80,6 +82,80 @@ class DeepSeekClient:
             ),
             max_retries=max_retries,
         )
+
+    def _record_response_metadata(
+        self,
+        resp: object,
+        *,
+        reasoning: str = "",
+    ) -> dict[str, object]:
+        """Keep safe usage counters while deliberately dropping raw reasoning."""
+
+        choices = getattr(resp, "choices", []) or []
+        choice = choices[0] if choices else None
+        usage = getattr(resp, "usage", None)
+        completion_details = getattr(usage, "completion_tokens_details", None)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        reasoning_tokens = int(
+            getattr(completion_details, "reasoning_tokens", 0) or 0
+        )
+        metadata: dict[str, object] = {
+            "finish_reason": getattr(choice, "finish_reason", "") or "",
+            "completion_tokens": completion_tokens,
+            "reasoning_tokens": reasoning_tokens,
+            "reasoning_characters": len(reasoning),
+            "reasoning_available": bool(reasoning),
+        }
+
+        prompt_tokens_raw = getattr(usage, "prompt_tokens", None)
+        if prompt_tokens_raw is not None:
+            prompt_tokens = int(prompt_tokens_raw or 0)
+            prompt_details = getattr(usage, "prompt_tokens_details", None)
+            cached_tokens_raw = getattr(usage, "prompt_cache_hit_tokens", None)
+            if cached_tokens_raw is None:
+                cached_tokens_raw = getattr(prompt_details, "cached_tokens", None)
+            cache_miss_raw = getattr(usage, "prompt_cache_miss_tokens", None)
+            cache_write_raw = getattr(usage, "prompt_cache_write_tokens", None)
+            if cache_write_raw is None:
+                cache_write_raw = getattr(usage, "cache_creation_input_tokens", None)
+            cached_tokens = int(cached_tokens_raw or 0)
+            cache_miss_tokens = int(
+                cache_miss_raw
+                if cache_miss_raw is not None
+                else max(prompt_tokens - cached_tokens, 0)
+            )
+            total_tokens = int(
+                getattr(usage, "total_tokens", None)
+                or prompt_tokens + completion_tokens
+            )
+            cache_denominator = cached_tokens + cache_miss_tokens
+            metadata.update(
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "prompt_cache_hit_tokens": cached_tokens,
+                    "prompt_cache_miss_tokens": cache_miss_tokens,
+                    "cache_write_tokens": (
+                        int(cache_write_raw or 0)
+                        if cache_write_raw is not None
+                        else None
+                    ),
+                    "cache_hit_rate": (
+                        cached_tokens / cache_denominator
+                        if cache_denominator > 0
+                        else 0.0
+                    ),
+                    "cache_usage_available": cached_tokens_raw is not None
+                    or cache_miss_raw is not None,
+                    "response_tokens": max(completion_tokens - reasoning_tokens, 0),
+                    "total_tokens": total_tokens,
+                    "context_used_tokens": total_tokens,
+                    "context_window_tokens": self.settings.deepseek_context_window_tokens,
+                }
+            )
+
+        self.last_chat_metadata = metadata
+        self.usage_history.append(dict(metadata))
+        return metadata
 
     def chat(
         self,
@@ -111,15 +187,7 @@ class DeepSeekClient:
         choice = resp.choices[0]
         message = choice.message
         reasoning = getattr(message, "reasoning_content", None) or ""
-        usage = getattr(resp, "usage", None)
-        completion_details = getattr(usage, "completion_tokens_details", None)
-        self.last_chat_metadata = {
-            "finish_reason": getattr(choice, "finish_reason", "") or "",
-            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
-            "reasoning_tokens": getattr(completion_details, "reasoning_tokens", 0) or 0,
-            "reasoning_characters": len(reasoning),
-            "reasoning_available": bool(reasoning),
-        }
+        self._record_response_metadata(resp, reasoning=reasoning)
         return message.content or ""
 
     def chat_json(
@@ -156,5 +224,65 @@ class DeepSeekClient:
                 f"DeepSeek API 调用失败（JSON mode, model={self.settings.deepseek_model}）："
                 f"{type(exc).__name__}: {exc}"
             ) from exc
-        raw = resp.choices[0].message.content or "{}"
+        message = resp.choices[0].message
+        raw = message.content or "{}"
+        reasoning = getattr(message, "reasoning_content", None) or ""
+        self._record_response_metadata(resp, reasoning=reasoning)
         return schema.model_validate_json(raw)
+
+
+def summarize_usage_metadata(
+    records: list[dict[str, object]],
+) -> dict[str, object]:
+    """Aggregate all LLM calls in a turn while keeping latest context occupancy."""
+
+    if not records:
+        return {}
+
+    latest = records[-1]
+    sum_fields = (
+        "prompt_tokens",
+        "prompt_cache_hit_tokens",
+        "prompt_cache_miss_tokens",
+        "completion_tokens",
+        "reasoning_tokens",
+        "reasoning_characters",
+        "response_tokens",
+        "total_tokens",
+    )
+    summary: dict[str, object] = {
+        field: sum(int(record.get(field, 0) or 0) for record in records)
+        for field in sum_fields
+    }
+    cache_writes = [
+        int(record["cache_write_tokens"] or 0)
+        for record in records
+        if record.get("cache_write_tokens") is not None
+    ]
+    cache_hits = int(summary["prompt_cache_hit_tokens"])
+    cache_misses = int(summary["prompt_cache_miss_tokens"])
+    cache_denominator = cache_hits + cache_misses
+    context_used = int(latest.get("context_used_tokens", 0) or 0)
+    context_window = int(latest.get("context_window_tokens", 0) or 0)
+    summary.update(
+        {
+            "llm_call_count": len(records),
+            "finish_reason": latest.get("finish_reason", "") or "",
+            "reasoning_available": any(
+                bool(record.get("reasoning_available", False)) for record in records
+            ),
+            "cache_write_tokens": sum(cache_writes) if cache_writes else None,
+            "cache_usage_available": any(
+                bool(record.get("cache_usage_available", False)) for record in records
+            ),
+            "cache_hit_rate": (
+                cache_hits / cache_denominator if cache_denominator > 0 else 0.0
+            ),
+            "context_used_tokens": context_used,
+            "context_window_tokens": context_window,
+            "context_usage_percent": (
+                context_used / context_window * 100 if context_window > 0 else 0.0
+            ),
+        }
+    )
+    return summary
