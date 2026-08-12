@@ -16,6 +16,22 @@ def test_does_not_change_ordinary_brackets_or_code_fences():
     assert normalize_math_markdown(raw) == (raw, False)
 
 
+def test_does_not_change_tilde_fenced_code_or_close_shorter_fence():
+    raw = (
+        "~~~python\n"
+        "print(r'\\(x\\)')\n"
+        "print(r'\\frac{1}{2}')\n"
+        "~~~\n\n"
+        "~~~~python\n"
+        "print(r'\\(y\\)')\n"
+        "~~~\n"
+        "print(r'\\(z\\)')\n"
+        "~~~~"
+    )
+
+    assert normalize_math_markdown(raw) == (raw, False)
+
+
 def test_normalizes_standard_latex_delimiters():
     normalized, _ = normalize_math_markdown(r"行内 \\(a^2+b^2\\)，展示 \\[x=\\frac12\\]")
 
