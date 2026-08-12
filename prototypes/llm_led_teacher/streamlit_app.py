@@ -21,7 +21,10 @@ from app.memory.conversation_archive import (
     ConversationRecord,
     get_local_conversation_store,
 )
-from prototypes.llm_led_teacher.context_usage import build_context_usage_display
+from prototypes.llm_led_teacher.context_usage import (
+    build_context_usage_display,
+    build_kv_persistence_display,
+)
 from prototypes.llm_led_teacher.conversation_ui import (
     build_conversation_history,
     episode_has_content,
@@ -591,20 +594,19 @@ def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
         st.caption(
             "命中指显存中的 KV/prompt cache 前缀复用，不代表模型权重是否已装入显存。"
         )
-        if metadata.get("kv_persistence_enabled"):
-            restore_status = metadata.get("kv_persistence_restore_status", "not_attempted")
-            save_status = metadata.get("kv_persistence_save_status", "not_attempted")
+        kv_display = build_kv_persistence_display(metadata)
+        if kv_display.enabled:
             st.divider()
             st.markdown("#### 💾 KV 持久化")
-            st.write("**llama-server slot**", metadata.get("kv_persistence_slot"))
-            st.write("**恢复状态**", restore_status)
-            st.write("**保存状态**", save_status)
-            if metadata.get("kv_persistence_filename"):
-                st.write("**本地文件**", metadata["kv_persistence_filename"])
-            if metadata.get("kv_persistence_directory"):
-                st.caption(f"保存目录：{metadata[kv_persistence_directory]}")
-            if metadata.get("kv_persistence_error"):
-                st.warning(f"KV 已降级，不影响本轮回答：{metadata[kv_persistence_error]}")
+            st.write("**llama-server slot**", kv_display.slot_id)
+            st.write("**恢复状态**", kv_display.restore_status)
+            st.write("**保存状态**", kv_display.save_status)
+            if kv_display.filename:
+                st.write("**本地文件**", kv_display.filename)
+            if kv_display.directory:
+                st.caption(f"保存目录：{kv_display.directory}")
+            if kv_display.error:
+                st.warning(f"KV 已降级，不影响本轮回答：{kv_display.error}")
 
 
 def render_turn_details(turn: PrototypeTurnRecord) -> None:
