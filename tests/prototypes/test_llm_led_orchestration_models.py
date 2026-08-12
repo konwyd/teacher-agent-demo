@@ -4,8 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from prototypes.llm_led_teacher.orchestration_models import (
+    AgentDecision,
     AnswerMode,
     RequestClassification,
+    TeachingContract,
 )
 
 
@@ -69,3 +71,31 @@ def test_off_topic_rejects_subject_or_non_redirect_mode(
             answer_mode=answer_mode,
             reason="invalid off-topic shape",
         )
+
+
+def test_concept_contract_cannot_reveal_or_apply_to_active_problem() -> None:
+    with pytest.raises(ValidationError):
+        TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释求根公式",
+            allowed_content=["给出通用公式"],
+            forbidden_content=[],
+            may_apply_to_active_problem=True,
+            may_reveal_final_answer=False,
+            reason="concept only",
+        )
+
+
+def test_only_full_solution_may_reveal_final_answer() -> None:
+    with pytest.raises(ValidationError):
+        TeachingContract(
+            response_mode="guided_solution",
+            requested_target="引导解题",
+            may_reveal_final_answer=True,
+            reason="invalid disclosure",
+        )
+
+
+def test_finish_decision_requires_teaching_contract() -> None:
+    with pytest.raises(ValidationError):
+        AgentDecision(kind="finish", reason="done")

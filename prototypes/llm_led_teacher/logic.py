@@ -22,8 +22,10 @@ from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
     AnswerMode,
+    BoundaryAudit,
     RequestClassification,
     RequestScope,
+    TeachingContract,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
 
@@ -84,6 +86,9 @@ class PrototypeTurnRecord(BaseModel):
     agent_trace: list[AgentTraceEvent] = Field(default_factory=list)
     loaded_skills: list[str] = Field(default_factory=list)
     agent_termination_reason: str = ""
+    teaching_contract: TeachingContract | None = None
+    boundary_audit: BoundaryAudit | None = None
+    formula_normalized: bool = False
 
 
 class PrototypeEpisode(BaseModel):
