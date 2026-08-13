@@ -31,6 +31,9 @@ _FULLWIDTH = str.maketrans({
 })
 
 _MATH_CHARS = set("0123456789xX+-*/=.() ")
+_UNSUPPORTED_EQUATION_SYNTAX = re.compile(
+    r"(?:\*\*|\^|[²³⁴⁵⁶⁷⁸⁹]|[xX]\s*\*\s*[xX])"
+)
 
 
 class StepValidity(str, Enum):
@@ -163,6 +166,8 @@ def format_equation(eq: Equation) -> str:
 def extract_equation(text: str) -> Optional[str]:
     """从自然语言消息中抽取第一个可解析的方程，返回规范格式（如 '3x + 6 = 10'）。"""
     t = _normalize(text)
+    if _UNSUPPORTED_EQUATION_SYNTAX.search(t):
+        return None
     for i, ch in enumerate(t):
         if ch != "=":
             continue
@@ -194,6 +199,8 @@ def _parse_candidate(candidate: str) -> Optional[Equation]:
 def find_equations(text: str) -> list[str]:
     """抽取消息中所有可解析的方程（规范格式，去重）。"""
     t = _normalize(text)
+    if _UNSUPPORTED_EQUATION_SYNTAX.search(t):
+        return []
     found: list[str] = []
     i = 0
     while i < len(t):

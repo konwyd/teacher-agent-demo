@@ -13,6 +13,12 @@ def test_extract_equation_from_natural_language() -> None:
     assert mc.extract_equation("x＝4/3") == "x = 4/3"
 
 
+def test_nonlinear_equations_are_never_truncated_into_linear_equations() -> None:
+    for text in ("3x^2+2x-11=0", "x²=4", "x*x=4"):
+        assert mc.extract_equation(text) is None
+        assert mc.find_equations(text) == []
+
+
 def test_solve_and_equivalence() -> None:
     assert mc.solve_str("3x+6=10") == Fraction(4, 3)
     assert mc.solve_str("5x-2=3x+6") == 4

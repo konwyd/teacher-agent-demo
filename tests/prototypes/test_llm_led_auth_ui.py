@@ -214,7 +214,7 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
             )
         ],
     )
-    app.session_state.prototype_session_schema_version = 10
+    app.session_state.prototype_session_schema_version = 11
     app.run()
 
     assert not app.exception
@@ -224,6 +224,8 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
     assert migrated_turn.teaching_contract is None
     assert migrated_turn.agent_trace == []
     assert migrated_turn.boundary_audit is None
+    assert migrated_turn.post_repair_boundary_audit is None
+    assert migrated_turn.boundary_fallback_reason == ""
     captions = [caption.value for caption in app.caption]
     assert "该历史记录生成于教学契约持久化之前。" in captions
     assert "该历史记录没有持久化 Agent trace。" in captions

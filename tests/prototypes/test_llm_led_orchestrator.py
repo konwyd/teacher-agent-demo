@@ -31,6 +31,23 @@ class _Decisions:
         return self.decisions.pop(0)
 
 
+class _ScriptedActions:
+    def __init__(self, actions: list[object]) -> None:
+        self.actions = list(actions)
+        self.payloads: list[dict[str, object]] = []
+
+    @property
+    def calls(self) -> int:
+        return len(self.payloads)
+
+    def decide(self, payload):
+        self.payloads.append(dict(payload))
+        result = self.actions.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
 class _Registry:
     def __init__(self) -> None:
         self.calls = []
@@ -233,6 +250,181 @@ def test_finish_normalizes_untrusted_full_solution_contract() -> None:
     assert result.teaching_contract.response_mode is TeachingResponseMode.ONE_STEP
     assert result.teaching_contract.may_reveal_final_answer is False
     assert result.trace[-1].details == result.teaching_contract.model_dump(mode="json")
+
+
+def test_invalid_action_is_retried_once_then_valid_action_is_used() -> None:
+    provider = _ScriptedActions(
+        [
+            {"kind": "finish", "reason": "missing required contract"},
+            _finish(),
+        ]
+    )
+    registry = _Registry()
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=provider,
+        registry=registry,
+    )
+
+    result = loop.run("3x+2=11", "给我一点提示", "数学", "初中")
+
+    assert provider.calls == 2
+    assert provider.payloads[1]["action_format_repair"] == (
+        "上次 JSON 不符合 schema，只输出合法 action。"
+    )
+    assert registry.calls == []
+    assert result.termination_reason == "model_finished"
+    retry_events = [event for event in result.trace if event.event_type == "action_retry"]
+    assert len(retry_events) == 1
+    assert retry_events[0].details == {"error_type": "ValidationError"}
+
+
+def test_two_invalid_actions_for_new_physics_problem_fall_back_to_local_only() -> None:
+    provider = _ScriptedActions(
+        [
+            {"kind": "finish", "reason": "missing required contract"},
+            {"kind": "call_tool", "reason": "missing tool name"},
+        ]
+    )
+    registry = _Registry()
+    loop = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("物理", new=True)),
+        action_provider=provider,
+        registry=registry,
+    )
+
+    result = loop.run(
+        "",
+        "物理新题：请根据初中教材说明影响物体惯性大小的因素。",
+        "",
+        "",
+    )
+
+    assert provider.calls == 2
+    assert registry.calls == [
+        (
+            "search_local_knowledge",
+            {
+                "query": "物理新题：请根据初中教材说明影响物体惯性大小的因素。",
+                "subject": "物理",
+                "stage": "初中",
+                "top_k": 5,
+                "sources": ["textbook", "exercise"],
+            },
+        )
+    ]
+    assert [item.name for item in result.observations] == [
+        "search_local_knowledge"
+    ]
+    assert result.rag_context.text == "证据"
+    assert result.termination_reason == "provider_error"
+    assert all(name != "search_web" for name, _ in registry.calls)
+    fallback_events = [
+        event for event in result.trace if event.event_type == "fallback_tool"
+    ]
+    assert len(fallback_events) == 1
+    assert fallback_events[0].tool_name == "search_local_knowledge"
+    assert fallback_events[0].ok is True
+
+
+def test_action_provider_is_never_called_for_off_topic_even_if_script_is_invalid() -> None:
+    classification = RequestClassification(
+        scope="off_topic",
+        subject=None,
+        stage="未知",
+        is_new_problem=True,
+        answer_mode="brief_redirect",
+        reason="not a school question",
+    )
+    provider = _ScriptedActions(
+        [ValueError("invalid action one"), ValueError("invalid action two")]
+    )
+    registry = _Registry()
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(classification),
+        action_provider=provider,
+        registry=registry,
+    ).run("", "请介绍最新款手机", "", "")
+
+    assert provider.calls == 0
+    assert registry.calls == []
+    assert result.teaching_contract.response_mode is TeachingResponseMode.BRIEF_REDIRECT
+
+
+def test_provider_fallback_local_tool_stays_within_one_step_and_tool_budget() -> None:
+    provider = _ScriptedActions(
+        [ValueError("invalid action one"), ValueError("invalid action two")]
+    )
+    registry = _Registry()
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("物理", new=True)),
+        action_provider=provider,
+        registry=registry,
+        max_iterations=1,
+    ).run("", "惯性是什么？", "", "")
+
+    assert provider.calls == 2
+    assert len(registry.calls) == 1
+    assert len(result.observations) == 1
+    assert all(name != "search_web" for name, _ in registry.calls)
+
+
+def test_provider_failure_after_adequate_local_evidence_does_not_search_again() -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="search_local_knowledge",
+                arguments={
+                    "query": "惯性",
+                    "subject": "物理",
+                    "stage": "初中",
+                },
+                reason="先查询本地教材",
+            ),
+            ValueError("invalid action one"),
+            ValueError("invalid action two"),
+        ]
+    )
+    registry = _Registry()
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("物理", new=False)),
+        action_provider=provider,
+        registry=registry,
+    ).run("惯性概念", "为什么只与质量有关？", "物理", "初中")
+
+    assert provider.calls == 3
+    assert [name for name, _ in registry.calls] == ["search_local_knowledge"]
+    assert len(result.observations) == 1
+    assert result.rag_context.text == "证据"
+    assert result.termination_reason == "provider_error"
+
+
+def test_two_invalid_actions_for_concept_followup_use_one_local_search() -> None:
+    provider = _ScriptedActions(
+        [ValueError("invalid action one"), ValueError("invalid action two")]
+    )
+    registry = _Registry()
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=False)),
+        action_provider=provider,
+        registry=registry,
+    ).run("3x^2+2x-11=0", "求根公式是什么？", "数学", "初中")
+
+    assert provider.calls == 2
+    assert registry.calls == [
+        (
+            "search_local_knowledge",
+            {
+                "query": "求根公式是什么？",
+                "subject": "数学",
+                "stage": "初中",
+                "top_k": 5,
+                "sources": ["textbook", "exercise"],
+            },
+        )
+    ]
+    assert len(result.observations) == 1
 
 
 def test_provider_error_returns_safe_contract() -> None:

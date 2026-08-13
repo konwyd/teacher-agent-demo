@@ -1,5 +1,7 @@
 """Contract tests for optional, topic-agnostic verifier boundaries."""
 
+import pytest
+
 from app.agent.optional_verifier import (
     LinearEquationVerifier,
     NoopVerifier,
@@ -45,6 +47,20 @@ def test_linear_equation_verifier_declines_another_math_domain() -> None:
     )
 
     assert result.status is VerificationStatus.NOT_APPLICABLE
+
+
+@pytest.mark.parametrize("problem", ["3x^2+2x-11=0", "x²=4", "x*x=4"])
+def test_linear_verifier_declines_nonlinear_equation_syntax(problem: str) -> None:
+    verifier = LinearEquationVerifier()
+    request = VerificationRequest(
+        problem_context=problem,
+        student_attempt="x=2",
+    )
+
+    assert verifier.supports(request) is False
+    result = verifier.verify(request)
+    assert result.status is VerificationStatus.NOT_APPLICABLE
+    assert result.evidence == []
 
 
 def test_generic_harness_runs_when_all_optional_services_are_empty() -> None:

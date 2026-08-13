@@ -57,6 +57,11 @@ _CONCEPT_ONLY_MARKERS = (
 _NEGATED_ANSWER_PATTERN = re.compile(
     r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}(?:答案|最终结果)"
 )
+_NEGATED_FULL_SOLUTION_PATTERN = re.compile(
+    r"(?:不要|别|不用|无需|不必|不需要|先不|暂时不)"
+    r"[^\n，。；！？,;!?]{0,12}"
+    r"(?:完整(?:答案|步骤|解答|求解)|全部步骤|从头到尾)"
+)
 _NEGATED_APPLICATION_PATTERN = re.compile(
     r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}"
     r"(?:代入|套用|应用|用于|计算|解答)(?:到|在|于)?(?:当前题|本题)?"
@@ -88,6 +93,7 @@ def has_explicit_full_solution_request(message: str) -> bool:
 
     return (
         not has_no_answer_request(message)
+        and not _has_no_full_solution_request(message)
         and not _has_no_apply_request(message)
         and any(marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS)
     )
@@ -105,13 +111,17 @@ def _is_generic_solve_request(message: str) -> bool:
     return any(marker in message for marker in _GENERIC_SOLVE_REQUEST_MARKERS)
 
 
+def _has_no_full_solution_request(message: str) -> bool:
+    return bool(_NEGATED_FULL_SOLUTION_PATTERN.search(message))
+
+
 def _has_no_apply_request(message: str) -> bool:
     return bool(_NEGATED_APPLICATION_PATTERN.search(message)) or any(
         marker in message for marker in _CONCEPT_ONLY_MARKERS
     )
 
 
-def _is_concept_request(message: str) -> bool:
+def is_concept_request(message: str) -> bool:
     return (
         any(marker in message for marker in ("是什么", "什么意思", "概念", "定义", "原理", "为什么"))
         or any(marker in message for marker in _CONCEPT_ONLY_MARKERS)
@@ -198,7 +208,7 @@ def normalize_teaching_contract(
     no_answer = has_no_answer_request(student_message)
     explicit_full_solution = has_explicit_full_solution_request(student_message)
     no_apply = _has_no_apply_request(student_message)
-    concept_request = _is_concept_request(student_message)
+    concept_request = is_concept_request(student_message)
 
     response_mode = contract.response_mode
     if no_apply:
@@ -262,7 +272,7 @@ def build_safe_teaching_contract(
         response_mode = TeachingResponseMode.FULL_SOLUTION
         may_apply = True
         allowed_content = ["完整解答", "最终答案", "步骤原因说明"]
-    elif _is_concept_request(student_message):
+    elif is_concept_request(student_message):
         response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
         may_apply = False
         allowed_content = ["概念定义", "通用解释"]

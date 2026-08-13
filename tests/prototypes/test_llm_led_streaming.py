@@ -178,6 +178,10 @@ def test_streamlit_persists_public_teaching_boundary_and_real_agent_trace():
     assert "teaching_contract" in source
     assert "agent_trace" in source
     assert "boundary_audit" in source
+    assert "post_repair_boundary_audit" in source
+    assert "boundary_fallback_reason" in source
+    assert "修正后二次审计" in source
+    assert "受限安全回复" in source
     assert "iter_markdown_display_chunks" in source
     assert "观察器原始输出" not in source
     assert "processing_steps = [" not in source

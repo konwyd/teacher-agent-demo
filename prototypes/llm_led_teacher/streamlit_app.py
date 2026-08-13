@@ -32,7 +32,7 @@ from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_markdown_display_chunks
 
 
-_SESSION_SCHEMA_VERSION = 11
+_SESSION_SCHEMA_VERSION = 12
 _PROGRESS_LABELS = {
     "classification": "Agent · 正在识别请求……",
     "planning": "Agent · 正在规划与调用工具……",
@@ -505,6 +505,28 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
             st.write("**修正指令**", boundary_audit.repair_instructions or ["无"])
             if boundary_audit.audit_error:
                 st.warning(f"边界审计已降级：{boundary_audit.audit_error}")
+
+            post_repair_audit = getattr(turn, "post_repair_boundary_audit", None)
+            if post_repair_audit is not None:
+                st.markdown("##### 修正后二次审计")
+                if post_repair_audit.passed:
+                    st.success("通过：修正版符合本轮教学契约。")
+                else:
+                    st.warning("未通过：修正版未被接受。")
+                st.write(
+                    "**二次审计违规项**",
+                    [violation.value for violation in post_repair_audit.violations]
+                    or ["无"],
+                )
+                st.write("**二次审计证据**", post_repair_audit.evidence or ["无"])
+                if post_repair_audit.audit_error:
+                    st.warning(
+                        f"二次审计已降级：{post_repair_audit.audit_error}"
+                    )
+
+            fallback_reason = getattr(turn, "boundary_fallback_reason", "")
+            if fallback_reason:
+                st.warning(f"受限安全回复已启用：{fallback_reason}")
 
         st.markdown("#### 可选确定性验证")
         verification = turn.student_verification

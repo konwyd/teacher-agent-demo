@@ -97,6 +97,8 @@ class PrototypeTurnRecord(BaseModel):
     agent_termination_reason: str = ""
     teaching_contract: TeachingContract | None = None
     boundary_audit: BoundaryAudit | None = None
+    post_repair_boundary_audit: BoundaryAudit | None = None
+    boundary_fallback_reason: str = ""
     formula_normalized: bool = False
 
 
@@ -688,18 +690,29 @@ def run_turn(
     draft_character_count = len(output.response)
     enter_stage("auditing")
     boundary_audit: BoundaryAudit | None = None
+    boundary_auditor: SemanticBoundaryAuditor | None = None
     if orchestration_result is not None:
-        boundary_audit = SemanticBoundaryAuditor(active_client).audit(
+        boundary_auditor = SemanticBoundaryAuditor(active_client)
+        boundary_audit = boundary_auditor.audit(
             clean_message,
             episode.problem_context,
             orchestration_result.teaching_contract,
             output.response,
         )
-    extracted_equations = mc.find_equations(output.response)
-    claim_audits = _audit_claims(
-        episode.problem_context,
-        extracted_equations,
-        episode.previous_verified_step,
+    verifier_applicable = LinearEquationVerifier().supports(
+        VerificationRequest(problem_context=episode.problem_context)
+    )
+    extracted_equations = (
+        mc.find_equations(output.response) if verifier_applicable else []
+    )
+    claim_audits = (
+        _audit_claims(
+            episode.problem_context,
+            extracted_equations,
+            episode.previous_verified_step,
+        )
+        if verifier_applicable
+        else []
     )
     repair_reasons = _collect_warnings(
         episode,
@@ -723,6 +736,8 @@ def run_turn(
             dict.fromkeys(boundary_repair_reasons + repair_reasons)
         )
     repair_performed = False
+    post_repair_boundary_audit: BoundaryAudit | None = None
+    boundary_fallback_reason = ""
     if repair_reasons:
         enter_stage("repairing")
         output = _repair(active_client, payload, output, repair_reasons)
@@ -731,20 +746,55 @@ def run_turn(
             getattr(active_client, "last_chat_metadata", {}) or {}
         )
         if orchestration_result is not None:
-            hard_violations = hard_boundary_recheck(
-                episode.problem_context,
-                orchestration_result.teaching_contract,
-                output.response,
-            )
-            if hard_violations:
+            if boundary_audit is not None and not boundary_audit.passed:
+                assert boundary_auditor is not None
+                post_repair_boundary_audit = boundary_auditor.audit(
+                    clean_message,
+                    episode.problem_context,
+                    orchestration_result.teaching_contract,
+                    output.response,
+                )
+                if not post_repair_boundary_audit.passed:
+                    if post_repair_boundary_audit.audit_error:
+                        boundary_fallback_reason = (
+                            "post_repair_audit_error:"
+                            f"{post_repair_boundary_audit.audit_error}"
+                        )
+                    else:
+                        violation_names = ",".join(
+                            violation.value
+                            for violation in post_repair_boundary_audit.violations
+                        ) or "no_public_violation"
+                        boundary_fallback_reason = (
+                            f"post_repair_audit_failed:{violation_names}"
+                        )
+
+            if not boundary_fallback_reason:
+                hard_violations = hard_boundary_recheck(
+                    episode.problem_context,
+                    orchestration_result.teaching_contract,
+                    output.response,
+                )
+                if hard_violations:
+                    boundary_fallback_reason = "hard_boundary_recheck:" + ",".join(
+                        violation.value for violation in hard_violations
+                    )
+
+            if boundary_fallback_reason:
                 output = _contract_safe_fallback(
                     orchestration_result.teaching_contract
                 )
-        extracted_equations = mc.find_equations(output.response)
-        claim_audits = _audit_claims(
-            episode.problem_context,
-            extracted_equations,
-            episode.previous_verified_step,
+        extracted_equations = (
+            mc.find_equations(output.response) if verifier_applicable else []
+        )
+        claim_audits = (
+            _audit_claims(
+                episode.problem_context,
+                extracted_equations,
+                episode.previous_verified_step,
+            )
+            if verifier_applicable
+            else []
         )
 
     remaining_warnings = _collect_warnings(
@@ -809,6 +859,8 @@ def run_turn(
             orchestration_result.teaching_contract if orchestration_result else None
         ),
         boundary_audit=boundary_audit,
+        post_repair_boundary_audit=post_repair_boundary_audit,
+        boundary_fallback_reason=boundary_fallback_reason,
         formula_normalized=formula_normalized,
     )
     episode.turns.append(record)

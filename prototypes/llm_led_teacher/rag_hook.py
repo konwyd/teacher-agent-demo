@@ -125,7 +125,10 @@ def subject_metadata_filters(
     """Translate orchestration enums to collection metadata without routing."""
     return {
         "textbook": {"subject": subject.value, "stage": stage.value},
-        "exercise": {"subject": _EXERCISE_SUBJECTS[subject]},
+        "exercise": {
+            "subject": _EXERCISE_SUBJECTS[subject],
+            "stage": stage.value,
+        },
     }
 
 
@@ -166,10 +169,20 @@ def retrieve_local_context(
         excerpt = document[:600] + ("…" if len(document) > 600 else "")
         metadata = raw.get("metadata", {}) or {}
         source = str(raw.get("source", "local"))
+        expected_subject = (
+            _EXERCISE_SUBJECTS[subject]
+            if source == "exercise"
+            else subject.value
+        )
+        if (
+            metadata.get("subject") != expected_subject
+            or metadata.get("stage") != stage.value
+        ):
+            continue
         title = metadata.get("chapter") or metadata.get("knowledges") or metadata.get("source_file", "")
         reference = (
-            f"[{source}:{index}] {metadata.get('subject', subject.value)} · "
-            f"{metadata.get('stage', stage.value)} · {str(title)[:80]}"
+            f"[{source}:{index}] {metadata['subject']} · "
+            f"{metadata['stage']} · {str(title)[:80]}"
         )
         chunk = f"{reference}\n{excerpt}"
         if used + len(chunk) > 2400:

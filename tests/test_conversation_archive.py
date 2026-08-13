@@ -95,4 +95,6 @@ def test_legacy_episode_and_turn_gain_multisubject_defaults() -> None:
     assert episode.turns[0].agent_termination_reason == ""
     assert episode.turns[0].teaching_contract is None
     assert episode.turns[0].boundary_audit is None
+    assert episode.turns[0].post_repair_boundary_audit is None
+    assert episode.turns[0].boundary_fallback_reason == ""
     assert episode.turns[0].formula_normalized is False

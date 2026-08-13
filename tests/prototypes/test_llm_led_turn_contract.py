@@ -605,7 +605,7 @@ def test_agent_contract_audits_repairs_and_normalizes_formula():
             "通用公式是：\n\n[ x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a} ]\n\n代入本题得到 x=...",
             "通用公式是：\n\n[ x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a} ]\n\n其中 a、b、c 是系数。",
         ],
-        audits=[audit],
+        audits=[audit, BoundaryAudit(passed=True)],
     )
     episode = PrototypeEpisode(
         problem_context="3x^2+2x-11=0",
@@ -625,6 +625,8 @@ def test_agent_contract_audits_repairs_and_normalizes_formula():
     assert turn.repair_performed is True
     assert turn.teaching_contract == _concept_formula_result().teaching_contract
     assert turn.boundary_audit == audit
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == ""
     assert turn.formula_normalized is True
     assert client.teacher_payloads[0]["teaching_contract"]["response_mode"] == "concept_explanation"
     assert client.repair_payloads[0]["turn_context"]["teaching_contract"] == client.teacher_payloads[0]["teaching_contract"]
@@ -660,7 +662,7 @@ def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
     )
     client = _ContractTurnClient(
         drafts=["先移项，最终答案是 x=2。", "先移项得到2x=4。"],
-        audits=[audit],
+        audits=[audit, BoundaryAudit(passed=True)],
         record_usage=True,
     )
 
@@ -671,15 +673,15 @@ def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
         orchestrator=_UsageOrchestrator(result, client),
     )
 
-    assert client.requested_schemas == [BoundaryAudit]
+    assert client.requested_schemas == [BoundaryAudit, BoundaryAudit]
     assert turn.observer_raw_guidance.pacing is PacingMode.SINGLE_MOVE
     assert turn.turn_guidance.pacing is PacingMode.SINGLE_MOVE
     assert turn.observer_error == "observer_replaced_by_teaching_contract"
-    assert turn.model_generation_metadata["llm_call_count"] == 4
-    assert turn.model_generation_metadata["prompt_tokens"] == 40
-    assert turn.model_generation_metadata["completion_tokens"] == 20
-    assert turn.model_generation_metadata["reasoning_tokens"] == 4
-    assert turn.model_generation_metadata["response_tokens"] == 16
+    assert turn.model_generation_metadata["llm_call_count"] == 5
+    assert turn.model_generation_metadata["prompt_tokens"] == 50
+    assert turn.model_generation_metadata["completion_tokens"] == 25
+    assert turn.model_generation_metadata["reasoning_tokens"] == 5
+    assert turn.model_generation_metadata["response_tokens"] == 20
 
 
 def test_agent_hard_recheck_replaces_still_leaking_repair_with_safe_fallback():
@@ -700,7 +702,7 @@ def test_agent_hard_recheck_replaces_still_leaking_repair_with_safe_fallback():
     )
     client = _ContractTurnClient(
         drafts=["代入本题可得结果。", "我仍然代入本题计算。"],
-        audits=[audit],
+        audits=[audit, BoundaryAudit(passed=True)],
     )
 
     turn = run_turn(
@@ -717,12 +719,16 @@ def test_agent_hard_recheck_replaces_still_leaking_repair_with_safe_fallback():
     assert "我仍然代入本题计算" not in turn.teacher_output.response
     assert "不展开当前题的计算" not in turn.teacher_output.response
     assert turn.repair_performed is True
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == (
+        "hard_boundary_recheck:applied_without_permission"
+    )
 
 
 def test_agent_audit_transport_failure_repairs_once_and_never_shows_draft():
     client = _ContractTurnClient(
         drafts=["代入本题可得答案。", "这里只说明求根公式中各符号的含义。"],
-        audits=[RuntimeError("audit unavailable")],
+        audits=[RuntimeError("audit unavailable"), BoundaryAudit(passed=True)],
     )
 
     turn = run_turn(
@@ -734,9 +740,77 @@ def test_agent_audit_transport_failure_repairs_once_and_never_shows_draft():
 
     assert turn.boundary_audit is not None
     assert turn.boundary_audit.audit_error == "RuntimeError"
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == ""
     assert turn.repair_performed is True
     assert client.chat_calls == 2
     assert turn.teacher_output.response == "这里只说明求根公式中各符号的含义。"
+
+
+def test_failed_post_repair_audit_replaces_semantic_leak_with_safe_fallback():
+    initial_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+        repair_instructions=["不要代入当前题"],
+    )
+    post_repair_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission", "final_answer_leak"],
+        evidence=["修正版仍写出了当前题系数和判别式"],
+        repair_instructions=["改用不含当前题数据的安全回复"],
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "代入本题计算。",
+            "令 a=3，b=2，c=-11，因此判别式等于136。",
+        ],
+        audits=[initial_audit, post_repair_audit],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    assert turn.boundary_audit == initial_audit
+    assert turn.post_repair_boundary_audit == post_repair_audit
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission,final_answer_leak"
+    )
+    assert "a=3" not in turn.teacher_output.response
+    assert "b=2" not in turn.teacher_output.response
+    assert "c=-11" not in turn.teacher_output.response
+    assert "136" not in turn.teacher_output.response
+
+
+def test_post_repair_audit_error_fails_closed_to_safe_fallback():
+    client = _ContractTurnClient(
+        drafts=["代入本题可得答案。", "令 a=3，b=2，c=-11。"],
+        audits=[
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                repair_instructions=["不要代入当前题"],
+            ),
+            RuntimeError("post-repair audit unavailable"),
+        ],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    assert turn.post_repair_boundary_audit is not None
+    assert turn.post_repair_boundary_audit.audit_error == "RuntimeError"
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_error:RuntimeError"
+    )
+    assert "a=3" not in turn.teacher_output.response
 
 
 def test_agent_repair_failure_raises_without_consuming_pending_message():
@@ -1006,3 +1080,44 @@ def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
     assert episode.problem_context == "解方程 2x+3=7"
     assert episode.active_subject == "数学"
     assert turn.claim_audits
+
+
+def test_quadratic_turn_keeps_optional_linear_verifier_neutral() -> None:
+    classification = RequestClassification(
+        scope="k9",
+        subject="数学",
+        stage="初中",
+        is_new_problem=False,
+        answer_mode="complete",
+        reason="quadratic follow-up",
+    )
+    result = _concept_formula_result().model_copy(
+        update={"classification": classification}
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "令 a=3，b=2，c=-11，先计算判别式："
+            "$$\\Delta=b^2-4ac=136$$"
+        ],
+        audits=[BoundaryAudit(passed=True)],
+    )
+    episode = PrototypeEpisode(
+        problem_context="3x^2+2x-11=0",
+        previous_verified_step="旧的线性证据",
+        active_subject="数学",
+        active_stage="初中",
+    )
+
+    turn = run_turn(
+        episode,
+        "请完整解答并解释为什么",
+        client=client,
+        orchestrator=_FakeOrchestrator(result),
+    )
+
+    assert turn.student_verification.status.value == "not_applicable"
+    assert turn.student_verification.verifier_name == "none"
+    assert turn.extracted_equations == []
+    assert turn.claim_audits == []
+    assert turn.evidence_level == "unverified"
+    assert episode.previous_verified_step == "旧的线性证据"

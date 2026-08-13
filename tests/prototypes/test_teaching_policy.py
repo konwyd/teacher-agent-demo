@@ -62,6 +62,25 @@ def test_negated_disclosure_window_cannot_grant_full_solution(message: str) -> N
     assert has_explicit_full_solution_request(message) is False
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "不要完整步骤，只给我一个提示",
+        "不需要完整解答，只讲思路",
+    ],
+)
+def test_negated_full_solution_request_never_reveals_answer(message: str) -> None:
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        message,
+        _math_classification(),
+    )
+
+    assert has_explicit_full_solution_request(message) is False
+    assert normalized.response_mode is not TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_reveal_final_answer is False
+
+
 def test_no_answer_phrase_overrides_model_full_solution_contract() -> None:
     normalized = normalize_teaching_contract(
         _full_solution_contract(),
@@ -203,6 +222,25 @@ def test_explicit_full_solution_with_why_cue_keeps_full_permissions() -> None:
     assert normalized.response_mode is TeachingResponseMode.FULL_SOLUTION
     assert normalized.may_apply_to_active_problem is True
     assert normalized.may_reveal_final_answer is True
+
+
+def test_exact_explicit_full_solution_with_explanation_remains_authorized() -> None:
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        "请完整解答并解释为什么",
+        _math_classification(),
+    )
+
+    assert normalized.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_apply_to_active_problem is True
+    assert normalized.may_reveal_final_answer is True
+
+
+def test_negation_window_does_not_cross_into_later_explicit_request() -> None:
+    assert (
+        has_explicit_full_solution_request("不需要解释为什么，请完整解答")
+        is True
+    )
 
 
 def test_explicit_full_solution_with_no_answer_still_cannot_reveal() -> None:

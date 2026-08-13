@@ -25,6 +25,7 @@ from prototypes.llm_led_teacher.orchestration_tools import (
 from prototypes.llm_led_teacher.rag_hook import RagContext
 from prototypes.llm_led_teacher.teaching_policy import (
     build_safe_teaching_contract,
+    is_concept_request,
     normalize_teaching_contract,
 )
 
@@ -128,6 +129,8 @@ contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“
 
 
 class MultisubjectAgentLoop:
+    _ACTION_FORMAT_REPAIR = "上次 JSON 不符合 schema，只输出合法 action。"
+
     def __init__(
         self,
         client: DeepSeekClient | None = None,
@@ -224,9 +227,34 @@ class MultisubjectAgentLoop:
                     "web_calls": runtime.web_search_count,
                 },
             }
-            try:
-                decision = AgentDecision.model_validate(self.action_provider.decide(payload))
-            except Exception as exc:  # noqa: BLE001 - bounded safe fallback
+            decision: AgentDecision | None = None
+            action_error: Exception | None = None
+            for action_attempt in range(2):
+                action_payload = dict(payload)
+                if action_attempt:
+                    action_payload["action_format_repair"] = self._ACTION_FORMAT_REPAIR
+                try:
+                    decision = AgentDecision.model_validate(
+                        self.action_provider.decide(action_payload)
+                    )
+                    break
+                except Exception as exc:  # noqa: BLE001 - one structured repair
+                    action_error = exc
+                    if action_attempt == 0:
+                        self._trace(
+                            trace,
+                            AgentTraceEvent(
+                                step=step,
+                                event_type="action_retry",
+                                summary=self._ACTION_FORMAT_REPAIR,
+                                ok=False,
+                                details={"error_type": type(exc).__name__},
+                            ),
+                            progress_callback,
+                        )
+
+            if decision is None:
+                assert action_error is not None
                 termination_reason = "provider_error"
                 self._trace(
                     trace,
@@ -235,10 +263,48 @@ class MultisubjectAgentLoop:
                         event_type="fallback",
                         summary="编排决策失败，使用已有证据安全收口",
                         ok=False,
-                        details={"error_type": type(exc).__name__},
+                        details={"error_type": type(action_error).__name__},
                     ),
                     progress_callback,
                 )
+                if self._needs_fallback_local_search(
+                    classification,
+                    runtime,
+                    student_message,
+                ):
+                    fallback_arguments = {
+                        "query": student_message[:800],
+                        "subject": classification.subject.value,
+                        "stage": classification.stage.value,
+                        "top_k": 5,
+                        "sources": ["textbook", "exercise"],
+                    }
+                    result = self.registry.execute(
+                        "search_local_knowledge",
+                        fallback_arguments,
+                        runtime,
+                    )
+                    observations.append(result)
+                    if result.ok:
+                        rag_context = self._merge_rag(rag_context, result.data)
+                    hit_count = len(result.data.get("hits", [])) if result.ok else 0
+                    self._trace(
+                        trace,
+                        AgentTraceEvent(
+                            step=step,
+                            event_type="fallback_tool",
+                            summary=(
+                                f"编排降级后执行本地检索，命中 {hit_count} 条"
+                                if result.ok
+                                else f"编排降级本地检索未执行：{result.error}"
+                            ),
+                            tool_name="search_local_knowledge",
+                            ok=result.ok,
+                            elapsed_seconds=result.elapsed_seconds,
+                            details={"hit_count": hit_count, "error": result.error},
+                        ),
+                        progress_callback,
+                    )
                 break
             self._trace(
                 trace,
@@ -309,6 +375,25 @@ class MultisubjectAgentLoop:
             loaded_skills=loaded_skills,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
+        )
+
+    @staticmethod
+    def _needs_fallback_local_search(
+        classification: RequestClassification,
+        runtime: OrchestrationRuntime,
+        student_message: str,
+    ) -> bool:
+        return bool(
+            classification.scope is RequestScope.K9
+            and classification.subject is not None
+            and classification.stage is not SchoolStage.UNKNOWN
+            and not runtime.local_search_succeeded
+            and not runtime.local_search_signatures
+            and (
+                classification.is_new_problem
+                or not runtime.problem_context
+                or is_concept_request(student_message)
+            )
         )
 
     @classmethod
