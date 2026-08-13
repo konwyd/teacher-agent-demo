@@ -258,6 +258,9 @@ def test_streamlit_source_composes_the_desk_without_hiding_functional_controls()
 
     assert "from prototypes.llm_led_teacher.desk_theme import" in source
     assert "DESK_THEME_CSS" in source
+    assert source.index("authenticated_user =") < source.index(
+        "st.markdown(DESK_THEME_CSS"
+    )
     assert "新建一课" in source
     assert "def render_thinking_sections(" in source
     assert "turn.sections" in source

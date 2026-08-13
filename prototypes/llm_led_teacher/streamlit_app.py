@@ -156,8 +156,6 @@ _DEEPSEEK_STYLE = """
 }
 </style>
 """
-st.markdown(DESK_THEME_CSS, unsafe_allow_html=True)
-
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
 
 
@@ -362,6 +360,7 @@ if "authenticated_user" not in st.session_state:
     st.stop()
 
 authenticated_user = st.session_state.authenticated_user
+st.markdown(DESK_THEME_CSS, unsafe_allow_html=True)
 warmup_status = warmup_rag()
 
 if (
