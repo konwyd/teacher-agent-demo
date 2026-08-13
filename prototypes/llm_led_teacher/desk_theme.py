@@ -526,7 +526,12 @@ def render_brand_header() -> None:
     )
 
 
-def render_thinking_sections(turn: object, expanded: bool = True) -> None:
+def render_thinking_sections(
+    turn: object,
+    expanded: bool = True,
+    *,
+    container: object | None = None,
+) -> None:
     """Render the public four-slot teaching summary in the paper margin."""
 
     sections = getattr(turn, "sections", []) or []
@@ -544,7 +549,8 @@ def render_thinking_sections(turn: object, expanded: bool = True) -> None:
             f'<div class="desk-thinking-card-title">{escape(str(section.title))}</div>'
             f'<div class="desk-thinking-card-summary">{escape(str(section.summary))}</div>{details}</article>'
         )
-    st.markdown(
+    target = container or st
+    target.markdown(
         '<aside class="desk-thinking-rail"><div class="desk-thinking-rail-title">备课批注</div>'
         + "".join(cards)
         + "</aside>",

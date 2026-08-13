@@ -822,12 +822,21 @@ def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
     )
 
 
-def render_thinking_sections(turn: object, expanded: bool = True) -> None:
+def render_thinking_sections(
+    turn: object,
+    expanded: bool = True,
+    *,
+    container: object | None = None,
+) -> None:
     """Keep the page-level rendering contract explicit for the desk rail."""
 
     _ = turn.sections
     # desk_theme renders escape(section.summary) and escape(detail) for every public slot.
-    return desk_render_thinking_sections(turn, expanded=expanded)
+    return desk_render_thinking_sections(
+        turn,
+        expanded=expanded,
+        container=container,
+    )
 
 
 def render_desk_turn(turn: PrototypeTurnRecord, *, conversation_id: str) -> None:
@@ -840,8 +849,6 @@ def render_desk_turn(turn: PrototypeTurnRecord, *, conversation_id: str) -> None
             render_public_thinking(turn, current_conversation_id=conversation_id)
         with answer:
             with st.container(key=f"desk_answer_{turn.turn_id}"):
-                if not turn.public_thinking_events:
-                    render_thinking_sections(turn, expanded=True)
                 st.markdown(turn.teacher_output.response)
                 render_turn_token_usage(turn)
                 render_turn_details(turn)
@@ -873,9 +880,6 @@ with st.bottom:
 message = retry_message or message
 if message:
     is_retry = retry_message is not None
-    if not is_retry:
-        st.markdown(f'<div class="desk-user-note">{escape(message)}</div>', unsafe_allow_html=True)
-
     _set_pending_student_message(episode, message)
     try:
         target_conversation_id = _ensure_target_conversation(episode, message)
@@ -935,6 +939,13 @@ if message:
                 history_save_error = str(exc)
             if history_save_error:
                 st.warning(f"历史记录保存失败：{history_save_error}")
+            if turn.sections:
+                with progress_status:
+                    render_thinking_sections(
+                        turn,
+                        expanded=True,
+                        container=progress_status,
+                    )
             st.session_state[thinking_state_key] = complete_thinking(
                 st.session_state[thinking_state_key]
             )
