@@ -87,6 +87,16 @@ def test_linear_verifier_keeps_scalar_distribution_supported() -> None:
     assert verifier.supports(request) is True
     assert verifier.verify(request).status is VerificationStatus.VERIFIED_CORRECT
 
+    described_request = VerificationRequest(
+        problem_context="在实数范围 x∈R 内解 2(x+1)=6",
+        student_attempt="x=2",
+    )
+    assert verifier.supports(described_request) is True
+    assert (
+        verifier.verify(described_request).status
+        is VerificationStatus.VERIFIED_CORRECT
+    )
+
 
 def test_generic_harness_runs_when_all_optional_services_are_empty() -> None:
     state = run_generic_teaching_turn(

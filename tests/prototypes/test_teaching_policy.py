@@ -277,6 +277,29 @@ def test_later_positive_full_solution_mention_wins(message: str) -> None:
     assert has_explicit_full_solution_request(message) is True
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "完整解答不要解释为什么",
+        "完整解答不用分很多段",
+        "完整解答不要紧，我能看懂",
+    ],
+)
+def test_post_marker_response_preferences_do_not_negate_full_solution(
+    message: str,
+) -> None:
+    assert has_explicit_full_solution_request(message) is True
+
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        message,
+        _math_classification(),
+    )
+    assert normalized.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_apply_to_active_problem is True
+    assert normalized.may_reveal_final_answer is True
+
+
 def test_later_positive_mention_wins_within_the_same_clause() -> None:
     assert (
         has_explicit_full_solution_request(

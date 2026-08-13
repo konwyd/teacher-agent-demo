@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from fractions import Fraction
@@ -68,12 +67,7 @@ def _normalize(text: str) -> str:
 def has_unsupported_linear_syntax(text: str) -> bool:
     """Return whether raw text is outside the linear-equation support domain."""
 
-    normalized = _normalize(text)
-    return bool(_UNSUPPORTED_EQUATION_SYNTAX.search(normalized)) or any(
-        unicodedata.category(character) == "Sm"
-        and character not in _MATH_CHARS
-        for character in normalized
-    )
+    return bool(_UNSUPPORTED_EQUATION_SYNTAX.search(_normalize(text)))
 
 
 def fmt_frac(f: Fraction) -> str:
