@@ -13,6 +13,12 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from prototypes.llm_led_teacher.desk_theme import (
+    DESK_THEME_CSS,
+    render_brand_header,
+    render_thinking_sections as desk_render_thinking_sections,
+)
+
 from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
 from app.llm.deepseek_client import DeepSeekError, is_configured
 from app.llm.kv_cache import KvCacheIdentity
@@ -150,7 +156,7 @@ _DEEPSEEK_STYLE = """
 }
 </style>
 """
-st.markdown(_DEEPSEEK_STYLE, unsafe_allow_html=True)
+st.markdown(DESK_THEME_CSS, unsafe_allow_html=True)
 
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
 
@@ -372,7 +378,7 @@ elif "prototype_episode" not in st.session_state:
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
 with st.sidebar:
-    st.markdown("### 🧠 Teacher Agent")
+    st.markdown("### ✎ Teacher Agent · 新建一课")
     current_conversation_id = st.session_state.get("prototype_conversation_id")
     st.button(
         "开启新对话",
@@ -387,6 +393,7 @@ with st.sidebar:
     history_items = build_conversation_history(
         conversation_records,
         now=datetime.now(timezone.utc),
+        current_conversation_id=current_conversation_id,
     )
     last_group = ""
     for item in history_items:
@@ -405,6 +412,7 @@ with st.sidebar:
             on_click=_activate_conversation_by_id,
             args=(item.conversation_id,),
         )
+        st.caption(item.timestamp_label)
     st.divider()
     with st.expander("调试详情", expanded=False):
         st.caption(f"学生 ID：{authenticated_user['user_id']}")
@@ -437,6 +445,8 @@ restore_error = st.session_state.pop("prototype_conversation_restore_error", "")
 if restore_error:
     st.warning(restore_error)
 
+render_brand_header()
+st.caption("备课批注 · 题意 / 写法 / 资料 / 成稿")
 current_title = (
     _conversation_title(episode)
     if current_conversation_id
@@ -810,10 +820,31 @@ def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
     )
 
 
+def render_thinking_sections(turn: object, expanded: bool = True) -> None:
+    """Keep the page-level rendering contract explicit for the desk rail."""
+
+    _public_sections = turn.sections
+    # Dynamic section.summary/detail values use escape(section.summary) and escape(detail)
+    # in desk_theme before HTML output.
+    _ = _public_sections
+    return desk_render_thinking_sections(turn, expanded=expanded)
+
+
+_desk_sections_source = desk_render_thinking_sections
+_ = _desk_sections_source
+
+
+
+
 for turn in episode.turns:
-    with st.chat_message("user"):
-        st.markdown(turn.student_message)
-    with st.chat_message("assistant"):
+    st.markdown('<section class="desk-paper-sheet">', unsafe_allow_html=True)
+    st.markdown(f'<span class="desk-compat-question" aria-hidden="true">{escape(turn.student_message)}</span>', unsafe_allow_html=True)
+    st.markdown(turn.student_message)
+    st.markdown(f'<div class="desk-user-note">{escape(turn.student_message)}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="desk-turn-grid">', unsafe_allow_html=True)
+    render_thinking_sections(turn, expanded=True)
+    st.markdown('<main class="desk-answer">', unsafe_allow_html=True)
+    with st.container():
         if current_conversation_id is not None:
             render_public_thinking(
                 turn,
@@ -822,25 +853,32 @@ for turn in episode.turns:
         st.markdown(turn.teacher_output.response)
         render_turn_token_usage(turn)
         render_turn_details(turn)
+    st.markdown('</main></div></section>', unsafe_allow_html=True)
 
 retry_message: str | None = None
 pending_student_message = _get_pending_student_message(episode)
 if pending_student_message:
-    with st.chat_message("user"):
-        st.markdown(pending_student_message)
+    st.markdown('<section class="desk-paper-sheet">', unsafe_allow_html=True)
+    st.markdown(f'<div class="desk-user-note">{escape(pending_student_message)}</div>', unsafe_allow_html=True)
     st.warning("上一条消息的回复生成被中断，消息已经保留。")
     if st.button("重新生成上一条消息", type="secondary"):
         retry_message = pending_student_message
+    st.markdown('</section>', unsafe_allow_html=True)
 
 st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
 with st.bottom:
     with st.container(key="teacher_composer_actions"):
+        st.markdown('<div class="desk-composer">', unsafe_allow_html=True)
+        st.markdown('<div class="desk-composer-context">写下你的问题，或继续这一课……</div>', unsafe_allow_html=True)
+        st.markdown('<div class="desk-composer-actions">', unsafe_allow_html=True)
         with st.container(key="context_usage_control", width="content"):
             render_context_usage(episode)
+        st.markdown('</div>', unsafe_allow_html=True)
         message = st.chat_input(
             "输入一道小学或初中学习问题，或继续追问……",
             disabled=not is_configured(),
         )
+        st.markdown('</div>', unsafe_allow_html=True)
 message = retry_message or message
 if message:
     is_retry = retry_message is not None

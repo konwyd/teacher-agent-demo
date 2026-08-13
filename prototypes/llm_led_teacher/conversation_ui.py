@@ -20,6 +20,8 @@ class ConversationHistoryItem:
     title: str
     group: str
     updated_at: str
+    timestamp_label: str
+    is_current: bool = False
 
 
 def _normalize_title(value: object) -> str:
@@ -73,10 +75,24 @@ def _history_group(updated_at: datetime, now: datetime) -> str:
     return "更早"
 
 
+def _timestamp_label(updated_at: datetime, now: datetime) -> str:
+    """Format a compact, real timestamp for the visible directory entry."""
+
+    timezone_info = now.tzinfo or timezone.utc
+    localized = updated_at.astimezone(timezone_info)
+    localized_now = now.astimezone(timezone_info)
+    if localized.date() == localized_now.date():
+        return localized.strftime("%H:%M")
+    if localized.year == localized_now.year:
+        return f"{localized.month}月{localized.day}日"
+    return f"{localized.year}年{localized.month}月{localized.day}日"
+
+
 def build_conversation_history(
     records: Sequence[ConversationRecord],
     *,
     now: datetime,
+    current_conversation_id: str | None = None,
 ) -> list[ConversationHistoryItem]:
     """Filter, sort, title, and group stored conversations for the sidebar."""
 
@@ -87,12 +103,17 @@ def build_conversation_history(
         key=lambda record: (_parse_timestamp(record.updated_at), record.conversation_id),
         reverse=True,
     )
-    return [
-        ConversationHistoryItem(
-            conversation_id=record.conversation_id,
-            title=derive_conversation_title(record),
-            group=_history_group(_parse_timestamp(record.updated_at), now),
-            updated_at=record.updated_at,
+    items: list[ConversationHistoryItem] = []
+    for record in visible:
+        updated_at = _parse_timestamp(record.updated_at)
+        items.append(
+            ConversationHistoryItem(
+                conversation_id=record.conversation_id,
+                title=derive_conversation_title(record),
+                group=_history_group(updated_at, now),
+                updated_at=record.updated_at,
+                timestamp_label=_timestamp_label(updated_at, now),
+                is_current=record.conversation_id == current_conversation_id,
+            )
         )
-        for record in visible
-    ]
+    return items

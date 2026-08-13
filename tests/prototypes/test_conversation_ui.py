@@ -105,3 +105,31 @@ def test_meaningful_stored_title_wins_and_all_titles_are_normalized_and_bounded(
 
     assert derive_conversation_title(meaningful) == "已有 标题"
     assert derive_conversation_title(long_pending) == "问" * 80
+
+
+def test_selected_history_item_keeps_real_title_and_timestamp_after_grouping() -> None:
+    selected = _record(
+        "conv_selected",
+        "  一元一次方程   移项  ",
+        pending="不会被标题覆盖",
+        hours_ago=2,
+    )
+    other = _record(
+        "conv_other",
+        "另一课",
+        pending="另一课",
+        days_ago=3,
+    )
+
+    items = build_conversation_history(
+        [other, selected],
+        now=NOW,
+        current_conversation_id="conv_selected",
+    )
+
+    current = next(item for item in items if item.is_current)
+    assert current.conversation_id == "conv_selected"
+    assert current.title == "一元一次方程 移项"
+    assert current.updated_at == selected.updated_at
+    assert current.timestamp_label == "10:00"
+    assert next(item for item in items if item.conversation_id == "conv_other").is_current is False
