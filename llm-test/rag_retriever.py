@@ -658,7 +658,9 @@ def retrieve_local_hits(
     normalized: list[dict[str, Any]] = []
     for hit in hits:
         metadata = hit.get("meta", {}) or {}
-        source = hit.get("source", "local")
+        source = hit.get("source")
+        if source not in {"textbook", "exercise"}:
+            continue
         expected_subject = (
             _EXERCISE_SUBJECTS.get(subject_clean, subject_clean)
             if source == "exercise"

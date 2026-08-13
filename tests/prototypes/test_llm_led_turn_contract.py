@@ -624,7 +624,9 @@ def test_agent_contract_audits_repairs_and_normalizes_formula():
     assert "$$x=\\frac" in turn.teacher_output.response
     assert turn.repair_performed is True
     assert turn.teaching_contract == _concept_formula_result().teaching_contract
-    assert turn.boundary_audit == audit
+    assert turn.boundary_audit == audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
     assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
     assert turn.boundary_fallback_reason == ""
     assert turn.formula_normalized is True
@@ -682,6 +684,116 @@ def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
     assert turn.model_generation_metadata["completion_tokens"] == 25
     assert turn.model_generation_metadata["reasoning_tokens"] == 5
     assert turn.model_generation_metadata["response_tokens"] == 20
+
+
+def test_agent_advisory_repair_always_runs_post_repair_audit_and_counts_usage():
+    client = _ContractTurnClient(
+        drafts=[
+            "求根公式里的 a 是什么？b 又是什么？",
+            "求根公式中的 a、b、c 表示方程的三个系数。",
+        ],
+        audits=[BoundaryAudit(passed=True), BoundaryAudit(passed=True)],
+        record_usage=True,
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_UsageOrchestrator(_concept_formula_result(), client),
+    )
+
+    assert turn.repair_performed is True
+    assert client.requested_schemas == [BoundaryAudit, BoundaryAudit]
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.model_generation_metadata["llm_call_count"] == 5
+
+
+def test_advisory_repair_failed_second_audit_uses_redacted_fixed_fallback():
+    initial_audit = BoundaryAudit(
+        passed=True,
+        evidence=["INITIAL_REJECTED_EVIDENCE"],
+    )
+    post_repair_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+        evidence=["POST_REJECTED_EVIDENCE"],
+        repair_instructions=["POST_REPAIR_RAW_TEXT"],
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "求根公式里的 a 是什么？b 又是什么？",
+            "令三个系数分别取当前题中的数值即可得到结果。",
+        ],
+        audits=[initial_audit, post_repair_audit],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    serialized = turn.model_dump_json()
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission"
+    )
+    assert "三个系数分别取当前题" not in turn.teacher_output.response
+    assert turn.boundary_audit == BoundaryAudit(passed=True)
+    assert turn.post_repair_boundary_audit == BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+    )
+    assert "INITIAL_REJECTED_EVIDENCE" not in serialized
+    assert "POST_REJECTED_EVIDENCE" not in serialized
+    assert "POST_REPAIR_RAW_TEXT" not in serialized
+
+
+def test_boundary_repair_raw_audit_text_is_never_persisted():
+    client = _ContractTurnClient(
+        drafts=["代入本题计算。", "仍把当前题的数值带入公式。"],
+        audits=[
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                evidence=["INITIAL_REJECTED_EVIDENCE"],
+                repair_instructions=["INITIAL_REPAIR_RAW_TEXT"],
+            ),
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                evidence=["POST_REJECTED_EVIDENCE"],
+                repair_instructions=["POST_REPAIR_RAW_TEXT"],
+            ),
+        ],
+    )
+
+    episode = PrototypeEpisode(problem_context="3x^2+2x-11=0")
+    turn = run_turn(
+        episode,
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    serialized = episode.model_dump_json()
+    assert turn.boundary_audit is not None
+    assert turn.boundary_audit.violations == ["applied_without_permission"]
+    assert turn.post_repair_boundary_audit is not None
+    assert turn.post_repair_boundary_audit.violations == [
+        "applied_without_permission"
+    ]
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission"
+    )
+    for sentinel in (
+        "INITIAL_REJECTED_EVIDENCE",
+        "INITIAL_REPAIR_RAW_TEXT",
+        "POST_REJECTED_EVIDENCE",
+        "POST_REPAIR_RAW_TEXT",
+    ):
+        assert sentinel not in serialized
 
 
 def test_agent_hard_recheck_replaces_still_leaking_repair_with_safe_fallback():
@@ -774,8 +886,12 @@ def test_failed_post_repair_audit_replaces_semantic_leak_with_safe_fallback():
         orchestrator=_FakeOrchestrator(_concept_formula_result()),
     )
 
-    assert turn.boundary_audit == initial_audit
-    assert turn.post_repair_boundary_audit == post_repair_audit
+    assert turn.boundary_audit == initial_audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
+    assert turn.post_repair_boundary_audit == post_repair_audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
     assert turn.boundary_fallback_reason == (
         "post_repair_audit_failed:applied_without_permission,final_answer_leak"
     )

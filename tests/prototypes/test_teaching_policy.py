@@ -243,6 +243,52 @@ def test_negation_window_does_not_cross_into_later_explicit_request() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "我不想要完整解答，只给一个提示",
+        "我不想在还没理清每个符号和条件之前就看到你把全部计算过程展开成完整解答",
+        "完整解答就不要了，给我一个提示",
+        "请完整解答，但是我改主意了，完整解答就不要了",
+    ],
+)
+def test_last_full_solution_mention_is_negated_clause_aware(message: str) -> None:
+    assert has_explicit_full_solution_request(message) is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "不要解释为什么，请完整解答",
+        "先不要完整解答。不过我改主意了，请完整解答",
+    ],
+)
+def test_later_positive_full_solution_mention_wins(message: str) -> None:
+    assert has_explicit_full_solution_request(message) is True
+
+
+def test_later_positive_mention_wins_within_the_same_clause() -> None:
+    assert (
+        has_explicit_full_solution_request(
+            "不要完整解答我改主意了请完整解答"
+        )
+        is True
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "先不要答案，但是请完整解答",
+        "不要代入当前题，但是请完整解答",
+    ],
+)
+def test_global_no_answer_and_no_apply_still_override_later_request(
+    message: str,
+) -> None:
+    assert has_explicit_full_solution_request(message) is False
+
+
 def test_explicit_full_solution_with_no_answer_still_cannot_reveal() -> None:
     normalized = normalize_teaching_contract(
         _full_solution_contract(),

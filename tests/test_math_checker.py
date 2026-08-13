@@ -14,9 +14,26 @@ def test_extract_equation_from_natural_language() -> None:
 
 
 def test_nonlinear_equations_are_never_truncated_into_linear_equations() -> None:
-    for text in ("3x^2+2x-11=0", "x²=4", "x*x=4"):
+    for text in (
+        "3x^2+2x-11=0",
+        "x²=4",
+        "x*x=4",
+        "x·x=4",
+        "1/x=2",
+        "1/(x+1)=2",
+        "x(x+1)=2",
+        "(x+1)x=2",
+        "(x+1)(x-1)=0",
+    ):
+        assert mc.parse_equation(text) is None
         assert mc.extract_equation(text) is None
         assert mc.find_equations(text) == []
+
+
+def test_linear_scalar_distribution_and_constant_denominators_stay_supported() -> None:
+    assert mc.extract_equation("2(x+1)=6") == "2x + 2 = 6"
+    assert mc.extract_equation("3*(x-2)=9") == "3x - 6 = 9"
+    assert mc.extract_equation("x/2=3") == "1/2x = 3"
 
 
 def test_solve_and_equivalence() -> None:

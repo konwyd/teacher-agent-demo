@@ -187,6 +187,10 @@ def test_streamlit_persists_public_teaching_boundary_and_real_agent_trace():
     assert "processing_steps = [" not in source
     assert "可选确定性验证" in source
     assert "VerificationStatus.NOT_APPLICABLE" in source
+    assert "boundary_audit.evidence" not in source
+    assert "post_repair_audit.evidence" not in source
+    assert "boundary_audit.repair_instructions" not in source
+    assert '"**触发的修正**", turn.repair_reasons' not in source
     assert source.count("render_context_usage(episode)") == 1
     assert source.count("render_turn_token_usage(turn)") == 2
 

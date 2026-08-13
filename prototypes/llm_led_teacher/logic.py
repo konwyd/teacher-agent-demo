@@ -12,7 +12,7 @@ from enum import Enum
 from time import perf_counter
 from typing import Callable, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.agent import math_checker as mc
 from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequest
@@ -100,6 +100,27 @@ class PrototypeTurnRecord(BaseModel):
     post_repair_boundary_audit: BoundaryAudit | None = None
     boundary_fallback_reason: str = ""
     formula_normalized: bool = False
+
+    @model_validator(mode="after")
+    def redact_rejected_draft_data(self) -> "PrototypeTurnRecord":
+        """Keep persisted/UI-facing audit data free of rejected draft text."""
+
+        for field_name in (
+            "boundary_audit",
+            "post_repair_boundary_audit",
+        ):
+            audit = getattr(self, field_name)
+            if audit is not None:
+                setattr(
+                    self,
+                    field_name,
+                    audit.model_copy(
+                        update={"evidence": [], "repair_instructions": []}
+                    ),
+                )
+        if self.repair_reasons:
+            self.repair_reasons = ["guardrail_repair"]
+        return self
 
 
 class PrototypeEpisode(BaseModel):
@@ -746,28 +767,27 @@ def run_turn(
             getattr(active_client, "last_chat_metadata", {}) or {}
         )
         if orchestration_result is not None:
-            if boundary_audit is not None and not boundary_audit.passed:
-                assert boundary_auditor is not None
-                post_repair_boundary_audit = boundary_auditor.audit(
-                    clean_message,
-                    episode.problem_context,
-                    orchestration_result.teaching_contract,
-                    output.response,
-                )
-                if not post_repair_boundary_audit.passed:
-                    if post_repair_boundary_audit.audit_error:
-                        boundary_fallback_reason = (
-                            "post_repair_audit_error:"
-                            f"{post_repair_boundary_audit.audit_error}"
-                        )
-                    else:
-                        violation_names = ",".join(
-                            violation.value
-                            for violation in post_repair_boundary_audit.violations
-                        ) or "no_public_violation"
-                        boundary_fallback_reason = (
-                            f"post_repair_audit_failed:{violation_names}"
-                        )
+            assert boundary_auditor is not None
+            post_repair_boundary_audit = boundary_auditor.audit(
+                clean_message,
+                episode.problem_context,
+                orchestration_result.teaching_contract,
+                output.response,
+            )
+            if not post_repair_boundary_audit.passed:
+                if post_repair_boundary_audit.audit_error:
+                    boundary_fallback_reason = (
+                        "post_repair_audit_error:"
+                        f"{post_repair_boundary_audit.audit_error}"
+                    )
+                else:
+                    violation_names = ",".join(
+                        violation.value
+                        for violation in post_repair_boundary_audit.violations
+                    ) or "no_public_violation"
+                    boundary_fallback_reason = (
+                        f"post_repair_audit_failed:{violation_names}"
+                    )
 
             if not boundary_fallback_reason:
                 hard_violations = hard_boundary_recheck(

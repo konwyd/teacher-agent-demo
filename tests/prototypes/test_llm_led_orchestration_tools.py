@@ -101,6 +101,17 @@ def test_retrieve_local_hits_drops_wrong_or_missing_subject_stage(monkeypatch) -
                     "source": "textbook",
                     "sim": 0.99,
                 },
+                {
+                    "text": "缺少来源的物理材料",
+                    "meta": {"subject": "物理", "stage": "初中"},
+                    "sim": 0.95,
+                },
+                {
+                    "text": "未知来源的物理材料",
+                    "meta": {"subject": "物理", "stage": "初中"},
+                    "source": "local",
+                    "sim": 0.94,
+                },
             ]
 
     class FakeExercise:
@@ -183,6 +194,17 @@ def test_local_adapter_drops_mixed_wrong_stage_hits_without_relabeling(monkeypat
                     "metadata": {},
                     "source": "exercise",
                     "sim": 0.98,
+                },
+                {
+                    "text": "缺少来源",
+                    "metadata": {"subject": "数学", "stage": "初中"},
+                    "sim": 0.97,
+                },
+                {
+                    "text": "未知来源",
+                    "metadata": {"subject": "数学", "stage": "初中"},
+                    "source": "local",
+                    "sim": 0.96,
                 },
             ],
             "query": "数学 初中 二次方程",

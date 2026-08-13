@@ -57,14 +57,12 @@ _CONCEPT_ONLY_MARKERS = (
 _NEGATED_ANSWER_PATTERN = re.compile(
     r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}(?:答案|最终结果)"
 )
-_NEGATED_FULL_SOLUTION_PATTERN = re.compile(
-    r"(?:不要|别|不用|无需|不必|不需要|先不|暂时不)"
-    r"[^\n，。；！？,;!?]{0,12}"
-    r"(?:完整(?:答案|步骤|解答|求解)|全部步骤|从头到尾)"
-)
 _NEGATED_APPLICATION_PATTERN = re.compile(
     r"(?:不要|别|不用|无需|不必|先不|暂时不).{0,12}"
-    r"(?:代入|套用|应用|用于|计算|解答)(?:到|在|于)?(?:当前题|本题)?"
+    r"(?:"
+    r"(?:代入|套用|应用|用于|计算)(?:到|在|于)?(?:当前题|本题)?"
+    r"|解答(?:当前题|本题)"
+    r")"
 )
 _CONCEPT_EXPLANATION_PATTERN = re.compile(
     r"(?:解释|讲解|讲讲|说明).{0,10}(?:公式|概念|定义|原理)"
@@ -86,6 +84,64 @@ _APPLICATION_CONTENT_MARKERS = (
     "解答当前题",
     "解当前题",
 )
+_INTENT_CLAUSE_BOUNDARY = re.compile(r"(?:[\n，。；！？,;!?]+|但是|不过|然而|但)")
+_FULL_SOLUTION_NEGATION_MARKERS = (
+    "不要",
+    "别",
+    "不用",
+    "无需",
+    "不必",
+    "不需要",
+    "不想",
+    "不愿",
+    "先不",
+    "暂时不",
+)
+_FULL_SOLUTION_MENTION_PATTERN = re.compile(
+    "|".join(
+        re.escape(marker)
+        for marker in sorted(
+            _FULL_SOLUTION_REQUEST_MARKERS,
+            key=len,
+            reverse=True,
+        )
+    )
+)
+_FULL_SOLUTION_POST_NEGATION_PATTERN = re.compile(
+    r"(?:(?:就)?(?:不要|不需要|不想要|不愿要|不必|免了)(?:了)?(?:吧)?"
+    r"|(?:就)?算了(?:吧)?)$"
+)
+
+
+def _intent_clauses(message: str) -> tuple[str, ...]:
+    return tuple(
+        clause.strip()
+        for clause in _INTENT_CLAUSE_BOUNDARY.split(message)
+        if clause.strip()
+    )
+
+
+def _last_full_solution_intent(message: str) -> bool | None:
+    last_intent: bool | None = None
+    for clause in _intent_clauses(message):
+        mentions = list(_FULL_SOLUTION_MENTION_PATTERN.finditer(clause))
+        if not mentions:
+            continue
+        for index, mention in enumerate(mentions):
+            scope_start = mentions[index - 1].end() if index else 0
+            scope_end = (
+                mentions[index + 1].start()
+                if index + 1 < len(mentions)
+                else len(clause)
+            )
+            prefix = clause[scope_start : mention.start()]
+            suffix = clause[mention.end() : scope_end].strip()
+            negated = any(
+                marker in prefix
+                for marker in _FULL_SOLUTION_NEGATION_MARKERS
+            ) or bool(_FULL_SOLUTION_POST_NEGATION_PATTERN.search(suffix))
+            last_intent = not negated
+    return last_intent
 
 
 def has_explicit_full_solution_request(message: str) -> bool:
@@ -93,17 +149,18 @@ def has_explicit_full_solution_request(message: str) -> bool:
 
     return (
         not has_no_answer_request(message)
-        and not _has_no_full_solution_request(message)
         and not _has_no_apply_request(message)
-        and any(marker in message for marker in _FULL_SOLUTION_REQUEST_MARKERS)
+        and _last_full_solution_intent(message) is True
     )
 
 
 def has_no_answer_request(message: str) -> bool:
     """Return whether the student's own message explicitly forbids answer disclosure."""
 
-    return bool(_NEGATED_ANSWER_PATTERN.search(message)) or any(
-        marker in message for marker in _NO_ANSWER_MARKERS
+    return any(
+        bool(_NEGATED_ANSWER_PATTERN.search(clause))
+        or any(marker in clause for marker in _NO_ANSWER_MARKERS)
+        for clause in _intent_clauses(message)
     )
 
 
@@ -111,13 +168,11 @@ def _is_generic_solve_request(message: str) -> bool:
     return any(marker in message for marker in _GENERIC_SOLVE_REQUEST_MARKERS)
 
 
-def _has_no_full_solution_request(message: str) -> bool:
-    return bool(_NEGATED_FULL_SOLUTION_PATTERN.search(message))
-
-
 def _has_no_apply_request(message: str) -> bool:
-    return bool(_NEGATED_APPLICATION_PATTERN.search(message)) or any(
-        marker in message for marker in _CONCEPT_ONLY_MARKERS
+    return any(
+        bool(_NEGATED_APPLICATION_PATTERN.search(clause))
+        or any(marker in clause for marker in _CONCEPT_ONLY_MARKERS)
+        for clause in _intent_clauses(message)
     )
 
 

@@ -163,12 +163,14 @@ def retrieve_local_context(
     hits: list[dict] = []
     used = 0
     for index, raw in enumerate(raw_hits, 1):
+        source = raw.get("source")
+        if source not in {"textbook", "exercise"}:
+            continue
         document = str(raw.get("text", ""))
         if not document:
             continue
         excerpt = document[:600] + ("…" if len(document) > 600 else "")
         metadata = raw.get("metadata", {}) or {}
-        source = str(raw.get("source", "local"))
         expected_subject = (
             _EXERCISE_SUBJECTS[subject]
             if source == "exercise"

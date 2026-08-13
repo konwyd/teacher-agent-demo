@@ -98,3 +98,33 @@ def test_legacy_episode_and_turn_gain_multisubject_defaults() -> None:
     assert episode.turns[0].post_repair_boundary_audit is None
     assert episode.turns[0].boundary_fallback_reason == ""
     assert episode.turns[0].formula_normalized is False
+
+
+def test_legacy_rejected_boundary_audit_is_redacted_when_loaded() -> None:
+    legacy = {
+        "turns": [
+            {
+                "turn_id": 1,
+                "student_message": "怎么解？",
+                "teacher_output": {"response": "安全回复"},
+                "student_verification": {"status": "not_applicable"},
+                "evidence_level": "none",
+                "repair_performed": True,
+                "repair_reasons": ["LEGACY_REPAIR_RAW_TEXT"],
+                "boundary_audit": {
+                    "passed": False,
+                    "violations": ["final_answer_leak"],
+                    "evidence": ["LEGACY_REJECTED_EVIDENCE"],
+                    "repair_instructions": ["LEGACY_REPAIR_RAW_TEXT"],
+                },
+            }
+        ]
+    }
+
+    episode = PrototypeEpisode.model_validate(legacy)
+    serialized = episode.model_dump_json()
+
+    assert episode.turns[0].boundary_audit is not None
+    assert episode.turns[0].boundary_audit.violations == ["final_answer_leak"]
+    assert "LEGACY_REJECTED_EVIDENCE" not in serialized
+    assert "LEGACY_REPAIR_RAW_TEXT" not in serialized

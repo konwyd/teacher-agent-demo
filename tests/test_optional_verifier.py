@@ -49,7 +49,20 @@ def test_linear_equation_verifier_declines_another_math_domain() -> None:
     assert result.status is VerificationStatus.NOT_APPLICABLE
 
 
-@pytest.mark.parametrize("problem", ["3x^2+2x-11=0", "x²=4", "x*x=4"])
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "3x^2+2x-11=0",
+        "x²=4",
+        "x*x=4",
+        "x·x=4",
+        "1/x=2",
+        "1/(x+1)=2",
+        "x(x+1)=2",
+        "(x+1)x=2",
+        "(x+1)(x-1)=0",
+    ],
+)
 def test_linear_verifier_declines_nonlinear_equation_syntax(problem: str) -> None:
     verifier = LinearEquationVerifier()
     request = VerificationRequest(
@@ -61,6 +74,17 @@ def test_linear_verifier_declines_nonlinear_equation_syntax(problem: str) -> Non
     result = verifier.verify(request)
     assert result.status is VerificationStatus.NOT_APPLICABLE
     assert result.evidence == []
+
+
+def test_linear_verifier_keeps_scalar_distribution_supported() -> None:
+    verifier = LinearEquationVerifier()
+    request = VerificationRequest(
+        problem_context="2(x+1)=6",
+        student_attempt="2x+2=6",
+    )
+
+    assert verifier.supports(request) is True
+    assert verifier.verify(request).status is VerificationStatus.VERIFIED_CORRECT
 
 
 def test_generic_harness_runs_when_all_optional_services_are_empty() -> None:

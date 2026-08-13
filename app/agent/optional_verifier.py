@@ -64,6 +64,8 @@ class LinearEquationVerifier:
     name = "linear_equation_fraction_checker"
 
     def supports(self, request: VerificationRequest) -> bool:
+        if mc.has_unsupported_linear_syntax(request.problem_context):
+            return False
         equations = mc.find_equations(request.problem_context)
         return len(equations) == 1
 

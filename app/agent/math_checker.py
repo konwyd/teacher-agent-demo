@@ -25,14 +25,23 @@ Side = tuple[Fraction, Fraction]
 Equation = tuple[Side, Side]
 
 _FULLWIDTH = str.maketrans({
-    "＋": "+", "－": "-", "＝": "=", "×": "*", "÷": "/", "．": ".", "（": "(", "）": ")",
+    "＋": "+", "－": "-", "＝": "=", "×": "*", "·": "*", "÷": "/", "．": ".", "（": "(", "）": ")",
     "Ｘ": "x", "ｘ": "x", "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
     "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
 })
 
 _MATH_CHARS = set("0123456789xX+-*/=.() ")
 _UNSUPPORTED_EQUATION_SYNTAX = re.compile(
-    r"(?:\*\*|\^|[²³⁴⁵⁶⁷⁸⁹]|[xX]\s*\*\s*[xX])"
+    r"(?:"
+    r"\*\*|\^|[²³⁴⁵⁶⁷⁸⁹]"
+    r"|[xX]\s*\*\s*[xX]"
+    r"|[xX]\s*[xX]"
+    r"|/\s*[+-]?[xX]"
+    r"|/\s*\([^)]*[xX][^)]*\)"
+    r"|[xX]\s*\*?\s*\("
+    r"|\)\s*\*?\s*[xX]"
+    r"|\)\s*\*?\s*\("
+    r")"
 )
 
 
@@ -53,6 +62,12 @@ class StepCheckResult:
 
 def _normalize(text: str) -> str:
     return text.translate(_FULLWIDTH).replace("等于", "=")
+
+
+def has_unsupported_linear_syntax(text: str) -> bool:
+    """Return whether raw text is outside the linear-equation support domain."""
+
+    return bool(_UNSUPPORTED_EQUATION_SYNTAX.search(_normalize(text)))
 
 
 def fmt_frac(f: Fraction) -> str:
@@ -132,6 +147,8 @@ def _parse_side(side: str) -> Optional[Side]:
 def parse_equation(eq: str) -> Optional[Equation]:
     """解析形如 '3x+6=10' 的一元一次方程；解析失败返回 None。"""
     t = _normalize(eq)
+    if has_unsupported_linear_syntax(t):
+        return None
     if t.count("=") != 1:
         return None
     left, right = t.split("=")
@@ -166,7 +183,7 @@ def format_equation(eq: Equation) -> str:
 def extract_equation(text: str) -> Optional[str]:
     """从自然语言消息中抽取第一个可解析的方程，返回规范格式（如 '3x + 6 = 10'）。"""
     t = _normalize(text)
-    if _UNSUPPORTED_EQUATION_SYNTAX.search(t):
+    if has_unsupported_linear_syntax(t):
         return None
     for i, ch in enumerate(t):
         if ch != "=":
@@ -185,21 +202,15 @@ def extract_equation(text: str) -> Optional[str]:
 
 
 def _parse_candidate(candidate: str) -> Optional[Equation]:
-    """解析候选片段；失败时从左侧逐字符裁剪重试（去掉粘连的杂质字符）。"""
-    for i in range(len(candidate)):
-        sub = candidate[i:].strip()
-        if "=" not in sub:
-            return None
-        parsed = parse_equation(sub)
-        if parsed is not None:
-            return parsed
-    return None
+    """Parse one complete candidate without changing its mathematical domain."""
+
+    return parse_equation(candidate.strip())
 
 
 def find_equations(text: str) -> list[str]:
     """抽取消息中所有可解析的方程（规范格式，去重）。"""
     t = _normalize(text)
-    if _UNSUPPORTED_EQUATION_SYNTAX.search(t):
+    if has_unsupported_linear_syntax(t):
         return []
     found: list[str] = []
     i = 0

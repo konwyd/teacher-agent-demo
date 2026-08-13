@@ -501,8 +501,6 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 [violation.value for violation in boundary_audit.violations]
                 or ["无"],
             )
-            st.write("**证据摘要**", boundary_audit.evidence or ["无"])
-            st.write("**修正指令**", boundary_audit.repair_instructions or ["无"])
             if boundary_audit.audit_error:
                 st.warning(f"边界审计已降级：{boundary_audit.audit_error}")
 
@@ -518,7 +516,6 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                     [violation.value for violation in post_repair_audit.violations]
                     or ["无"],
                 )
-                st.write("**二次审计证据**", post_repair_audit.evidence or ["无"])
                 if post_repair_audit.audit_error:
                     st.warning(
                         f"二次审计已降级：{post_repair_audit.audit_error}"
@@ -633,7 +630,6 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                     for audit in turn.claim_audits
                 ],
             )
-        st.write("**触发的修正**", turn.repair_reasons or [])
         st.write("**修正后仍有警告**", turn.remaining_warnings or [])
 
 
