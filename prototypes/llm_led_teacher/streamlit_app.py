@@ -477,13 +477,13 @@ def _format_token_count(value: int) -> str:
 
 _CONTEXT_USAGE_STYLE = """
 <style>
+.st-key-teacher_composer_actions > div[data-testid="stVerticalBlock"] {
+    gap: 12px;
+    min-width: 0;
+}
 .st-key-context_usage_control {
-    position: absolute;
-    right: 4.35rem;
-    top: 50%;
-    transform: translateY(-50%);
+    position: static;
     width: max-content !important;
-    z-index: 10;
 }
 .st-key-context_usage_control [data-testid="stPopover"] > button {
     background: transparent;
@@ -495,6 +495,17 @@ _CONTEXT_USAGE_STYLE = """
 .st-key-context_usage_control [data-testid="stPopover"] > button:hover {
     background: rgba(151, 166, 195, 0.12);
     color: rgb(49, 51, 63);
+}
+@media (max-width: 640px) {
+    .st-key-teacher_composer_actions > div[data-testid="stVerticalBlock"] {
+        gap: 8px;
+    }
+    .st-key-context_usage_control [data-testid="stPopover"] > button p {
+        display: none;
+    }
+    .st-key-context_usage_control [data-testid="stPopover"] > button::after {
+        content: "上下文";
+    }
 }
 </style>
 """
@@ -823,12 +834,13 @@ if pending_student_message:
 
 st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
 with st.bottom:
-    with st.container(key="context_usage_control", width="content"):
-        render_context_usage(episode)
-    message = st.chat_input(
-        "输入一道小学或初中学习问题，或继续追问……",
-        disabled=not is_configured(),
-    )
+    with st.container(key="teacher_composer_actions"):
+        with st.container(key="context_usage_control", width="content"):
+            render_context_usage(episode)
+        message = st.chat_input(
+            "输入一道小学或初中学习问题，或继续追问……",
+            disabled=not is_configured(),
+        )
 message = retry_message or message
 if message:
     is_retry = retry_message is not None

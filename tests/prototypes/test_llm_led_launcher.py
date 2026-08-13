@@ -61,9 +61,9 @@ def test_app_port_preflight_rejects_duplicate_launcher():
 
 
 def test_service_environment_forces_local_model_and_preserves_explicit_rag_device():
-    from scripts.run_llm_led_teacher import build_service_env
+    from scripts.run_llm_led_teacher import build_runtime_env
 
-    env = build_service_env(
+    env = build_runtime_env(
         {
             "DEEPSEEK_API_KEY": "paid-key",
             "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
@@ -88,6 +88,15 @@ def test_service_environment_forces_local_model_and_preserves_explicit_rag_devic
     assert env["CHROMA_SERVER"] == "127.0.0.1:8002"
 
 
+def test_launcher_passes_cli_context_size_to_runtime_environment():
+    source = Path("scripts/run_llm_led_teacher.py").read_text()
+    call_start = source.index("    env = build_runtime_env(")
+    call_end = source.index("    )", call_start)
+    runtime_call = source[call_start:call_end]
+
+    assert "context_window_tokens=args.ctx_size," in runtime_call
+
+
 def test_service_base_env_loads_dotenv_before_rag_warmup(tmp_path):
     from scripts.run_llm_led_teacher import load_service_base_env
 
@@ -104,7 +113,7 @@ def test_service_base_env_loads_dotenv_before_rag_warmup(tmp_path):
 
     assert env["ONLY_FILE"] == "loaded"
 
-def test_model_environment_contains_memory_safe_runtime_defaults():
+def test_local_launcher_defaults_to_512k_context():
     from scripts.run_llm_led_teacher import (
         DEFAULT_BATCH_SIZE,
         DEFAULT_CTX_SIZE,
@@ -113,7 +122,7 @@ def test_model_environment_contains_memory_safe_runtime_defaults():
         build_model_env,
     )
 
-    assert DEFAULT_CTX_SIZE == 131072
+    assert DEFAULT_CTX_SIZE == 524288
     assert DEFAULT_PARALLEL == 1
     assert DEFAULT_BATCH_SIZE == 128
     assert DEFAULT_UBATCH_SIZE == 128
@@ -130,7 +139,7 @@ def test_model_environment_contains_memory_safe_runtime_defaults():
     )
 
     assert env["PORT"] == "8080"
-    assert env["CTX_SIZE"] == "131072"
+    assert env["CTX_SIZE"] == "524288"
     assert env["PARALLEL"] == "1"
     assert env["BATCH_SIZE"] == "128"
     assert env["UBATCH_SIZE"] == "128"
@@ -141,9 +150,9 @@ def test_model_environment_contains_memory_safe_runtime_defaults():
 
 
 def test_kv_environment_reuses_existing_model_address_and_parallel(tmp_path):
-    from scripts.run_llm_led_teacher import build_model_env, build_service_env
+    from scripts.run_llm_led_teacher import build_model_env, build_runtime_env
 
-    service_env = build_service_env(
+    service_env = build_runtime_env(
         {},
         rag_host="127.0.0.1",
         rag_port=8002,

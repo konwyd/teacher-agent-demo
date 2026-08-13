@@ -25,7 +25,7 @@ DEFAULT_KV_CACHE_DIR = ROOT / "data" / "runtime" / "kv-states"
 DEFAULT_MODEL_HOST = "127.0.0.1"
 DEFAULT_MODEL_PORT = 8080
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
-DEFAULT_CTX_SIZE = 131072
+DEFAULT_CTX_SIZE = 524288
 DEFAULT_PARALLEL = 1
 DEFAULT_BATCH_SIZE = 128
 DEFAULT_UBATCH_SIZE = 128
@@ -107,7 +107,7 @@ def build_model_env(
     return env
 
 
-def build_service_env(
+def build_runtime_env(
     base: dict[str, str],
     *,
     rag_host: str,
@@ -116,7 +116,7 @@ def build_service_env(
     model_port: int = DEFAULT_MODEL_PORT,
     model_name: str = DEFAULT_MODEL_NAME,
     request_timeout: float = 300.0,
-    context_window_tokens: int = 131072,
+    context_window_tokens: int = DEFAULT_CTX_SIZE,
     kv_cache_dir: Path = DEFAULT_KV_CACHE_DIR,
     parallel: int = DEFAULT_PARALLEL,
 ) -> dict[str, str]:
@@ -145,6 +145,10 @@ def build_service_env(
     no_proxy.update({"127.0.0.1", "localhost", rag_host, model_host})
     env["NO_PROXY"] = env["no_proxy"] = ",".join(sorted(no_proxy))
     return env
+
+
+# Backward-compatible name for existing callers outside the one-command launcher.
+build_service_env = build_runtime_env
 
 
 def model_server_ready(
@@ -384,7 +388,7 @@ def main() -> int:
     else:
         print(f"复用已有 Chroma：127.0.0.1:{args.rag_port}")
 
-    env = build_service_env(
+    env = build_runtime_env(
         load_service_base_env(os.environ.copy()),
         rag_host="127.0.0.1",
         rag_port=args.rag_port,
