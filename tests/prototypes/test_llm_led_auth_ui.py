@@ -24,6 +24,7 @@ from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingKind,
     PublicThinkingStatus,
 )
+from prototypes.llm_led_teacher.thinking_state import thinking_key
 from app.llm.deepseek_client import DeepSeekError
 
 
@@ -314,6 +315,10 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
         markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
         for markdown in completed_statuses[0].markdown
     )
+    assert any(
+        markdown.value == "这是审计后的回答。"
+        for markdown in app.markdown
+    )
 
     app.run()
 
@@ -324,6 +329,37 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
     ]
     assert len(thinking_expanders) == 1
     assert thinking_expanders[0].proto.expanded is False
+
+    conversation_id = app.session_state.prototype_conversation_id
+    expanded_key = f"{thinking_key(conversation_id, 1)}:expanded"
+    app.session_state[expanded_key] = True
+    app.run()
+
+    thinking_expanders = [
+        expander
+        for expander in app.expander
+        if expander.label == "🧠 已思考（用时 7 秒）"
+    ]
+    assert len(thinking_expanders) == 1
+    assert thinking_expanders[0].proto.expanded is True
+    assert any(
+        markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
+        for markdown in thinking_expanders[0].markdown
+    )
+    assert any(
+        markdown.value == "这是审计后的回答。"
+        for markdown in app.markdown
+    )
+
+    app.run()
+
+    thinking_expanders = [
+        expander
+        for expander in app.expander
+        if expander.label == "🧠 已思考（用时 7 秒）"
+    ]
+    assert len(thinking_expanders) == 1
+    assert thinking_expanders[0].proto.expanded is True
 
 
 def test_new_chat_remains_an_unpersisted_draft_across_reruns(

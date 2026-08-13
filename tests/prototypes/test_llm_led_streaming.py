@@ -223,3 +223,9 @@ def test_streamlit_uses_keyed_thinking_state_without_generation_rerun():
     assert "st.session_state.pop(_JUST_GENERATED_TURN_KEY" not in source
     assert "st.session_state[_JUST_GENERATED_TURN_KEY]" not in source
     assert "            st.rerun()\n" not in source[source.index("if message:") :]
+
+
+def test_ui_extra_requires_streamlit_with_keyed_expander_support():
+    project = Path("pyproject.toml").read_text()
+
+    assert 'ui = ["streamlit>=1.55", "requests>=2.31"]' in project
