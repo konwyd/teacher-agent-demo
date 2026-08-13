@@ -828,38 +828,41 @@ def render_thinking_sections(turn: object, expanded: bool = True) -> None:
     # desk_theme renders escape(section.summary) and escape(detail) for every public slot.
     return desk_render_thinking_sections(turn, expanded=expanded)
 
-for turn in episode.turns:
+
+def render_desk_turn(turn: PrototypeTurnRecord, *, conversation_id: str) -> None:
+    """Render one completed turn in the same desk layout for history and live output."""
+
     with st.container(key=f"desk_paper_sheet_{turn.turn_id}"):
         st.markdown(f'<div class="desk-user-note">{escape(turn.student_message)}</div>', unsafe_allow_html=True)
-        with st.container(key=f"desk_compat_question_{turn.turn_id}"):
-            st.markdown(turn.student_message)
         rail, answer = st.columns([1, 2.25], gap="large")
         with rail:
-            if current_conversation_id is not None:
-                render_public_thinking(turn, current_conversation_id=current_conversation_id)
+            render_public_thinking(turn, current_conversation_id=conversation_id)
         with answer:
-            answer_box = st.container(key=f"desk_answer_{turn.turn_id}")
-            with answer_box:
-                if current_conversation_id is not None and not turn.public_thinking_events:
+            with st.container(key=f"desk_answer_{turn.turn_id}"):
+                if not turn.public_thinking_events:
                     render_thinking_sections(turn, expanded=True)
                 st.markdown(turn.teacher_output.response)
                 render_turn_token_usage(turn)
                 render_turn_details(turn)
 
+for turn in episode.turns:
+    with st.container(key=f"desk_compat_question_{turn.turn_id}"):
+        st.markdown(turn.student_message)
+    render_desk_turn(turn, conversation_id=current_conversation_id or "draft")
+
 retry_message: str | None = None
 pending_student_message = _get_pending_student_message(episode)
 if pending_student_message:
-    st.markdown('<section class="desk-paper-sheet">', unsafe_allow_html=True)
-    st.markdown(f'<div class="desk-user-note">{escape(pending_student_message)}</div>', unsafe_allow_html=True)
-    st.warning("上一条消息的回复生成被中断，消息已经保留。")
-    if st.button("重新生成上一条消息", type="secondary"):
-        retry_message = pending_student_message
-    st.markdown('</section>', unsafe_allow_html=True)
+    with st.container(key="pending_desk_turn"):
+        st.markdown(f'<div class="desk-user-note">{escape(pending_student_message)}</div>', unsafe_allow_html=True)
+        st.warning("上一条消息的回复生成被中断，消息已经保留。")
+        if st.button("重新生成上一条消息", type="secondary"):
+            retry_message = pending_student_message
 
 st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
 with st.bottom:
     with st.container(key="teacher_composer_actions"):
-        st.caption("写下你的问题，或继续这一课……")
+        st.caption("写下你的问题，或继续这一课…… · 深度思考已启用 · 联网按需触发")
         with st.container(key="context_usage_control", width="content"):
             render_context_usage(episode)
         message = st.chat_input(
@@ -870,8 +873,7 @@ message = retry_message or message
 if message:
     is_retry = retry_message is not None
     if not is_retry:
-        with st.chat_message("user"):
-            st.markdown(message)
+        st.markdown(f'<div class="desk-user-note">{escape(message)}</div>', unsafe_allow_html=True)
 
     _set_pending_student_message(episode, message)
     try:
@@ -885,7 +887,7 @@ if message:
         st.error(f"消息保存失败，已停止生成以避免内容丢失：{exc}")
         st.stop()
 
-    with st.chat_message("assistant"):
+    with st.container(key=f"live_desk_turn_{len(episode.turns) + 1}"):
         thinking_state_key = thinking_key(
             target_conversation_id,
             len(episode.turns) + 1,
@@ -939,5 +941,9 @@ if message:
             display_started = perf_counter()
             st.write_stream(iter_display_chunks(turn.teacher_output.response))
             turn.display_seconds = round(perf_counter() - display_started, 3)
+            if turn.public_thinking_events:
+                render_public_thinking(turn, current_conversation_id=target_conversation_id)
+            else:
+                render_thinking_sections(turn, expanded=False)
             render_turn_token_usage(turn)
             render_turn_details(turn)

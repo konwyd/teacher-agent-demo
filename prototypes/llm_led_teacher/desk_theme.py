@@ -150,7 +150,7 @@ footer {
 }
 
 .desk-paper-sheet,
-.st-key-desk_paper_sheet {
+[class*="st-key-desk_paper_sheet_"] {
     background-color: var(--desk-paper);
     background-image:
         radial-gradient(circle at 14% 18%, rgba(71,57,35,.035) 0 .7px, transparent .9px),
@@ -165,7 +165,7 @@ footer {
     padding: 2.2rem 3rem 3.4rem 4.5rem;
     position: relative;
 }
-.st-key-desk_paper_sheet::before {
+[class*="st-key-desk_paper_sheet_"]::before {
     background: var(--desk-rule);
     bottom: 0;
     content: "";
@@ -227,7 +227,28 @@ footer {
     width: .48rem;
 }
 .desk-user-note {
+    background: #fff2b9;
+    border: 1px solid rgba(122,91,35,.12);
+    border-radius: .2rem .2rem .7rem .2rem;
+    box-shadow: 0 7px 18px rgba(74,57,29,.1);
     color: var(--desk-ink);
+    margin: .2rem 0 1.8rem auto;
+    max-width: 72%;
+    padding: .82rem 1rem .75rem;
+    position: relative;
+    transform: rotate(.25deg);
+    width: fit-content;
+}
+.desk-user-note::before {
+    background: rgba(168,65,50,.74);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    content: "";
+    height: .48rem;
+    position: absolute;
+    right: .7rem;
+    top: .35rem;
+    width: .48rem;
 }
 .desk-answer,
 [class*="st-key-desk_answer_"] {
@@ -413,12 +434,12 @@ footer {
         padding: 0 .2rem;
     }
     .desk-paper-sheet,
-    .st-key-desk_paper_sheet {
+    [class*="st-key-desk_paper_sheet_"] {
         border-radius: .25rem;
         min-height: 40vh;
         padding: 1.35rem 1rem 2.4rem;
     }
-    .st-key-desk_paper_sheet::before {
+    [class*="st-key-desk_paper_sheet_"]::before {
         display: none;
     }
     [data-testid="stHorizontalBlock"]:has(.desk-thinking-rail) {
@@ -454,7 +475,7 @@ footer {
         padding-right: .45rem;
     }
     .desk-paper-sheet,
-    .st-key-desk_paper_sheet {
+    [class*="st-key-desk_paper_sheet_"] {
         padding-left: .75rem;
         padding-right: .75rem;
     }
