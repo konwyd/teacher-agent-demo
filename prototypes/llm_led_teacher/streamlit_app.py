@@ -382,6 +382,7 @@ with st.sidebar:
     current_conversation_id = st.session_state.get("prototype_conversation_id")
     st.button(
         "开启新对话",
+        help="开启一次全新的课程对话",
         use_container_width=True,
         type="secondary",
         on_click=_activate_draft,
@@ -782,7 +783,7 @@ def render_public_thinking(
 ) -> None:
     """Render saved public events without exposing internal trace payloads."""
 
-    if not turn.public_thinking_events:
+    if not turn.public_thinking_events and not turn.sections:
         return
     state_key = thinking_key(current_conversation_id, turn.turn_id)
     panel_state = st.session_state.get(state_key)
@@ -887,7 +888,9 @@ if message:
         st.error(f"消息保存失败，已停止生成以避免内容丢失：{exc}")
         st.stop()
 
-    with st.container(key=f"live_desk_turn_{len(episode.turns) + 1}"):
+    with st.container(key=f"desk_paper_sheet_live_{len(episode.turns) + 1}"):
+        st.markdown(f'<div class="desk-user-note">{escape(message)}</div>', unsafe_allow_html=True)
+        live_rail, live_answer = st.columns([1, 2.25], gap="large")
         thinking_state_key = thinking_key(
             target_conversation_id,
             len(episode.turns) + 1,
@@ -898,11 +901,9 @@ if message:
         st.session_state[thinking_state_key] = begin_thinking(
             previous_thinking_state
         )
-        progress_status = st.status(
-            "🧠 思考中…（已用时 0 秒）",
-            expanded=True,
-        )
-        live_thinking = LiveThinkingPanel(progress_status)
+        with live_rail:
+            progress_status = st.status("🧠 思考中…（已用时 0 秒）", expanded=True)
+            live_thinking = LiveThinkingPanel(progress_status)
 
         try:
             turn = run_turn(
@@ -939,11 +940,10 @@ if message:
             )
             live_thinking.complete(turn.backend_total_seconds)
             display_started = perf_counter()
-            st.write_stream(iter_display_chunks(turn.teacher_output.response))
+            with live_answer:
+                with st.container(key=f"desk_answer_live_{turn.turn_id}"):
+                    st.write_stream(iter_display_chunks(turn.teacher_output.response))
             turn.display_seconds = round(perf_counter() - display_started, 3)
-            if turn.public_thinking_events:
-                render_public_thinking(turn, current_conversation_id=target_conversation_id)
-            else:
-                render_thinking_sections(turn, expanded=False)
-            render_turn_token_usage(turn)
-            render_turn_details(turn)
+            with live_answer:
+                render_turn_token_usage(turn)
+                render_turn_details(turn)
