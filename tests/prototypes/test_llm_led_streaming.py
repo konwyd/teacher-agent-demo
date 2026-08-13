@@ -248,6 +248,8 @@ def test_digital_teacher_desk_theme_has_paper_ink_and_responsive_contract():
     assert ".desk-composer" in DESK_THEME_CSS
     assert '[data-testid="stHeader"]' in DESK_THEME_CSS
     assert '[data-testid="stBottom"]' in DESK_THEME_CSS
+    assert '[data-testid="stExpandSidebarButton"]' in DESK_THEME_CSS
+    assert '[data-testid="stToolbar"],\n' not in DESK_THEME_CSS
     assert ".st-key-teacher_composer_controls" in DESK_THEME_CSS
 
 

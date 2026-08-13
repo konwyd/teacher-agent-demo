@@ -40,17 +40,45 @@ body,
     pointer-events: none;
 }
 [data-testid="stHeader"] button,
-[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"] {
+[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"],
+[data-testid="stHeader"] [data-testid="stExpandSidebarButton"] {
     pointer-events: auto;
 }
 
 /* Streamlit's own application controls stay visible; only its hosting chrome is removed. */
-[data-testid="stToolbar"],
 [data-testid="stDecoration"],
 [data-testid="stStatusWidget"],
-    #MainMenu,
+[data-testid="stAppDeployButton"],
+[data-testid="stMainMenu"],
+#MainMenu,
 footer {
     display: none !important;
+}
+[data-testid="stToolbar"] {
+    background: transparent !important;
+    pointer-events: none;
+}
+[data-testid="stExpandSidebarButton"] {
+    align-items: center;
+    background: rgba(255,253,244,.96) !important;
+    border: 1px solid rgba(94,74,46,.18) !important;
+    border-radius: .55rem !important;
+    box-shadow: 0 7px 22px rgba(50,39,25,.14) !important;
+    color: var(--desk-vermilion) !important;
+    display: flex !important;
+    height: 2.45rem;
+    justify-content: center;
+    left: .85rem;
+    pointer-events: auto !important;
+    position: fixed;
+    top: .72rem;
+    width: 2.45rem;
+    z-index: 1000000;
+}
+[data-testid="stExpandSidebarButton"]:hover {
+    background: #fff9e9 !important;
+    border-color: rgba(168,65,50,.34) !important;
+    color: var(--desk-ink) !important;
 }
 
 [data-testid="stSidebar"] {
