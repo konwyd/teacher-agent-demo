@@ -247,7 +247,7 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
     assert saved.episode["pending_student_message"] == "旧会话热更新后发送的消息"
 
 
-def test_new_public_thinking_stays_expanded_for_one_rerun_then_collapses(
+def test_new_public_thinking_completes_collapsed_without_forced_rerun(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -303,16 +303,16 @@ def test_new_public_thinking_stays_expanded_for_one_rerun_then_collapses(
 
     app.chat_input[0].set_value("请解释这道题").run()
 
-    thinking_expanders = [
-        expander
-        for expander in app.expander
-        if expander.label == "🧠 已思考（用时 7 秒）"
+    completed_statuses = [
+        status
+        for status in app.status
+        if status.label == "备课完成 · 7秒"
     ]
-    assert len(thinking_expanders) == 1
-    assert thinking_expanders[0].proto.expanded is True
+    assert len(completed_statuses) == 1
+    assert completed_statuses[0].proto.expanded is False
     assert any(
         markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
-        for markdown in thinking_expanders[0].markdown
+        for markdown in completed_statuses[0].markdown
     )
 
     app.run()

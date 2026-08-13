@@ -34,6 +34,14 @@ from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
 from prototypes.llm_led_teacher.public_thinking import format_public_thinking_event
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_display_chunks
+from prototypes.llm_led_teacher.thinking_state import (
+    ThinkingPanelState,
+    begin_thinking,
+    complete_thinking,
+    fail_thinking,
+    set_user_expanded,
+    thinking_key,
+)
 
 
 _SESSION_SCHEMA_VERSION = 12
@@ -145,7 +153,6 @@ _DEEPSEEK_STYLE = """
 st.markdown(_DEEPSEEK_STYLE, unsafe_allow_html=True)
 
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
-_JUST_GENERATED_TURN_KEY = "public_thinking_just_generated_turn_id"
 
 
 def _get_pending_student_message(current_episode: object) -> str:
@@ -420,7 +427,6 @@ with st.sidebar:
             "prototype_user_id",
             "prototype_session_schema_version",
             _PENDING_STUDENT_MESSAGE_KEY,
-            _JUST_GENERATED_TURN_KEY,
         ):
             st.session_state.pop(key, None)
         st.rerun()
@@ -751,27 +757,57 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
 def render_public_thinking(
     turn: PrototypeTurnRecord,
     *,
-    expanded: bool = False,
+    current_conversation_id: str,
 ) -> None:
     """Render saved public events without exposing internal trace payloads."""
 
     if not turn.public_thinking_events:
         return
+    state_key = thinking_key(current_conversation_id, turn.turn_id)
+    panel_state = st.session_state.get(state_key)
+    if not isinstance(panel_state, ThinkingPanelState):
+        panel_state = complete_thinking(None)
+        st.session_state[state_key] = panel_state
+    expanded_key = f"{state_key}:expanded"
+    if expanded_key in st.session_state:
+        panel_state = set_user_expanded(
+            panel_state,
+            bool(st.session_state[expanded_key]),
+        )
+        st.session_state[state_key] = panel_state
     seconds = max(round(turn.backend_total_seconds), 0)
-    with st.expander(f"🧠 已思考（用时 {seconds} 秒）", expanded=expanded):
+    with st.expander(
+        f"🧠 已思考（用时 {seconds} 秒）",
+        expanded=panel_state.expanded,
+        key=expanded_key,
+        on_change=_remember_thinking_expansion,
+        args=(state_key, expanded_key),
+    ):
         for event in turn.public_thinking_events:
             st.markdown(format_public_thinking_event(event))
 
 
-just_generated_turn_id = st.session_state.pop(_JUST_GENERATED_TURN_KEY, None)
+def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
+    """Persist a historical panel choice without changing its phase."""
+
+    panel_state = st.session_state.get(state_key)
+    if not isinstance(panel_state, ThinkingPanelState):
+        panel_state = complete_thinking(None)
+    st.session_state[state_key] = set_user_expanded(
+        panel_state,
+        bool(st.session_state[expanded_key]),
+    )
+
+
 for turn in episode.turns:
     with st.chat_message("user"):
         st.markdown(turn.student_message)
     with st.chat_message("assistant"):
-        render_public_thinking(
-            turn,
-            expanded=turn.turn_id == just_generated_turn_id,
-        )
+        if current_conversation_id is not None:
+            render_public_thinking(
+                turn,
+                current_conversation_id=current_conversation_id,
+            )
         st.markdown(turn.teacher_output.response)
         render_turn_token_usage(turn)
         render_turn_details(turn)
@@ -813,6 +849,16 @@ if message:
         st.stop()
 
     with st.chat_message("assistant"):
+        thinking_state_key = thinking_key(
+            target_conversation_id,
+            len(episode.turns) + 1,
+        )
+        previous_thinking_state = st.session_state.get(thinking_state_key)
+        if not isinstance(previous_thinking_state, ThinkingPanelState):
+            previous_thinking_state = None
+        st.session_state[thinking_state_key] = begin_thinking(
+            previous_thinking_state
+        )
         progress_status = st.status(
             "🧠 思考中…（已用时 0 秒）",
             expanded=True,
@@ -831,6 +877,9 @@ if message:
                 ),
             )
         except (DeepSeekError, ValueError) as exc:
+            st.session_state[thinking_state_key] = fail_thinking(
+                st.session_state[thinking_state_key]
+            )
             live_thinking.fail()
             st.error(str(exc))
         else:
@@ -846,11 +895,12 @@ if message:
                 history_save_error = str(exc)
             if history_save_error:
                 st.warning(f"历史记录保存失败：{history_save_error}")
+            st.session_state[thinking_state_key] = complete_thinking(
+                st.session_state[thinking_state_key]
+            )
             live_thinking.complete(turn.backend_total_seconds)
             display_started = perf_counter()
             st.write_stream(iter_display_chunks(turn.teacher_output.response))
             turn.display_seconds = round(perf_counter() - display_started, 3)
             render_turn_token_usage(turn)
             render_turn_details(turn)
-            st.session_state[_JUST_GENERATED_TURN_KEY] = turn.turn_id
-            st.rerun()

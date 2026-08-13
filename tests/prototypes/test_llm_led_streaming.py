@@ -105,11 +105,40 @@ def test_live_thinking_panel_renders_public_copy_and_updates_elapsed_label():
 
     assert status.lines == ["✓ 找到 4 条可用的本地参考。"]
     assert status.updates[0]["label"] == "🧠 思考中…（已用时 2 秒）"
+    assert "expanded" not in status.updates[0]
     assert status.updates[-1] == {
-        "label": "🧠 已思考（用时 7 秒）",
+        "label": "备课完成 · 7秒",
         "state": "complete",
-        "expanded": True,
+        "expanded": False,
     }
+
+
+def test_live_thinking_panel_completion_updates_expansion_only_once():
+    from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
+
+    class FakeStatus:
+        def __init__(self):
+            self.updates = []
+
+        def write(self, value):
+            raise AssertionError("complete should not append content")
+
+        def update(self, **kwargs):
+            self.updates.append(kwargs)
+
+    status = FakeStatus()
+    panel = LiveThinkingPanel(status, clock=lambda: 1.0)
+
+    panel.complete(6.8)
+    panel.complete(9.2)
+
+    assert status.updates == [
+        {
+            "label": "备课完成 · 7秒",
+            "state": "complete",
+            "expanded": False,
+        }
+    ]
 
 
 def test_live_thinking_panel_failure_never_renders_exception_details():
@@ -179,3 +208,18 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     assert "target_conversation_id" in source
     assert "_get_pending_student_message(episode)" in source
     assert "enable_agent_loop=True" in source
+
+
+def test_streamlit_uses_keyed_thinking_state_without_generation_rerun():
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+
+    assert "thinking_key(current_conversation_id, turn.turn_id)" in source
+    assert "on_change=_remember_thinking_expansion" in source
+    assert "begin_thinking(" in source
+    assert "complete_thinking(" in source
+    assert "fail_thinking(" in source
+    assert "_JUST_GENERATED_TURN_KEY" not in source
+    assert "public_thinking_just_generated_turn_id" not in source
+    assert "st.session_state.pop(_JUST_GENERATED_TURN_KEY" not in source
+    assert "st.session_state[_JUST_GENERATED_TURN_KEY]" not in source
+    assert "            st.rerun()\n" not in source[source.index("if message:") :]

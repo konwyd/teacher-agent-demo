@@ -9,6 +9,11 @@ from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
     format_public_thinking_event,
 )
+from prototypes.llm_led_teacher.thinking_state import (
+    begin_thinking,
+    complete_thinking,
+    fail_thinking,
+)
 
 
 class StatusWriter(Protocol):
@@ -29,6 +34,7 @@ class LiveThinkingPanel:
         self._status = status
         self._clock = clock
         self._started_at = clock()
+        self._state = begin_thinking(None)
 
     def append(self, event: PublicThinkingEvent) -> None:
         self._status.write(format_public_thinking_event(event))
@@ -36,14 +42,22 @@ class LiveThinkingPanel:
         self._status.update(label=f"🧠 思考中…（已用时 {elapsed} 秒）")
 
     def complete(self, total_seconds: float) -> None:
+        completed = complete_thinking(self._state)
+        if completed == self._state:
+            return
+        self._state = completed
         seconds = max(round(total_seconds), 0)
         self._status.update(
-            label=f"🧠 已思考（用时 {seconds} 秒）",
+            label=f"备课完成 · {seconds}秒",
             state="complete",
-            expanded=True,
+            expanded=False,
         )
 
     def fail(self) -> None:
+        failed = fail_thinking(self._state)
+        if failed == self._state:
+            return
+        self._state = failed
         self._status.update(
             label="🧠 思考中断",
             state="error",
