@@ -70,7 +70,9 @@ def test_no_key_uses_mock() -> None:
     assert "[错误]" not in result["response"]
 
 
-def test_with_key_calls_deepseek_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_with_key_calls_deepseek_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """有 key 时必须走 _deepseek_response；用打桩替代真实网络调用。"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "fake-key-for-test")
     calls: list[str] = []
@@ -85,7 +87,9 @@ def test_with_key_calls_deepseek_without_network(monkeypatch: pytest.MonkeyPatch
     assert result["response"] == "canned-llm-reply，你觉得呢？"
 
 
-def test_api_failure_returns_clear_error_not_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_failure_returns_clear_error_not_mock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """API 失败时返回清晰错误，而不是静默降级为 mock 文案。"""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "fake-key-for-test")
 
@@ -132,14 +136,46 @@ def test_chat_json_forwards_optional_max_tokens() -> None:
 
     completions = _RecordingCompletions()
     client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
-    client._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     reply = client.chat_json("system", "user", _ReplySchema, max_tokens=450)
 
     assert reply.text == "ok"
     assert completions.calls[-1]["max_tokens"] == 450
+
+
+def test_local_llama_requests_disable_long_thinking() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(
+        settings=DeepSeekSettings(
+            deepseek_api_key="test-key",
+            deepseek_base_url="http://127.0.0.1:8080/v1",
+        )
+    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    client.chat("system", "user")
+    client.chat_json("system", "user", _ReplySchema)
+
+    expected = {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "reasoning_budget_tokens": 0,
+    }
+    assert [call["extra_body"] for call in completions.calls] == [expected, expected]
+
+
+def test_remote_deepseek_request_does_not_send_llama_options() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    client.chat("system", "user")
+
+    assert "extra_body" not in completions.calls[-1]
 
 
 def test_chat_records_reasoning_usage_without_retaining_raw_reasoning() -> None:
@@ -164,9 +200,7 @@ def test_chat_records_reasoning_usage_without_retaining_raw_reasoning() -> None:
             )
 
     client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
-    client._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=Completions())
-    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
 
     assert client.chat("system", "user", max_tokens=None) == "面向学生的回答"
     assert client.last_chat_metadata == {
@@ -206,9 +240,7 @@ def test_chat_records_context_and_prompt_cache_usage() -> None:
             deepseek_context_window_tokens=524288,
         )
     )
-    client._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=Completions())
-    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
 
     assert client.chat("system", "user") == "面向学生的回答"
     assert client.last_chat_metadata["prompt_tokens"] == 1000
@@ -246,9 +278,7 @@ def test_chat_json_also_records_usage_for_turn_level_aggregation() -> None:
             )
 
     client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
-    client._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=Completions())
-    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
 
     reply = client.chat_json("system", "user", _ReplySchema)
 
@@ -297,7 +327,9 @@ def test_client_uses_timeout_from_environment(monkeypatch: pytest.MonkeyPatch) -
     assert calls[-1]["timeout"] == 300.0
 
 
-def test_explicit_timeout_overrides_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_explicit_timeout_overrides_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.llm import deepseek_client
 
     calls: list[dict] = []

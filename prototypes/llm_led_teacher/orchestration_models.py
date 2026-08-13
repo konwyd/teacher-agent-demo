@@ -160,5 +160,7 @@ class AgentOrchestrationResult(BaseModel):
     observations: list[ToolResult] = Field(default_factory=list)
     trace: list[AgentTraceEvent] = Field(default_factory=list)
     loaded_skills: list[str] = Field(default_factory=list)
+    loaded_skill_guidance: dict[str, str] = Field(default_factory=dict)
     termination_reason: str = ""
     routing_guidance: dict[str, Any] = Field(default_factory=dict)
+    direct_response: str = ""

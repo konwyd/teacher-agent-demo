@@ -65,7 +65,8 @@ _NEGATED_APPLICATION_PATTERN = re.compile(
     r")"
 )
 _CONCEPT_EXPLANATION_PATTERN = re.compile(
-    r"(?:解释|讲解|讲讲|说明).{0,10}(?:公式|概念|定义|原理)"
+    r"(?:解释|讲解|讲讲|说明).{0,20}"
+    r"(?:公式|概念|定义|原理|因素|原因|含义|作用|特点|规律)"
 )
 
 _ANSWER_CONTENT_MARKERS = (

@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Protocol
 
-from app.llm.deepseek_client import DeepSeekClient
+from pydantic import ValidationError
+
+from app.llm.deepseek_client import DeepSeekClient, DeepSeekError
+from prototypes.llm_led_teacher.fast_plan import run_fast_plan
+from prototypes.llm_led_teacher.fast_routing import choose_fast_route
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentActionKind,
     AgentDecision,
@@ -79,10 +83,12 @@ off_topic 必须 subject=null、stage=未知、answer_mode=brief_redirect。
                     ),
                     schema=RequestClassification,
                     temperature=0.0,
-                    max_tokens=700,
+                    max_tokens=320,
                 )
                 return RequestClassification.model_validate(result)
-            except Exception:  # noqa: BLE001 - one repair then safe classification
+            except DeepSeekError:
+                break
+            except (ValidationError, ValueError, TypeError):
                 continue
         return RequestClassification(
             scope=RequestScope.OFF_TOPIC,
@@ -124,7 +130,7 @@ contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“
             user=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             schema=AgentDecision,
             temperature=0.0,
-            max_tokens=900,
+            max_tokens=480,
         )
 
 
@@ -138,17 +144,24 @@ class MultisubjectAgentLoop:
         classifier: Classifier | None = None,
         action_provider: ActionProvider | None = None,
         registry: OrchestrationToolRegistry | None = None,
-        max_iterations: int = 6,
+        max_iterations: int = 4,
+        enable_fast_routing: bool | None = None,
     ) -> None:
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")
         active_client = client
+        uses_default_components = classifier is None and action_provider is None
         if classifier is None or action_provider is None:
             active_client = active_client or DeepSeekClient()
         self.classifier = classifier or RequestClassifier(active_client)
         self.action_provider = action_provider or DeepSeekActionProvider(active_client)
         self.registry = registry or OrchestrationToolRegistry()
         self.max_iterations = max_iterations
+        self.enable_fast_routing = (
+            uses_default_components
+            if enable_fast_routing is None
+            else enable_fast_routing
+        )
 
     def run(
         self,
@@ -159,11 +172,25 @@ class MultisubjectAgentLoop:
         progress_callback: Callable[[str | AgentTraceEvent], None] | None = None,
     ) -> AgentOrchestrationResult:
         self._report_phase(progress_callback, "classification")
-        classification = self.classifier.classify(
-            student_message,
-            problem_context,
-            active_subject,
-            active_stage,
+        fast_route = (
+            choose_fast_route(
+                student_message,
+                problem_context,
+                active_subject,
+                active_stage,
+            )
+            if self.enable_fast_routing
+            else None
+        )
+        classification = (
+            fast_route.classification
+            if fast_route is not None
+            else self.classifier.classify(
+                student_message,
+                problem_context,
+                active_subject,
+                active_stage,
+            )
         )
         classification = self._inherit_continuity(
             classification,
@@ -178,7 +205,14 @@ class MultisubjectAgentLoop:
                 step=0,
                 event_type="classification",
                 summary=f"识别为{classification.stage.value}{subject_label}，{'新题' if classification.is_new_problem else '继续当前题'}",
-                details=classification.model_dump(mode="json"),
+                details={
+                    **classification.model_dump(mode="json"),
+                    "router": (
+                        "deterministic_fast_path"
+                        if fast_route is not None
+                        else "model_classifier"
+                    ),
+                },
             ),
             progress_callback,
         )
@@ -195,6 +229,10 @@ class MultisubjectAgentLoop:
                 trace=trace,
                 termination_reason="off_topic_redirect",
                 routing_guidance={"answer_mode": AnswerMode.BRIEF_REDIRECT.value},
+                direct_response=(
+                    "这个请求不在当前中小学课程辅导范围内。"
+                    "你可以换一个数学、语文、英语、物理等课程学习问题。"
+                ),
             )
 
         self._report_phase(progress_callback, "planning")
@@ -206,6 +244,7 @@ class MultisubjectAgentLoop:
                 "socratic_guidance": "一次推进一个关键步骤，用一个必要问题检查理解。",
                 "error_diagnosis": "指出具体错误证据，再给最小可执行修正。",
                 "concept_explanation": "先讲核心因果，再用贴近学生的例子解释。",
+                "complete_solution": "按明确授权给出完整步骤、关键理由与最终结论。",
             },
         )
         observations = []
@@ -214,6 +253,17 @@ class MultisubjectAgentLoop:
         termination_reason = "iteration_budget_exhausted"
         routing_guidance = {"answer_mode": classification.answer_mode.value}
         teaching_contract: TeachingContract | None = None
+        loaded_skill_guidance: dict[str, str] = {}
+
+        if fast_route is not None:
+            return run_fast_plan(
+                fast_route,
+                runtime,
+                self.registry,
+                student_message,
+                trace,
+                progress_callback,
+            )
 
         for step in range(1, self.max_iterations + 1):
             payload = {
@@ -240,6 +290,8 @@ class MultisubjectAgentLoop:
                     break
                 except Exception as exc:  # noqa: BLE001 - one structured repair
                     action_error = exc
+                    if isinstance(exc, DeepSeekError):
+                        break
                     if action_attempt == 0:
                         self._trace(
                             trace,
@@ -333,6 +385,9 @@ class MultisubjectAgentLoop:
                 skill_name = str(result.data.get("name", ""))
                 if skill_name and skill_name not in loaded_skills:
                     loaded_skills.append(skill_name)
+                    loaded_skill_guidance[skill_name] = str(
+                        result.data.get("content", "")
+                    )
             if result.ok and result.name in {"search_local_knowledge", "search_web"}:
                 rag_context = self._merge_rag(rag_context, result.data)
             hit_count = len(result.data.get("hits", [])) if result.ok else 0
@@ -373,6 +428,7 @@ class MultisubjectAgentLoop:
             observations=observations,
             trace=trace,
             loaded_skills=loaded_skills,
+            loaded_skill_guidance=loaded_skill_guidance,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
         )

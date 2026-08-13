@@ -73,7 +73,7 @@ class SemanticBoundaryAuditor:
                 user=json.dumps(payload, ensure_ascii=False),
                 schema=BoundaryAudit,
                 temperature=0.0,
-                max_tokens=700,
+                max_tokens=320,
             )
             if result.passed and (result.violations or result.audit_error):
                 raise ValueError("passed audit cannot contain violations or audit_error")

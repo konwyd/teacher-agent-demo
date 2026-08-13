@@ -164,7 +164,7 @@ def test_auditor_sends_only_boundary_inputs_as_strict_json():
     call = client.calls[0]
     assert call["schema"] is BoundaryAudit
     assert call["temperature"] == 0.0
-    assert call["max_tokens"] == 700
+    assert call["max_tokens"] == 320
     assert json.loads(call["user"]) == {
         "student_message": "求根公式是什么？",
         "problem_context": "3x^2+2x-11=0",

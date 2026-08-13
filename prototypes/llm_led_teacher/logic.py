@@ -382,6 +382,8 @@ def _teacher_payload(
             mode="json"
         )
         base["loaded_skills"] = orchestration.loaded_skills
+        if orchestration.loaded_skill_guidance:
+            base["loaded_skill_guidance"] = orchestration.loaded_skill_guidance
     if rag is not None and rag.text:
         base["retrieval_reference"] = {
             "content": rag.text,
@@ -480,6 +482,26 @@ def _evidence_level(
     return "unverified"
 
 
+def _generation_token_budget(contract: TeachingContract | None) -> int | None:
+    if contract is None:
+        return None
+    return {
+        TeachingResponseMode.CONCEPT_EXPLANATION: 640,
+        TeachingResponseMode.ONE_STEP: 512,
+        TeachingResponseMode.GUIDED_SOLUTION: 640,
+        TeachingResponseMode.FULL_SOLUTION: 1024,
+        TeachingResponseMode.BRIEF_REDIRECT: 192,
+    }[contract.response_mode]
+
+
+def _requires_semantic_boundary_audit(contract: TeachingContract) -> bool:
+    return contract.response_mode in {
+        TeachingResponseMode.CONCEPT_EXPLANATION,
+        TeachingResponseMode.ONE_STEP,
+        TeachingResponseMode.GUIDED_SOLUTION,
+    }
+
+
 def _chat_teaching_turn(
     client: StructuredTeacherClient,
     system: str,
@@ -504,6 +526,8 @@ def _repair(
     payload: str,
     draft: TeacherResponse,
     warnings: list[str],
+    *,
+    max_tokens: int | None,
 ) -> TeacherResponse:
     repair_system = (
         _SYSTEM_PROMPT
@@ -524,7 +548,7 @@ def _repair(
         repair_system,
         repair_payload,
         temperature=0.2,
-        max_tokens=None,
+        max_tokens=max_tokens,
     )
 
 
@@ -699,20 +723,40 @@ def run_turn(
         rag,
         orchestration_result,
     )
-    enter_stage("generating")
-    output = _chat_teaching_turn(
-        active_client,
-        _SYSTEM_PROMPT,
-        payload,
-        temperature=0.4,
-        max_tokens=None,
+    contract = (
+        orchestration_result.teaching_contract
+        if orchestration_result is not None
+        else None
     )
-    model_generation_metadata = dict(getattr(active_client, "last_chat_metadata", {}) or {})
+    generation_max_tokens = _generation_token_budget(contract)
+    enter_stage("generating")
+    if orchestration_result is not None and orchestration_result.direct_response:
+        output = TeacherResponse(response=orchestration_result.direct_response)
+        model_generation_metadata = {}
+    else:
+        output = _chat_teaching_turn(
+            active_client,
+            _SYSTEM_PROMPT,
+            payload,
+            temperature=0.4,
+            max_tokens=generation_max_tokens,
+        )
+        model_generation_metadata = dict(
+            getattr(active_client, "last_chat_metadata", {}) or {}
+        )
     draft_character_count = len(output.response)
-    enter_stage("auditing")
+    verifier_applicable = LinearEquationVerifier().supports(
+        VerificationRequest(problem_context=episode.problem_context)
+    )
+    needs_semantic_audit = bool(
+        contract is not None and _requires_semantic_boundary_audit(contract)
+    )
+    if needs_semantic_audit or verifier_applicable or orchestration_result is None:
+        enter_stage("auditing")
     boundary_audit: BoundaryAudit | None = None
     boundary_auditor: SemanticBoundaryAuditor | None = None
-    if orchestration_result is not None:
+    if needs_semantic_audit:
+        assert orchestration_result is not None
         boundary_auditor = SemanticBoundaryAuditor(active_client)
         boundary_audit = boundary_auditor.audit(
             clean_message,
@@ -720,9 +764,6 @@ def run_turn(
             orchestration_result.teaching_contract,
             output.response,
         )
-    verifier_applicable = LinearEquationVerifier().supports(
-        VerificationRequest(problem_context=episode.problem_context)
-    )
     extracted_equations = (
         mc.find_equations(output.response) if verifier_applicable else []
     )
@@ -761,13 +802,18 @@ def run_turn(
     boundary_fallback_reason = ""
     if repair_reasons:
         enter_stage("repairing")
-        output = _repair(active_client, payload, output, repair_reasons)
+        output = _repair(
+            active_client,
+            payload,
+            output,
+            repair_reasons,
+            max_tokens=generation_max_tokens,
+        )
         repair_performed = True
         model_generation_metadata = dict(
             getattr(active_client, "last_chat_metadata", {}) or {}
         )
-        if orchestration_result is not None:
-            assert boundary_auditor is not None
+        if orchestration_result is not None and boundary_auditor is not None:
             post_repair_boundary_audit = boundary_auditor.audit(
                 clean_message,
                 episode.problem_context,

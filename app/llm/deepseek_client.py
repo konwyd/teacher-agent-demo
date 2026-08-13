@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from typing import Type, TypeVar
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -83,6 +84,22 @@ class DeepSeekClient:
             max_retries=max_retries,
         )
 
+    def _local_llama_extra_body(self) -> dict[str, object] | None:
+        """Disable long reasoning only for a local llama.cpp-compatible server."""
+
+        host = urlparse(self.settings.deepseek_base_url).hostname
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            return None
+        return {
+            "chat_template_kwargs": {"enable_thinking": False},
+            "reasoning_budget_tokens": 0,
+        }
+
+    def _apply_local_llama_options(self, request_args: dict[str, object]) -> None:
+        extra_body = self._local_llama_extra_body()
+        if extra_body is not None:
+            request_args["extra_body"] = extra_body
+
     def _record_response_metadata(
         self,
         resp: object,
@@ -96,9 +113,7 @@ class DeepSeekClient:
         usage = getattr(resp, "usage", None)
         completion_details = getattr(usage, "completion_tokens_details", None)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        reasoning_tokens = int(
-            getattr(completion_details, "reasoning_tokens", 0) or 0
-        )
+        reasoning_tokens = int(getattr(completion_details, "reasoning_tokens", 0) or 0)
         metadata: dict[str, object] = {
             "finish_reason": getattr(choice, "finish_reason", "") or "",
             "completion_tokens": completion_tokens,
@@ -175,6 +190,7 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
+            self._apply_local_llama_options(request_args)
             resp = self._client.chat.completions.create(
                 **request_args,
             )
@@ -216,6 +232,7 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
+            self._apply_local_llama_options(request_args)
             resp = self._client.chat.completions.create(
                 **request_args,
             )
