@@ -56,6 +56,7 @@ def test_linear_equation_verifier_declines_another_math_domain() -> None:
         "x²=4",
         "x*x=4",
         "x·x=4",
+        "x⋅x=4",
         "1/x=2",
         "1/(x+1)=2",
         "x(x+1)=2",

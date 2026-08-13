@@ -249,11 +249,21 @@ def test_negation_window_does_not_cross_into_later_explicit_request() -> None:
         "我不想要完整解答，只给一个提示",
         "我不想在还没理清每个符号和条件之前就看到你把全部计算过程展开成完整解答",
         "完整解答就不要了，给我一个提示",
+        "完整解答就不要了给提示",
+        "完整解答就不要了只给一个提示",
         "请完整解答，但是我改主意了，完整解答就不要了",
     ],
 )
 def test_last_full_solution_mention_is_negated_clause_aware(message: str) -> None:
     assert has_explicit_full_solution_request(message) is False
+
+    normalized = normalize_teaching_contract(
+        _full_solution_contract(),
+        message,
+        _math_classification(),
+    )
+    assert normalized.response_mode is not TeachingResponseMode.FULL_SOLUTION
+    assert normalized.may_reveal_final_answer is False
 
 
 @pytest.mark.parametrize(

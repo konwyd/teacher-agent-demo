@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from fractions import Fraction
@@ -25,7 +26,7 @@ Side = tuple[Fraction, Fraction]
 Equation = tuple[Side, Side]
 
 _FULLWIDTH = str.maketrans({
-    "＋": "+", "－": "-", "＝": "=", "×": "*", "·": "*", "÷": "/", "．": ".", "（": "(", "）": ")",
+    "＋": "+", "－": "-", "＝": "=", "×": "*", "·": "*", "⋅": "*", "∙": "*", "÷": "/", "．": ".", "（": "(", "）": ")",
     "Ｘ": "x", "ｘ": "x", "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
     "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
 })
@@ -67,7 +68,12 @@ def _normalize(text: str) -> str:
 def has_unsupported_linear_syntax(text: str) -> bool:
     """Return whether raw text is outside the linear-equation support domain."""
 
-    return bool(_UNSUPPORTED_EQUATION_SYNTAX.search(_normalize(text)))
+    normalized = _normalize(text)
+    return bool(_UNSUPPORTED_EQUATION_SYNTAX.search(normalized)) or any(
+        unicodedata.category(character) == "Sm"
+        and character not in _MATH_CHARS
+        for character in normalized
+    )
 
 
 def fmt_frac(f: Fraction) -> str:

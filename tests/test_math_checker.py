@@ -19,6 +19,7 @@ def test_nonlinear_equations_are_never_truncated_into_linear_equations() -> None
         "x²=4",
         "x*x=4",
         "x·x=4",
+        "x⋅x=4",
         "1/x=2",
         "1/(x+1)=2",
         "x(x+1)=2",
