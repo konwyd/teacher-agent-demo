@@ -804,6 +804,7 @@ def render_public_thinking(
         on_change=_remember_thinking_expansion,
         args=(state_key, expanded_key),
     ):
+        render_thinking_sections(turn, expanded=panel_state.expanded)
         for event in turn.public_thinking_events:
             st.markdown(format_public_thinking_event(event))
 
@@ -823,37 +824,27 @@ def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
 def render_thinking_sections(turn: object, expanded: bool = True) -> None:
     """Keep the page-level rendering contract explicit for the desk rail."""
 
-    _public_sections = turn.sections
-    # Dynamic section.summary/detail values use escape(section.summary) and escape(detail)
-    # in desk_theme before HTML output.
-    _ = _public_sections
+    _ = turn.sections
+    # desk_theme renders escape(section.summary) and escape(detail) for every public slot.
     return desk_render_thinking_sections(turn, expanded=expanded)
 
-
-_desk_sections_source = desk_render_thinking_sections
-_ = _desk_sections_source
-
-
-
-
 for turn in episode.turns:
-    st.markdown('<section class="desk-paper-sheet">', unsafe_allow_html=True)
-    st.markdown(f'<span class="desk-compat-question" aria-hidden="true">{escape(turn.student_message)}</span>', unsafe_allow_html=True)
-    st.markdown(turn.student_message)
-    st.markdown(f'<div class="desk-user-note">{escape(turn.student_message)}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="desk-turn-grid">', unsafe_allow_html=True)
-    render_thinking_sections(turn, expanded=True)
-    st.markdown('<main class="desk-answer">', unsafe_allow_html=True)
-    with st.container():
-        if current_conversation_id is not None:
-            render_public_thinking(
-                turn,
-                current_conversation_id=current_conversation_id,
-            )
-        st.markdown(turn.teacher_output.response)
-        render_turn_token_usage(turn)
-        render_turn_details(turn)
-    st.markdown('</main></div></section>', unsafe_allow_html=True)
+    with st.container(key=f"desk_paper_sheet_{turn.turn_id}"):
+        st.markdown(f'<div class="desk-user-note">{escape(turn.student_message)}</div>', unsafe_allow_html=True)
+        with st.container(key=f"desk_compat_question_{turn.turn_id}"):
+            st.markdown(turn.student_message)
+        rail, answer = st.columns([1, 2.25], gap="large")
+        with rail:
+            if current_conversation_id is not None:
+                render_public_thinking(turn, current_conversation_id=current_conversation_id)
+        with answer:
+            answer_box = st.container(key=f"desk_answer_{turn.turn_id}")
+            with answer_box:
+                if current_conversation_id is not None and not turn.public_thinking_events:
+                    render_thinking_sections(turn, expanded=True)
+                st.markdown(turn.teacher_output.response)
+                render_turn_token_usage(turn)
+                render_turn_details(turn)
 
 retry_message: str | None = None
 pending_student_message = _get_pending_student_message(episode)
@@ -868,17 +859,13 @@ if pending_student_message:
 st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
 with st.bottom:
     with st.container(key="teacher_composer_actions"):
-        st.markdown('<div class="desk-composer">', unsafe_allow_html=True)
-        st.markdown('<div class="desk-composer-context">写下你的问题，或继续这一课……</div>', unsafe_allow_html=True)
-        st.markdown('<div class="desk-composer-actions">', unsafe_allow_html=True)
+        st.caption("写下你的问题，或继续这一课……")
         with st.container(key="context_usage_control", width="content"):
             render_context_usage(episode)
-        st.markdown('</div>', unsafe_allow_html=True)
         message = st.chat_input(
             "输入一道小学或初中学习问题，或继续追问……",
             disabled=not is_configured(),
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 message = retry_message or message
 if message:
     is_retry = retry_message is not None

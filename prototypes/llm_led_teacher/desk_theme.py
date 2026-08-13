@@ -37,8 +37,7 @@ body,
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
 [data-testid="stStatusWidget"],
-header[data-testid="stHeader"],
-#MainMenu,
+    #MainMenu,
 footer {
     display: none !important;
 }
@@ -256,6 +255,15 @@ footer {
     font-size: .72rem;
     margin: .25rem 0 .4rem;
     padding: .1rem 0 .1rem .72rem;
+}
+.desk-thinking-card { border-bottom: 1px dashed rgba(23,41,71,.13); margin: 0 0 .72rem; padding: 0 0 .65rem; }
+.desk-thinking-card:last-child { border-bottom: 0; margin-bottom: 0; }
+.desk-thinking-card-title { color: var(--desk-ink); font-weight: 740; letter-spacing: .09em; }
+.desk-thinking-card-summary { color: var(--desk-ink-soft); line-height: 1.55; margin: .3rem 0; }
+.desk-thinking-card-detail { line-height: 1.5; margin: .16rem 0; }
+.st-key-desk_compat_question_1,
+[class*="st-key-desk_compat_question_"] {
+    display: none;
 }
 .desk-thinking-rail.is-collapsed {
     border-left-color: rgba(61,118,100,.45);
