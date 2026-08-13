@@ -31,6 +31,9 @@ _FULLWIDTH = str.maketrans({
 })
 
 _MATH_CHARS = set("0123456789xX+-*/=.() ")
+_MATH_CONTINUITY_SYMBOLS = frozenset("√∛∜")
+_MATH_FUNCTION_SUFFIX = re.compile(r"(?:sin|cos|tan|log|ln)$", re.IGNORECASE)
+_MATH_FUNCTION_PREFIX = re.compile(r"^(?:sin|cos|tan|log|ln)", re.IGNORECASE)
 _UNSUPPORTED_EQUATION_SYNTAX = re.compile(
     r"(?:"
     r"\*\*|\^|[²³⁴⁵⁶⁷⁸⁹]"
@@ -180,6 +183,23 @@ def format_equation(eq: Equation) -> str:
     return f"{format_side(eq[0])} = {format_side(eq[1])}"
 
 
+def _has_unsupported_candidate_adjacency(
+    text: str,
+    start: int,
+    end: int,
+) -> bool:
+    """Reject a parseable tail that was cut off from a math operator/function."""
+
+    left = text[:start]
+    right = text[end:]
+    return bool(
+        (left and left[-1] in _MATH_CONTINUITY_SYMBOLS)
+        or (right and right[0] in _MATH_CONTINUITY_SYMBOLS)
+        or _MATH_FUNCTION_SUFFIX.search(left)
+        or _MATH_FUNCTION_PREFIX.match(right)
+    )
+
+
 def extract_equation(text: str) -> Optional[str]:
     """从自然语言消息中抽取第一个可解析的方程，返回规范格式（如 '3x + 6 = 10'）。"""
     t = _normalize(text)
@@ -194,6 +214,8 @@ def extract_equation(text: str) -> Optional[str]:
         r = i + 1
         while r < len(t) and t[r] in _MATH_CHARS and t[r] != "=":
             r += 1
+        if _has_unsupported_candidate_adjacency(t, l, r):
+            continue
         candidate = t[l:r].strip()
         parsed = _parse_candidate(candidate)
         if parsed is not None:
@@ -222,6 +244,9 @@ def find_equations(text: str) -> list[str]:
             r = i + 1
             while r < len(t) and t[r] in _MATH_CHARS and t[r] != "=":
                 r += 1
+            if _has_unsupported_candidate_adjacency(t, l, r):
+                i = r
+                continue
             parsed = _parse_candidate(t[l:r].strip())
             if parsed is not None:
                 eq = format_equation(parsed)
@@ -538,6 +563,9 @@ def _find_equations_with_pos(text: str) -> list[tuple[int, str]]:
             r = i + 1
             while r < len(t) and t[r] in _MATH_CHARS and t[r] != "=":
                 r += 1
+            if _has_unsupported_candidate_adjacency(t, l, r):
+                i = r
+                continue
             parsed = _parse_candidate(t[l:r].strip())
             if parsed is not None:
                 found.append((l, format_equation(parsed)))
