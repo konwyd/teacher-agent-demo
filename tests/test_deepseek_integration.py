@@ -142,6 +142,40 @@ def test_chat_json_forwards_optional_max_tokens() -> None:
     assert completions.calls[-1]["max_tokens"] == 450
 
 
+def test_local_llama_requests_disable_long_thinking() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(
+        settings=DeepSeekSettings(
+            deepseek_api_key="test-key",
+            deepseek_base_url="http://127.0.0.1:8080/v1",
+        )
+    )
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    client.chat("system", "user")
+    client.chat_json("system", "user", _ReplySchema)
+
+    expected = {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "reasoning_budget_tokens": 0,
+    }
+    assert [call["extra_body"] for call in completions.calls] == [expected, expected]
+
+
+def test_remote_deepseek_request_does_not_send_llama_options() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions()
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    client.chat("system", "user")
+
+    assert "extra_body" not in completions.calls[-1]
+
+
 def test_llama_slot_context_routes_chat_and_resets_after_exit() -> None:
     from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings, llama_slot
 

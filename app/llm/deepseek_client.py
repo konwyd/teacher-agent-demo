@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
 from typing import Iterator, Type, TypeVar
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -106,6 +107,23 @@ class DeepSeekClient:
             max_retries=max_retries,
         )
 
+    def _request_extra_body(self) -> dict[str, object] | None:
+        """Combine local llama.cpp controls with the current KV slot lease."""
+
+        extra_body: dict[str, object] = {}
+        host = urlparse(self.settings.deepseek_base_url).hostname
+        if host in {"127.0.0.1", "localhost", "::1"}:
+            extra_body.update(
+                {
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    "reasoning_budget_tokens": 0,
+                }
+            )
+        slot_extra_body = _request_slot_extra_body()
+        if slot_extra_body is not None:
+            extra_body.update(slot_extra_body)
+        return extra_body or None
+
     def _record_response_metadata(
         self,
         resp: object,
@@ -198,9 +216,9 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
-            slot_extra_body = _request_slot_extra_body()
-            if slot_extra_body is not None:
-                request_args["extra_body"] = slot_extra_body
+            extra_body = self._request_extra_body()
+            if extra_body is not None:
+                request_args["extra_body"] = extra_body
             resp = self._client.chat.completions.create(
                 **request_args,
             )
@@ -242,9 +260,9 @@ class DeepSeekClient:
             }
             if max_tokens is not None:
                 request_args["max_tokens"] = max_tokens
-            slot_extra_body = _request_slot_extra_body()
-            if slot_extra_body is not None:
-                request_args["extra_body"] = slot_extra_body
+            extra_body = self._request_extra_body()
+            if extra_body is not None:
+                request_args["extra_body"] = extra_body
             resp = self._client.chat.completions.create(
                 **request_args,
             )

@@ -443,6 +443,7 @@ class ExerciseRAG:
         query: str,
         topk: int = 3,
         subject: str | None = None,
+        stage: str | None = None,
         exclude_source_file: str | None = None,
     ) -> list[dict[str, Any]]:
         """检索相关练习题（双路混合检索：BM25 + bge-m3 + RRF 融合）"""
@@ -450,6 +451,8 @@ class ExerciseRAG:
         conditions: list[dict[str, Any]] = []
         if subject:
             conditions.append({"subject": subject})
+        if stage:
+            conditions.append({"stage": stage})
         if exclude_source_file:
             conditions.append({"source_file": {"$ne": exclude_source_file}})
         if len(conditions) == 1:
@@ -642,21 +645,37 @@ def retrieve_local_hits(
     if "exercise" in sources:
         exercise = _get_exercise_rag()
         if exercise is not None:
+            exercise_stage = stage if stage in ("小学", "初中") else None
             hits.extend(
                 exercise.retrieve(
                     query,
                     topk=topk,
                     subject=_EXERCISE_SUBJECTS.get(subject_clean, subject_clean),
+                    stage=exercise_stage,
                 )
             )
 
     normalized: list[dict[str, Any]] = []
     for hit in hits:
+        metadata = hit.get("meta", {}) or {}
+        source = hit.get("source")
+        if source not in {"textbook", "exercise"}:
+            continue
+        expected_subject = (
+            _EXERCISE_SUBJECTS.get(subject_clean, subject_clean)
+            if source == "exercise"
+            else subject_clean
+        )
+        if (
+            metadata.get("subject") != expected_subject
+            or metadata.get("stage") != stage
+        ):
+            continue
         normalized.append(
             {
                 "text": hit.get("text", ""),
-                "metadata": hit.get("meta", {}) or {},
-                "source": hit.get("source", "local"),
+                "metadata": metadata,
+                "source": source,
                 "vec_sim": float(hit.get("vec_sim", 0.0)),
                 "bm25_score": float(hit.get("bm25_score", 0.0)),
                 "rrf_normalized": float(hit.get("rrf_normalized", 0.0)),
@@ -668,7 +687,10 @@ def retrieve_local_hits(
         "query": query,
         "filters": {
             "textbook": {"subject": subject_clean, "stage": stage},
-            "exercise": {"subject": _EXERCISE_SUBJECTS.get(subject_clean, subject_clean)},
+            "exercise": {
+                "subject": _EXERCISE_SUBJECTS.get(subject_clean, subject_clean),
+                "stage": stage,
+            },
             "sources": list(sources),
         },
         "hits": normalized[:topk],

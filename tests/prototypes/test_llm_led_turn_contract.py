@@ -1,23 +1,19 @@
 import json
 
-import pytest
-
 from prototypes.llm_led_teacher.logic import (
     PacingMode,
     PrototypeEpisode,
-    PrototypeTurnRecord,
     TurnGuidance,
-    build_orchestration_timings,
     run_turn,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
+    BoundaryAudit,
     RequestClassification,
-    ToolResult,
+    TeachingContract,
 )
-from prototypes.llm_led_teacher.retrieval_policy import RetrievalDecision
 
 
 class _ObservedClient:
@@ -75,6 +71,8 @@ class _ScriptedClient(_ObservedClient):
 
     def chat_json(self, system, user, schema, temperature=0.0, max_tokens=None):
         self.observer_payloads.append(json.loads(user))
+        if schema is BoundaryAudit:
+            return BoundaryAudit(passed=True)
         if isinstance(self.guidance, Exception):
             raise self.guidance
         return self.guidance
@@ -92,124 +90,6 @@ def _no_rag(monkeypatch):
         "prototypes.llm_led_teacher.logic.retrieve_context",
         lambda problem, online_mode: RagContext(source="none"),
     )
-
-
-def test_kv_persistence_restores_after_observer_and_saves_final_teacher_state(
-    monkeypatch,
-):
-    from app.llm.kv_cache import KvCacheIdentity
-
-    _no_rag(monkeypatch)
-    events = []
-
-    class EventClient(_ScriptedClient):
-        def chat_json(self, *args, **kwargs):
-            events.append("observer")
-            return super().chat_json(*args, **kwargs)
-
-        def chat(self, *args, **kwargs):
-            events.append("teacher")
-            return super().chat(*args, **kwargs)
-
-    class Status:
-        def to_metadata(self):
-            return {
-                "kv_persistence_enabled": True,
-                "kv_persistence_slot": 2,
-                "kv_persistence_restore_status": "restored",
-                "kv_persistence_save_status": "saved",
-            }
-
-    class Lease:
-        slot_id = 2
-        status = Status()
-
-        def restore(self):
-            events.append("restore")
-            return True
-
-        def save(self):
-            events.append("save")
-            return True
-
-    class Manager:
-        class Context:
-            def __enter__(self):
-                events.append("lease-enter")
-                return Lease()
-
-            def __exit__(self, *_args):
-                events.append("lease-exit")
-
-        def lease(self, identity):
-            assert identity == KvCacheIdentity("usr_1", "conv_1")
-            return self.Context()
-
-    client = EventClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
-        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
-    )
-    turn = run_turn(
-        PrototypeEpisode(),
-        "2x+9=14，这道题怎么解",
-        client=client,
-        kv_identity=KvCacheIdentity("usr_1", "conv_1"),
-        kv_manager=Manager(),
-    )
-
-    assert events == [
-        "lease-enter",
-        "observer",
-        "restore",
-        "teacher",
-        "save",
-        "lease-exit",
-    ]
-    assert turn.model_generation_metadata["kv_persistence_slot"] == 2
-    assert turn.model_generation_metadata["kv_persistence_save_status"] == "saved"
-
-
-def test_kv_persistence_does_not_save_when_teacher_generation_fails(monkeypatch):
-    from app.llm.kv_cache import KvCacheIdentity
-
-    _no_rag(monkeypatch)
-    events = []
-
-    class Lease:
-        slot_id = 0
-        status = type("Status", (), {"to_metadata": lambda self: {}})()
-
-        def restore(self):
-            events.append("restore")
-
-        def save(self):
-            events.append("save")
-
-    class Manager:
-        @staticmethod
-        def lease(_identity):
-            class Context:
-                def __enter__(self):
-                    return Lease()
-
-                def __exit__(self, *_args):
-                    events.append("lease-exit")
-            return Context()
-
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
-        [],
-    )
-    with pytest.raises(StopIteration):
-        run_turn(
-            PrototypeEpisode(),
-            "2x+9=14，这道题怎么解",
-            client=client,
-            kv_identity=KvCacheIdentity("usr_1", "conv_1"),
-            kv_manager=Manager(),
-        )
-
-    assert events == ["restore", "lease-exit"]
 
 
 def test_correct_single_move_observer_keeps_single_move(monkeypatch):
@@ -279,87 +159,6 @@ def test_run_turn_reports_repair_before_complete(monkeypatch):
         "complete",
     ]
     assert "x=5/2" not in turn.teacher_output.response
-    assert any(
-        event.kind.value == "repair" for event in turn.public_thinking_events
-    )
-
-
-def test_turn_persists_public_thinking_and_emits_the_same_events(monkeypatch):
-    _no_rag(monkeypatch)
-    emitted = []
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
-        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
-    )
-
-    turn = run_turn(
-        PrototypeEpisode(),
-        "2x+9=14，这道题怎么解",
-        client=client,
-        thinking_callback=emitted.append,
-    )
-
-    assert emitted == turn.public_thinking_events
-    assert [event.sequence for event in emitted] == list(range(1, len(emitted) + 1))
-    assert any(
-        event.summary == "最终回答已经通过教学内容与节奏审计。"
-        for event in emitted
-    )
-    assert emitted[-1].kind.value == "complete"
-    assert "reasoning_content" not in turn.model_dump_json()
-
-
-def test_old_turn_without_public_thinking_events_still_loads() -> None:
-    payload = {
-        "turn_id": 1,
-        "student_message": "旧问题",
-        "teacher_output": {"response": "旧回答"},
-        "student_verification": {
-            "status": "unable_to_verify",
-            "summary": "旧记录没有公开思考字段。",
-            "verifier_name": "none",
-        },
-        "evidence_level": "unverified",
-    }
-
-    restored = PrototypeTurnRecord.model_validate(payload)
-
-    assert restored.public_thinking_events == []
-    assert restored.sections == []
-    assert restored.retrieval_decision.mode.value == "none"
-
-
-def test_turn_sections_round_trip_without_changing_legacy_events() -> None:
-    payload = {
-        "turn_id": 1,
-        "student_message": "改写这句话",
-        "teacher_output": {"response": "新的开头"},
-        "student_verification": {
-            "status": "not_applicable",
-            "summary": "无需验证",
-            "verifier_name": "none",
-        },
-        "evidence_level": "not_applicable",
-        "sections": [
-            {
-                "kind": "classification",
-                "title": "题意",
-                "summary": "已确认题目与作答目标。",
-                "details": ["语文新题", "把问句改成作文开头"],
-                "status": "completed",
-                "elapsed_seconds": 0.1,
-            }
-        ],
-    }
-
-    restored = PrototypeTurnRecord.model_validate(payload)
-    round_tripped = PrototypeTurnRecord.model_validate(
-        restored.model_dump(mode="json")
-    )
-
-    assert round_tripped.sections == restored.sections
-    assert round_tripped.sections[0].title == "题意"
-    assert round_tripped.public_thinking_events == []
 
 
 def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
@@ -382,7 +181,7 @@ def test_run_turn_records_stage_timings_and_safe_model_summary(monkeypatch):
 
     assert turn.stage_timings_seconds == {
         "observing": 1.0,
-        "local_retrieval": 2.0,
+        "retrieving": 2.0,
         "generating": 4.0,
         "auditing": 1.0,
         "repairing": 5.0,
@@ -542,32 +341,6 @@ def test_progress_callback_failure_does_not_block_teacher_response(monkeypatch):
     )
 
     assert "2x=5" in turn.teacher_output.response
-
-
-def test_thinking_callback_failure_does_not_block_or_truncate_record(monkeypatch):
-    _no_rag(monkeypatch)
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
-        ["先在等式两边同时减去9，得到2x=5。下一步该怎么做？"],
-    )
-
-    def broken_callback(event):
-        raise RuntimeError(f"UI unavailable at {event.sequence}")
-
-    turn = run_turn(
-        PrototypeEpisode(),
-        "2x+9=14，这道题怎么解",
-        client=client,
-        thinking_callback=broken_callback,
-    )
-
-    assert "2x=5" in turn.teacher_output.response
-    assert turn.public_thinking_events[-1].kind.value == "complete"
-    assert any(
-        event.kind.value == "verification"
-        and event.status.value == "warning"
-        for event in turn.public_thinking_events
-    )
 
 
 def test_explicit_full_solution_allows_complete_response_and_final_answer(monkeypatch):
@@ -733,256 +506,523 @@ class _FakeOrchestrator:
         return self.result
 
 
-class _FixedOrchestrator:
-    def __init__(self, result: AgentOrchestrationResult) -> None:
-        self.result = result
+class _ContractTurnClient:
+    def __init__(self, drafts, audits, *, record_usage=False):
+        self.drafts = iter(drafts)
+        self.audits = iter(audits)
+        self.record_usage = record_usage
+        self.teacher_payloads = []
+        self.repair_payloads = []
+        self.requested_schemas = []
+        self.chat_calls = 0
+        self.usage_history = []
 
-    def run(self, *args, **kwargs) -> AgentOrchestrationResult:
-        return self.result
+    def _record_usage(self, kind):
+        if not self.record_usage:
+            return
+        self.usage_history.append(
+            {
+                "prompt_tokens": 10,
+                "prompt_cache_hit_tokens": 2,
+                "prompt_cache_miss_tokens": 8,
+                "completion_tokens": 5,
+                "response_tokens": 4,
+                "reasoning_tokens": 1,
+                "total_tokens": 15,
+                "context_used_tokens": 15,
+                "context_window_tokens": 524288,
+                "cache_usage_available": True,
+                "finish_reason": "stop",
+                "kind": kind,
+            }
+        )
 
+    def chat_json(self, system, user, schema, temperature=0.0, max_tokens=None):
+        self.requested_schemas.append(schema)
+        result = next(self.audits)
+        self._record_usage("audit")
+        if isinstance(result, Exception):
+            raise result
+        return result
 
-def test_creative_turn_records_no_rag_and_no_repair_call(monkeypatch) -> None:
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
-        ["可以从画面、情绪和悬念三个方向来写。你更喜欢哪一种？"],
-    )
-    orchestration = AgentOrchestrationResult(
-        classification=RequestClassification(
-            scope="k9",
-            subject="语文",
-            stage="初中",
-            is_new_problem=True,
-            answer_mode="guided",
-            reason="作文创作指导",
-        ),
-        rag_context=RagContext(source="none"),
-        retrieval_decision=RetrievalDecision(
-            mode="none",
-            reason="创作指导无需外部资料",
-            confidence=1.0,
-        ),
-    )
-
-    turn = run_turn(
-        PrototypeEpisode(),
-        "把这句话润色成作文开头",
-        client=client,
-        orchestrator=_FixedOrchestrator(orchestration),
-    )
-
-    assert turn.retrieval_decision.mode.value == "none"
-    assert turn.rag_hits == []
-    assert "local_retrieval" not in turn.stage_timings_seconds
-    assert "web_retrieval" not in turn.stage_timings_seconds
-    assert turn.repair_performed is False
-
-
-def test_agent_turn_persists_four_safe_specific_public_sections() -> None:
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
-        ["可以从画面、情绪和悬念三个方向来写。你更喜欢哪一种？"],
-    )
-    orchestration = AgentOrchestrationResult(
-        classification=RequestClassification(
-            scope="k9",
-            subject="语文",
-            stage="初中",
-            is_new_problem=True,
-            answer_mode="guided",
-            reason="PRIVATE CLASSIFIER REASON",
-        ),
-        rag_context=RagContext(source="none"),
-        retrieval_decision=RetrievalDecision(
-            mode="none",
-            reason="创作指导无需外部资料",
-            confidence=1.0,
-        ),
-    )
-
-    turn = run_turn(
-        PrototypeEpisode(),
-        "把这句话润色成作文开头",
-        client=client,
-        orchestrator=_FixedOrchestrator(orchestration),
-    )
-
-    assert [section.title for section in turn.sections] == [
-        "题意",
-        "写法",
-        "资料",
-        "成稿",
-    ]
-    assert turn.sections[0].details == ["语文新题", "引导完成当前题目"]
-    assert turn.sections[1].details == [
-        "先确认题意，再分步讲解",
-        "当前题型暂无确定性验证，回答将保留必要的不确定性说明。"
-    ]
-    assert turn.sections[2].details == ["未使用 RAG", "创作指导无需外部资料"]
-    assert turn.sections[3].details == [
-        "先给结论，再解释依据",
-        "成稿已通过内容与节奏审计",
-    ]
-    assert "PRIVATE CLASSIFIER REASON" not in repr(turn.sections)
+    def chat(self, system, user, temperature=0.0, max_tokens=None):
+        self.chat_calls += 1
+        payload = json.loads(user)
+        if "turn_context" in payload:
+            self.repair_payloads.append(payload)
+        else:
+            self.teacher_payloads.append(payload)
+        result = next(self.drafts)
+        self._record_usage("generation")
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
-def test_agent_turn_keeps_strategy_structure_tool_metrics_and_repair_audit() -> None:
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
-        [
-            "两边减9得到2x=5，再除以2得到x=5/2。你会验算吗？",
-            "先在等式两边同时减去9，得到2x=5。下一步该怎么做？",
-        ],
-    )
-    orchestration = AgentOrchestrationResult(
+class _UsageOrchestrator(_FakeOrchestrator):
+    def __init__(self, result, client):
+        super().__init__(result)
+        self.client = client
+
+    def run(self, *args, **kwargs):
+        self.client._record_usage("planning")
+        return super().run(*args, **kwargs)
+
+
+def _concept_formula_result():
+    return AgentOrchestrationResult(
         classification=RequestClassification(
             scope="k9",
             subject="数学",
             stage="初中",
-            is_new_problem=True,
+            is_new_problem=False,
+            answer_mode="complete",
+            reason="student asks for a formula concept",
+        ),
+        teaching_contract=TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释求根公式本身",
+            allowed_content=["通用公式", "符号含义"],
+            forbidden_content=["代入本题", "最终答案"],
+            may_apply_to_active_problem=False,
+            may_reveal_final_answer=False,
+            reason="student requested a concept explanation only",
+        ),
+        rag_context=RagContext(source="none"),
+        termination_reason="model_finished",
+    )
+
+
+def test_agent_contract_audits_repairs_and_normalizes_formula():
+    audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission", "final_answer_leak"],
+        evidence=["草稿把公式代入了当前题"],
+        repair_instructions=["删除本题代入和答案"],
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "通用公式是：\n\n[ x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a} ]\n\n代入本题得到 x=...",
+            "通用公式是：\n\n[ x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a} ]\n\n其中 a、b、c 是系数。",
+        ],
+        audits=[audit, BoundaryAudit(passed=True)],
+    )
+    episode = PrototypeEpisode(
+        problem_context="3x^2+2x-11=0",
+        active_subject="数学",
+        active_stage="初中",
+    )
+
+    turn = run_turn(
+        episode,
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    assert "代入本题" not in turn.teacher_output.response
+    assert "$$x=\\frac" in turn.teacher_output.response
+    assert turn.repair_performed is True
+    assert turn.teaching_contract == _concept_formula_result().teaching_contract
+    assert turn.boundary_audit == audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == ""
+    assert turn.formula_normalized is True
+    assert client.teacher_payloads[0]["teaching_contract"]["response_mode"] == "concept_explanation"
+    assert client.repair_payloads[0]["turn_context"]["teaching_contract"] == client.teacher_payloads[0]["teaching_contract"]
+    assert client.repair_payloads[0]["must_fix"] == ["删除本题代入和答案"]
+
+
+def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
+    result = AgentOrchestrationResult(
+        classification=RequestClassification(
+            scope="k9",
+            subject="数学",
+            stage="初中",
+            is_new_problem=False,
             answer_mode="guided",
-            reason="PRIVATE CLASSIFIER REASON",
+            reason="continue active problem",
         ),
-        rag_context=RagContext(
-            source="local",
-            hits=[
-                {"document": "PRIVATE DOCUMENT 1"},
-                {"document": "PRIVATE DOCUMENT 2"},
-            ],
+        teaching_contract=TeachingContract(
+            response_mode="one_step",
+            requested_target="只推进下一步",
+            allowed_content=["一个步骤"],
+            forbidden_content=["最终答案"],
+            may_apply_to_active_problem=True,
+            may_reveal_final_answer=False,
+            reason="student did not request the full solution",
         ),
-        retrieval_decision=RetrievalDecision(
-            mode="local",
-            reason="需要课程内定义",
-            confidence=1.0,
+        rag_context=RagContext(source="none"),
+        termination_reason="model_finished",
+    )
+    audit = BoundaryAudit(
+        passed=False,
+        violations=["final_answer_leak"],
+        repair_instructions=["删除最终答案"],
+    )
+    client = _ContractTurnClient(
+        drafts=["先移项，最终答案是 x=2。", "先移项得到2x=4。"],
+        audits=[audit, BoundaryAudit(passed=True)],
+        record_usage=True,
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="2x+3=7"),
+        "下一步呢",
+        client=client,
+        orchestrator=_UsageOrchestrator(result, client),
+    )
+
+    assert client.requested_schemas == [BoundaryAudit, BoundaryAudit]
+    assert turn.observer_raw_guidance.pacing is PacingMode.SINGLE_MOVE
+    assert turn.turn_guidance.pacing is PacingMode.SINGLE_MOVE
+    assert turn.observer_error == "observer_replaced_by_teaching_contract"
+    assert turn.model_generation_metadata["llm_call_count"] == 5
+    assert turn.model_generation_metadata["prompt_tokens"] == 50
+    assert turn.model_generation_metadata["completion_tokens"] == 25
+    assert turn.model_generation_metadata["reasoning_tokens"] == 5
+    assert turn.model_generation_metadata["response_tokens"] == 20
+
+
+def test_agent_advisory_repair_always_runs_post_repair_audit_and_counts_usage():
+    client = _ContractTurnClient(
+        drafts=[
+            "求根公式里的 a 是什么？b 又是什么？",
+            "求根公式中的 a、b、c 表示方程的三个系数。",
+        ],
+        audits=[BoundaryAudit(passed=True), BoundaryAudit(passed=True)],
+        record_usage=True,
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_UsageOrchestrator(_concept_formula_result(), client),
+    )
+
+    assert turn.repair_performed is True
+    assert client.requested_schemas == [BoundaryAudit, BoundaryAudit]
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.model_generation_metadata["llm_call_count"] == 5
+
+
+def test_advisory_repair_failed_second_audit_uses_redacted_fixed_fallback():
+    initial_audit = BoundaryAudit(
+        passed=True,
+        evidence=["INITIAL_REJECTED_EVIDENCE"],
+    )
+    post_repair_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+        evidence=["POST_REJECTED_EVIDENCE"],
+        repair_instructions=["POST_REPAIR_RAW_TEXT"],
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "求根公式里的 a 是什么？b 又是什么？",
+            "令三个系数分别取当前题中的数值即可得到结果。",
+        ],
+        audits=[initial_audit, post_repair_audit],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    serialized = turn.model_dump_json()
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission"
+    )
+    assert "三个系数分别取当前题" not in turn.teacher_output.response
+    assert turn.boundary_audit == BoundaryAudit(passed=True)
+    assert turn.post_repair_boundary_audit == BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+    )
+    assert "INITIAL_REJECTED_EVIDENCE" not in serialized
+    assert "POST_REJECTED_EVIDENCE" not in serialized
+    assert "POST_REPAIR_RAW_TEXT" not in serialized
+
+
+def test_boundary_repair_raw_audit_text_is_never_persisted():
+    client = _ContractTurnClient(
+        drafts=["代入本题计算。", "仍把当前题的数值带入公式。"],
+        audits=[
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                evidence=["INITIAL_REJECTED_EVIDENCE"],
+                repair_instructions=["INITIAL_REPAIR_RAW_TEXT"],
+            ),
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                evidence=["POST_REJECTED_EVIDENCE"],
+                repair_instructions=["POST_REPAIR_RAW_TEXT"],
+            ),
+        ],
+    )
+
+    episode = PrototypeEpisode(problem_context="3x^2+2x-11=0")
+    turn = run_turn(
+        episode,
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    serialized = episode.model_dump_json()
+    assert turn.boundary_audit is not None
+    assert turn.boundary_audit.violations == ["applied_without_permission"]
+    assert turn.post_repair_boundary_audit is not None
+    assert turn.post_repair_boundary_audit.violations == [
+        "applied_without_permission"
+    ]
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission"
+    )
+    for sentinel in (
+        "INITIAL_REJECTED_EVIDENCE",
+        "INITIAL_REPAIR_RAW_TEXT",
+        "POST_REJECTED_EVIDENCE",
+        "POST_REPAIR_RAW_TEXT",
+    ):
+        assert sentinel not in serialized
+
+
+def test_agent_hard_recheck_replaces_still_leaking_repair_with_safe_fallback():
+    result = _concept_formula_result()
+    contract = result.teaching_contract.model_copy(
+        update={
+            "forbidden_content": [
+                "代入本题",
+                "最终答案",
+                "不展开当前题的计算",
+            ]
+        }
+    )
+    audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+        repair_instructions=["不要应用到当前题"],
+    )
+    client = _ContractTurnClient(
+        drafts=["代入本题可得结果。", "我仍然代入本题计算。"],
+        audits=[audit, BoundaryAudit(passed=True)],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(
+            result.model_copy(update={"teaching_contract": contract})
         ),
-        trace=[
-            AgentTraceEvent(
-                step=2,
-                event_type="tool_result",
-                tool_name="search_local_knowledge",
-                ok=True,
-                summary="PRIVATE TOOL SUMMARY",
-                elapsed_seconds=0.25,
-                details={
-                    "hit_count": 2,
-                    "system_prompt": "PRIVATE SYSTEM PROMPT",
-                },
-            )
+    )
+
+    assert client.chat_calls == 2
+    assert "代入本题" not in turn.teacher_output.response
+    assert "我仍然代入本题计算" not in turn.teacher_output.response
+    assert "不展开当前题的计算" not in turn.teacher_output.response
+    assert turn.repair_performed is True
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == (
+        "hard_boundary_recheck:applied_without_permission"
+    )
+
+
+def test_agent_audit_transport_failure_repairs_once_and_never_shows_draft():
+    client = _ContractTurnClient(
+        drafts=["代入本题可得答案。", "这里只说明求根公式中各符号的含义。"],
+        audits=[RuntimeError("audit unavailable"), BoundaryAudit(passed=True)],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    assert turn.boundary_audit is not None
+    assert turn.boundary_audit.audit_error == "RuntimeError"
+    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_fallback_reason == ""
+    assert turn.repair_performed is True
+    assert client.chat_calls == 2
+    assert turn.teacher_output.response == "这里只说明求根公式中各符号的含义。"
+
+
+def test_failed_post_repair_audit_replaces_semantic_leak_with_safe_fallback():
+    initial_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission"],
+        repair_instructions=["不要代入当前题"],
+    )
+    post_repair_audit = BoundaryAudit(
+        passed=False,
+        violations=["applied_without_permission", "final_answer_leak"],
+        evidence=["修正版仍写出了当前题系数和判别式"],
+        repair_instructions=["改用不含当前题数据的安全回复"],
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "代入本题计算。",
+            "令 a=3，b=2，c=-11，因此判别式等于136。",
+        ],
+        audits=[initial_audit, post_repair_audit],
+    )
+
+    turn = run_turn(
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
+        client=client,
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
+    )
+
+    assert turn.boundary_audit == initial_audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
+    assert turn.post_repair_boundary_audit == post_repair_audit.model_copy(
+        update={"evidence": [], "repair_instructions": []}
+    )
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_failed:applied_without_permission,final_answer_leak"
+    )
+    assert "a=3" not in turn.teacher_output.response
+    assert "b=2" not in turn.teacher_output.response
+    assert "c=-11" not in turn.teacher_output.response
+    assert "136" not in turn.teacher_output.response
+
+
+def test_post_repair_audit_error_fails_closed_to_safe_fallback():
+    client = _ContractTurnClient(
+        drafts=["代入本题可得答案。", "令 a=3，b=2，c=-11。"],
+        audits=[
+            BoundaryAudit(
+                passed=False,
+                violations=["applied_without_permission"],
+                repair_instructions=["不要代入当前题"],
+            ),
+            RuntimeError("post-repair audit unavailable"),
         ],
     )
 
     turn = run_turn(
-        PrototypeEpisode(),
-        "2x+9=14，这道题怎么解",
+        PrototypeEpisode(problem_context="3x^2+2x-11=0"),
+        "求根公式是什么？",
         client=client,
-        orchestrator=_FixedOrchestrator(orchestration),
+        orchestrator=_FakeOrchestrator(_concept_formula_result()),
     )
 
-    assert [section.title for section in turn.sections] == [
-        "题意",
-        "写法",
-        "资料",
-        "成稿",
-    ]
-    assert turn.sections[0].details == ["数学新题", "引导完成当前题目"]
-    assert turn.sections[1].details == [
-        "先验证学生步骤，再给下一步提示",
-        "当前题型暂无确定性验证，回答将保留必要的不确定性说明。",
-    ]
-    assert turn.sections[2].details == [
-        "使用本地 RAG",
-        "需要课程内定义",
-        "找到 2 条可用的本地参考。 · 0.250 秒",
-        "找到 2 条可用参考",
-    ]
-    assert turn.sections[3].details == [
-        "先回应当前步骤，再给下一步提示",
-        "修正后的成稿已通过审计",
-    ]
-    assert turn.repair_performed is True
-    assert "PRIVATE" not in repr(turn.sections)
-
-
-def test_turn_copies_exact_orchestration_retrieval_decision() -> None:
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
-        ["这条回答用于验证检索决策元数据。"],
+    assert turn.post_repair_boundary_audit is not None
+    assert turn.post_repair_boundary_audit.audit_error == "RuntimeError"
+    assert turn.boundary_fallback_reason == (
+        "post_repair_audit_error:RuntimeError"
     )
-    orchestration = AgentOrchestrationResult(
+    assert "a=3" not in turn.teacher_output.response
+
+
+def test_agent_repair_failure_raises_without_consuming_pending_message():
+    result = AgentOrchestrationResult(
         classification=RequestClassification(
             scope="k9",
-            subject="道法",
+            subject="物理",
             stage="初中",
             is_new_problem=True,
             answer_mode="complete",
-            reason="需要核对当前资料",
+            reason="new physics question",
+        ),
+        teaching_contract=TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释惯性",
+            allowed_content=["概念定义"],
+            forbidden_content=["套用旧数学题"],
+            may_apply_to_active_problem=False,
+            may_reveal_final_answer=False,
+            reason="student requested a concept explanation",
         ),
         rag_context=RagContext(source="none"),
-        retrieval_decision=RetrievalDecision(
-            mode="local_then_web",
-            reason="sentinel current-information decision",
-            confidence=0.37,
-            needs_current_information=True,
-        ),
+        termination_reason="model_finished",
+    )
+    client = _ContractTurnClient(
+        drafts=["未经审计的草稿", RuntimeError("repair unavailable")],
+        audits=[RuntimeError("audit unavailable")],
+    )
+    episode = PrototypeEpisode(
+        problem_context="2x+3=7",
+        previous_verified_step="2x=4",
+        active_subject="数学",
+        active_stage="小学",
+        pending_student_message="惯性是什么？",
+    )
+    orchestrator = _FakeOrchestrator(result)
+
+    try:
+        run_turn(
+            episode,
+            "惯性是什么？",
+            client=client,
+            orchestrator=orchestrator,
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "repair unavailable"
+    else:
+        raise AssertionError("repair failure must reach the pending-message recovery path")
+
+    assert orchestrator.calls[0][:4] == (
+        "2x+3=7",
+        "惯性是什么？",
+        "数学",
+        "小学",
+    )
+    assert episode.problem_context == "2x+3=7"
+    assert episode.previous_verified_step == "2x=4"
+    assert episode.active_subject == "数学"
+    assert episode.active_stage == "小学"
+    assert episode.pending_student_message == "惯性是什么？"
+    assert episode.turns == []
+
+
+def test_normalized_teacher_text_is_reused_in_next_turn_history():
+    result = _concept_formula_result()
+    client = _ContractTurnClient(
+        drafts=[
+            "公式是：\n\n[ x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a} ]",
+            "其中 a、b、c 分别是二次项、一次项和常数项的系数。",
+        ],
+        audits=[BoundaryAudit(passed=True), BoundaryAudit(passed=True)],
+    )
+    orchestrator = _FakeOrchestrator(result)
+    episode = PrototypeEpisode(
+        problem_context="3x^2+2x-11=0",
+        active_subject="数学",
+        active_stage="初中",
     )
 
-    turn = run_turn(
-        PrototypeEpisode(),
-        "今天最新的课程政策是什么？",
+    first = run_turn(
+        episode,
+        "求根公式是什么？",
         client=client,
-        orchestrator=_FixedOrchestrator(orchestration),
+        orchestrator=orchestrator,
     )
-
-    assert turn.retrieval_decision == orchestration.retrieval_decision
-
-
-def test_creative_advisory_alone_does_not_trigger_repair() -> None:
-    client = _ScriptedClient(
-        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
-        ["可以从画面、情绪和悬念三个方向来写。你喜欢哪一种？要试试悬念吗？"],
-    )
-    orchestration = AgentOrchestrationResult(
-        classification=RequestClassification(
-            scope="k9",
-            subject="语文",
-            stage="初中",
-            is_new_problem=True,
-            answer_mode="guided",
-            reason="作文创作指导",
-        ),
-        rag_context=RagContext(source="none"),
-        retrieval_decision=RetrievalDecision(
-            mode="none",
-            reason="创作指导无需外部资料",
-            confidence=1.0,
-        ),
-    )
-
-    turn = run_turn(
-        PrototypeEpisode(),
-        "把这句话润色成作文开头",
+    run_turn(
+        episode,
+        "a、b、c 分别是什么？",
         client=client,
-        orchestrator=_FixedOrchestrator(orchestration),
+        orchestrator=orchestrator,
     )
 
-    assert turn.repair_performed is False
-    assert turn.repair_reasons == []
-    assert client.chat_calls == 1
-
-
-def test_tool_timings_are_not_hidden_inside_routing() -> None:
-    observations = [
-        ToolResult(name="search_local_knowledge", ok=True, elapsed_seconds=1.25),
-        ToolResult(name="search_web", ok=True, elapsed_seconds=2.5),
-    ]
-
-    timings = build_orchestration_timings(
-        total_seconds=4.5,
-        observations=observations,
-    )
-
-    assert timings["routing"] == 0.75
-    assert timings["local_retrieval"] == 1.25
-    assert timings["web_retrieval"] == 2.5
+    persisted = first.teacher_output.response
+    history_text = client.teacher_payloads[1]["conversation_history"][0]["teacher"]
+    assert persisted == history_text
+    assert "$$x=\\frac" in persisted
 
 
 def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
@@ -1008,6 +1048,15 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     orchestrator = _FakeOrchestrator(
         AgentOrchestrationResult(
             classification=classification,
+            teaching_contract=TeachingContract(
+                response_mode="concept_explanation",
+                requested_target="解释受力改变运动状态的原因",
+                allowed_content=["物理概念", "原因说明"],
+                forbidden_content=["套用无关数学题"],
+                may_apply_to_active_problem=False,
+                may_reveal_final_answer=False,
+                reason="student requested a concept explanation",
+            ),
             rag_context=RagContext(
                 source="local",
                 text="力可以改变运动状态",
@@ -1031,10 +1080,6 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     assert episode.active_subject == "物理"
     assert episode.active_stage == "初中"
     assert episode.problem_context == "物体受力后运动状态为什么会改变？"
-    assert any(
-        event.summary == "已确定为初中物理新题。"
-        for event in turn.public_thinking_events
-    )
     assert turn.classification == classification
     assert turn.agent_trace == trace
     assert turn.loaded_skills == ["concept_explanation"]
@@ -1042,6 +1087,71 @@ def test_run_turn_persists_multisubject_classification_and_trace(monkeypatch):
     assert turn.rag_source == "local"
     assert client.teacher_payloads[0]["request_classification"]["subject"] == "物理"
     assert client.teacher_payloads[0]["loaded_skills"] == ["concept_explanation"]
+
+
+def test_agent_turn_records_classification_and_planning_as_distinct_stages() -> None:
+    classification = RequestClassification(
+        scope="k9",
+        subject="物理",
+        stage="初中",
+        is_new_problem=True,
+        answer_mode="complete",
+        reason="new physics question",
+    )
+    classification_event = AgentTraceEvent(
+        step=0,
+        event_type="classification",
+        summary="识别为初中物理新题",
+    )
+    result = AgentOrchestrationResult(
+        classification=classification,
+        teaching_contract=TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释力与运动状态",
+            allowed_content=["物理概念"],
+            forbidden_content=["无关数学题"],
+            may_apply_to_active_problem=False,
+            may_reveal_final_answer=False,
+            reason="student requested a concept explanation",
+        ),
+        rag_context=RagContext(source="none"),
+        trace=[classification_event],
+        termination_reason="model_finished",
+    )
+
+    class ProgressOrchestrator(_FakeOrchestrator):
+        def run(self, *args, progress_callback=None, **kwargs):
+            progress_callback("classification")
+            progress_callback(classification_event)
+            progress_callback("planning")
+            return super().run(*args, progress_callback=progress_callback, **kwargs)
+
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.COMPLETE_RESPONSE),
+        ["力可以改变物体的运动状态。"],
+    )
+    progress: list[str | AgentTraceEvent] = []
+
+    turn = run_turn(
+        PrototypeEpisode(),
+        "力为什么能改变物体的运动状态？",
+        client=client,
+        orchestrator=ProgressOrchestrator(result),
+        progress_callback=progress.append,
+    )
+
+    assert progress == [
+        "classification",
+        classification_event,
+        "planning",
+        "generating",
+        "auditing",
+        "complete",
+    ]
+    assert "classification" in turn.stage_timings_seconds
+    assert "planning" in turn.stage_timings_seconds
+    assert "observing" not in turn.stage_timings_seconds
+    assert "retrieving" not in turn.stage_timings_seconds
 
 
 def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
@@ -1056,6 +1166,15 @@ def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
     orchestrator = _FakeOrchestrator(
         AgentOrchestrationResult(
             classification=classification,
+            teaching_contract=TeachingContract(
+                response_mode="one_step",
+                requested_target="继续当前方程的下一步",
+                allowed_content=["一个有意义的步骤"],
+                forbidden_content=["完整求解", "最终答案"],
+                may_apply_to_active_problem=True,
+                may_reveal_final_answer=False,
+                reason="student is continuing the active problem",
+            ),
             rag_context=RagContext(source="local_empty"),
             termination_reason="model_finished",
             routing_guidance={"answer_mode": "guided"},
@@ -1077,3 +1196,44 @@ def test_agent_loop_keeps_existing_math_verifier_and_audit(monkeypatch):
     assert episode.problem_context == "解方程 2x+3=7"
     assert episode.active_subject == "数学"
     assert turn.claim_audits
+
+
+def test_quadratic_turn_keeps_optional_linear_verifier_neutral() -> None:
+    classification = RequestClassification(
+        scope="k9",
+        subject="数学",
+        stage="初中",
+        is_new_problem=False,
+        answer_mode="complete",
+        reason="quadratic follow-up",
+    )
+    result = _concept_formula_result().model_copy(
+        update={"classification": classification}
+    )
+    client = _ContractTurnClient(
+        drafts=[
+            "令 a=3，b=2，c=-11，先计算判别式："
+            "$$\\Delta=b^2-4ac=136$$"
+        ],
+        audits=[BoundaryAudit(passed=True)],
+    )
+    episode = PrototypeEpisode(
+        problem_context="3x^2+2x-11=0",
+        previous_verified_step="旧的线性证据",
+        active_subject="数学",
+        active_stage="初中",
+    )
+
+    turn = run_turn(
+        episode,
+        "请完整解答并解释为什么",
+        client=client,
+        orchestrator=_FakeOrchestrator(result),
+    )
+
+    assert turn.student_verification.status.value == "not_applicable"
+    assert turn.student_verification.verifier_name == "none"
+    assert turn.extracted_equations == []
+    assert turn.claim_audits == []
+    assert turn.evidence_level == "unverified"
+    assert episode.previous_verified_step == "旧的线性证据"

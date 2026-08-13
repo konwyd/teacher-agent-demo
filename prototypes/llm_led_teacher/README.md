@@ -1,32 +1,61 @@
 # LLM-led Teacher Prototype
 
-This throwaway prototype answers one question: can DeepSeek lead a complete
-multi-turn junior-math lesson while the Agent framework only preserves context
-and verifies the mathematical claims it can deterministically support?
+This prototype asks whether a bounded DeepSeek Agent can lead a multi-turn K9
+lesson while local, testable contracts preserve the active problem and control
+what the student-facing answer may disclose. It deliberately bypasses the legacy
+TeachingPlanner, mastery control, and Pedagogical Graph RAG.
 
-It deliberately bypasses TeachingPlanner, strategy capabilities, Pedagogical
-RAG, and mastery-based control. State is kept only in Streamlit session memory.
-For multi-step problems, the LLM still chooses the teaching move, but one normal
-turn advances only one meaningful step unless the student explicitly requests a
-full solution or prior turns provide evidence of sustained difficulty.
+The 8502 path runs `run_turn(..., enable_agent_loop=True)`. Its Agent replaces
+the experimental Observer as the source of teaching intent: after classifying
+scope, subject, stage, and problem continuity, the bounded loop may load a Skill
+or call guarded local/web knowledge tools, then must submit a `TeachingContract`.
+The contract records one of these response modes plus an explicit target,
+allowed/forbidden content, active-problem application permission, and final-answer
+permission:
 
-The primary LLM call returns student-facing plain text, not research metadata.
-The Agent extracts parseable equations with the existing `math_checker` and
-audits those equations. Unsupported prose claims remain `unverified` and are
-still shown to the student; missing verification never blocks the response.
+- `concept_explanation`: explain the general concept without applying it to the
+  active problem or revealing that problem's answer;
+- `one_step` / `guided_solution`: apply only the bounded help the contract allows;
+- `full_solution`: apply to the active problem and reveal the final answer only
+  after an explicit complete-solution request from the student's original text;
+- `brief_redirect`: answer an off-topic request briefly with zero knowledge-tool
+  calls and invite a return to K9 learning.
 
-An experimental non-blocking LLM observer runs before teaching to detect a new
-active problem and choose `single_move` or `complete_response` pacing. Normal
-turns therefore use two API calls; a hard-audit repair may use a third. Observer
-schema or transport failures fall back locally and never block the plain-text
-teacher response.
+Local policy normalizes the model-proposed permissions from the original student
+message, so the Agent cannot grant itself a wider disclosure scope. The legacy
+`single_move` / `complete_response` `TurnGuidance` remains only as a compatibility
+projection derived from the trusted contract; it is not the authority for the
+8502 Agent path. The old Observer remains available only when the Agent loop is
+explicitly disabled.
 
-Run from the worktree root:
+After teacher generation, the configured local model performs a semantic
+boundary audit against the contract. It checks target, application permission,
+answer disclosure, and step scope; a failed or unavailable audit causes a
+conservative repair and high-confidence literal recheck before display. This is
+**not a universal factual verifier** and an audit pass must not be presented as
+proof that every math, physics, or other subject claim is correct.
 
-```powershell
-$env:DEEPSEEK_API_KEY = "your-key"
-streamlit run prototypes/llm_led_teacher/streamlit_app.py
+Deterministic verification is an optional subject tool. The current adapter
+exposes the existing Fraction-based linear-equation `math_checker`; unsupported
+problems record `not_applicable` or `unable_to_verify` and continue through the
+same teaching-contract boundary. Missing verification never becomes fabricated
+verified evidence and does not block a response.
+
+Before persistence and display, unambiguous model LaTeX delimiters and textbook
+formula blocks are normalized to MathJax-compatible `$...$` / `$$...$$`
+Markdown without modifying fenced code. The normalized teacher text is reused in
+later history. Successful turns are stored in the per-user SQLite conversation
+archive together with the classification, TeachingContract, boundary audit,
+optional verifier result, formula-normalization marker, and the real public
+Agent/Tool trace. The UI re-renders those public events and does not expose
+prompts, private event details, or chain-of-thought.
+
+Run the local 8080/8002/8502 stack from the repository or worktree root:
+
+```bash
+python3 scripts/run_llm_led_teacher.py
 ```
 
-No real API is called by tests. Starting the app and sending a message uses the
-configured DeepSeek API and may incur cost.
+No real model or paid API is called by automated tests. Starting the app and
+sending a message uses the model endpoint selected by the launcher/configuration;
+the standard launcher pins Teacher subprocesses to the local 8080 endpoint.

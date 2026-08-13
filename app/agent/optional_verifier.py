@@ -64,17 +64,20 @@ class LinearEquationVerifier:
     name = "linear_equation_fraction_checker"
 
     def supports(self, request: VerificationRequest) -> bool:
+        if mc.has_unsupported_linear_syntax(request.problem_context):
+            return False
         equations = mc.find_equations(request.problem_context)
-        return len(equations) == 1 and mc.extract_equation(request.problem_context) is not None
+        return len(equations) == 1
 
     def verify(self, request: VerificationRequest) -> VerificationResult:
-        target_equation = mc.extract_equation(request.problem_context)
-        if target_equation is None:
+        if not self.supports(request):
             return VerificationResult(
                 status=VerificationStatus.NOT_APPLICABLE,
                 summary="The problem is outside the linear-equation verifier domain.",
                 verifier_name=self.name,
             )
+        target_equation = mc.extract_equation(request.problem_context)
+        assert target_equation is not None
 
         result = mc.check_step(
             target_equation,

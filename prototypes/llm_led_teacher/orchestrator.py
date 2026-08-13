@@ -5,8 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Protocol
 
-from app.llm.deepseek_client import DeepSeekClient
+from pydantic import ValidationError
+
+from app.llm.deepseek_client import DeepSeekClient, DeepSeekError
+from prototypes.llm_led_teacher.fast_plan import run_fast_plan
+from prototypes.llm_led_teacher.fast_routing import choose_fast_route
 from prototypes.llm_led_teacher.orchestration_models import (
+    AgentActionKind,
+    AgentDecision,
     AgentOrchestrationResult,
     AgentTraceEvent,
     AnswerMode,
@@ -14,16 +20,17 @@ from prototypes.llm_led_teacher.orchestration_models import (
     RequestScope,
     SchoolStage,
     Subject,
+    TeachingContract,
 )
 from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationRuntime,
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
-from prototypes.llm_led_teacher.retrieval_policy import (
-    RetrievalDecision,
-    RetrievalMode,
-    apply_retrieval_guards,
+from prototypes.llm_led_teacher.teaching_policy import (
+    build_safe_teaching_contract,
+    is_concept_request,
+    normalize_teaching_contract,
 )
 
 
@@ -37,8 +44,8 @@ class Classifier(Protocol):
     ) -> RequestClassification: ...
 
 
-class RetrievalProvider(Protocol):
-    def decide(self, payload: dict[str, Any]) -> RetrievalDecision: ...
+class ActionProvider(Protocol):
+    def decide(self, payload: dict[str, Any]) -> AgentDecision: ...
 
 
 class RequestClassifier:
@@ -76,10 +83,12 @@ off_topic 必须 subject=null、stage=未知、answer_mode=brief_redirect。
                     ),
                     schema=RequestClassification,
                     temperature=0.0,
-                    max_tokens=700,
+                    max_tokens=320,
                 )
                 return RequestClassification.model_validate(result)
-            except Exception:  # noqa: BLE001 - one repair then safe classification
+            except DeepSeekError:
+                break
+            except (ValidationError, ValueError, TypeError):
                 continue
         return RequestClassification(
             scope=RequestScope.OFF_TOPIC,
@@ -91,45 +100,68 @@ off_topic 必须 subject=null、stage=未知、answer_mode=brief_redirect。
         )
 
 
-class RetrievalDecisionProvider:
-    _SYSTEM_PROMPT = """你是九年义务教育教师的检索路由器，只判断回答当前请求是否需要外部证据。
-不要回答学生，不要生成教学内容，不要编排自由步骤或工具调用计划。
-mode 只能是 none、local、local_then_web：无需资料选 none；需要教材或题库证据选 local；
-只有需要核对今天、最新、刚发布等时效信息时才选 local_then_web，并设置 needs_current_information=true。
-reason 只写可公开的简短检索理由，不写私有思维链；confidence 表示路由置信度。"""
+class DeepSeekActionProvider:
+    _SYSTEM_PROMPT = """你是有边界的九学科教师 Agent 编排器，不直接回答学生。
+每步只输出一个动作：call_tool 或 finish。可用工具：
+- load_skill(name)
+- inspect_student_context()
+- search_local_knowledge(query, subject, stage, top_k, sources)，其中 sources 只能是 ["textbook","exercise"] 的非空子集
+- search_web(query, subject, stage, evidence_gap)
+
+规则：K9 问题优先查本地教材/题库；只有本地工具成功后且存在具体证据缺口才可联网。
+有相关本地片段即可 finish，不要求凑满五条，也不要用固定相似度阈值替代内容判断。
+同一参数不要重复调用；联网最多一次。reason 只写可公开的简短动作理由，不写思维链。
+finish 必须提交 contract。response_mode 只能是以下五种：
+- concept_explanation：完整解释学生请求的概念，但不得自动套用当前题；
+- one_step：当前多步题只推进一个有意义的步骤；
+- guided_solution：引导解题，但不披露最终答案；
+- full_solution：完整求解当前题；
+- brief_redirect：题外请求的简短范围引导。
+“完整解释所问概念”不等于“完整求解当前题”。只有学生原消息明确要求完整解答或给出答案时，
+contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“怎么解”不构成授权，
+学生说“不要答案”时绝不可披露。finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。"""
 
     def __init__(self, client: DeepSeekClient) -> None:
         self.client = client
 
-    def decide(self, payload: dict[str, Any]) -> RetrievalDecision:
-        return RetrievalDecision.model_validate(
-            self.client.chat_json(
-                system=self._SYSTEM_PROMPT,
-                user=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                schema=RetrievalDecision,
-                temperature=0.0,
-                max_tokens=500,
-            )
+    def decide(self, payload: dict[str, Any]) -> AgentDecision:
+        return self.client.chat_json(
+            system=self._SYSTEM_PROMPT,
+            user=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            schema=AgentDecision,
+            temperature=0.0,
+            max_tokens=480,
         )
 
 
 class MultisubjectAgentLoop:
+    _ACTION_FORMAT_REPAIR = "上次 JSON 不符合 schema，只输出合法 action。"
+
     def __init__(
         self,
         client: DeepSeekClient | None = None,
         *,
         classifier: Classifier | None = None,
-        retrieval_provider: RetrievalProvider | None = None,
+        action_provider: ActionProvider | None = None,
         registry: OrchestrationToolRegistry | None = None,
+        max_iterations: int = 4,
+        enable_fast_routing: bool | None = None,
     ) -> None:
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be positive")
         active_client = client
-        if classifier is None or retrieval_provider is None:
+        uses_default_components = classifier is None and action_provider is None
+        if classifier is None or action_provider is None:
             active_client = active_client or DeepSeekClient()
         self.classifier = classifier or RequestClassifier(active_client)
-        self.retrieval_provider = retrieval_provider or RetrievalDecisionProvider(
-            active_client
-        )
+        self.action_provider = action_provider or DeepSeekActionProvider(active_client)
         self.registry = registry or OrchestrationToolRegistry()
+        self.max_iterations = max_iterations
+        self.enable_fast_routing = (
+            uses_default_components
+            if enable_fast_routing is None
+            else enable_fast_routing
+        )
 
     def run(
         self,
@@ -137,13 +169,28 @@ class MultisubjectAgentLoop:
         student_message: str,
         active_subject: str,
         active_stage: str,
-        progress_callback: Callable[[AgentTraceEvent], None] | None = None,
+        progress_callback: Callable[[str | AgentTraceEvent], None] | None = None,
     ) -> AgentOrchestrationResult:
-        classification = self.classifier.classify(
-            student_message,
-            problem_context,
-            active_subject,
-            active_stage,
+        self._report_phase(progress_callback, "classification")
+        fast_route = (
+            choose_fast_route(
+                student_message,
+                problem_context,
+                active_subject,
+                active_stage,
+            )
+            if self.enable_fast_routing
+            else None
+        )
+        classification = (
+            fast_route.classification
+            if fast_route is not None
+            else self.classifier.classify(
+                student_message,
+                problem_context,
+                active_subject,
+                active_stage,
+            )
         )
         classification = self._inherit_continuity(
             classification,
@@ -158,24 +205,37 @@ class MultisubjectAgentLoop:
                 step=0,
                 event_type="classification",
                 summary=f"识别为{classification.stage.value}{subject_label}，{'新题' if classification.is_new_problem else '继续当前题'}",
-                details=classification.model_dump(mode="json"),
+                details={
+                    **classification.model_dump(mode="json"),
+                    "router": (
+                        "deterministic_fast_path"
+                        if fast_route is not None
+                        else "model_classifier"
+                    ),
+                },
             ),
             progress_callback,
         )
         if classification.scope is RequestScope.OFF_TOPIC:
+            teaching_contract = build_safe_teaching_contract(
+                student_message,
+                classification,
+            )
+            self._trace_contract(trace, 0, teaching_contract, progress_callback)
             return AgentOrchestrationResult(
                 classification=classification,
-                retrieval_decision=RetrievalDecision(
-                    mode=RetrievalMode.NONE,
-                    reason="当前请求无需课程资料",
-                    confidence=1.0,
-                ),
+                teaching_contract=teaching_contract,
                 rag_context=RagContext(source="off_topic"),
                 trace=trace,
                 termination_reason="off_topic_redirect",
                 routing_guidance={"answer_mode": AnswerMode.BRIEF_REDIRECT.value},
+                direct_response=(
+                    "这个请求不在当前中小学课程辅导范围内。"
+                    "你可以换一个数学、语文、英语、物理等课程学习问题。"
+                ),
             )
 
+        self._report_phase(progress_callback, "planning")
         runtime = OrchestrationRuntime(
             classification=classification,
             problem_context=problem_context,
@@ -184,74 +244,151 @@ class MultisubjectAgentLoop:
                 "socratic_guidance": "一次推进一个关键步骤，用一个必要问题检查理解。",
                 "error_diagnosis": "指出具体错误证据，再给最小可执行修正。",
                 "concept_explanation": "先讲核心因果，再用贴近学生的例子解释。",
+                "complete_solution": "按明确授权给出完整步骤、关键理由与最终结论。",
             },
         )
         observations = []
+        loaded_skills: list[str] = []
         rag_context = RagContext(source="none")
+        termination_reason = "iteration_budget_exhausted"
         routing_guidance = {"answer_mode": classification.answer_mode.value}
+        teaching_contract: TeachingContract | None = None
+        loaded_skill_guidance: dict[str, str] = {}
 
-        payload = {
-            "classification": classification.model_dump(mode="json"),
-            "problem_context": problem_context[-1600:],
-            "student_message": student_message[-1200:],
-        }
-        try:
-            decision = apply_retrieval_guards(
-                RetrievalDecision.model_validate(
-                    self.retrieval_provider.decide(payload)
-                ),
-                message=student_message,
-                classification=classification,
-            )
-            termination_reason = "retrieval_routed"
-        except Exception as exc:  # noqa: BLE001 - bounded safe fallback
-            decision = RetrievalDecision(
-                mode=RetrievalMode.NONE,
-                reason="检索路由失败，使用已有知识继续",
-                confidence=0.0,
-            )
-            termination_reason = "provider_error"
-            self._trace(
+        if fast_route is not None:
+            return run_fast_plan(
+                fast_route,
+                runtime,
+                self.registry,
+                student_message,
                 trace,
-                AgentTraceEvent(
-                    step=1,
-                    event_type="fallback",
-                    summary=decision.reason,
-                    ok=False,
-                    details={"error_type": type(exc).__name__},
-                ),
                 progress_callback,
             )
-        else:
+
+        for step in range(1, self.max_iterations + 1):
+            payload = {
+                "classification": classification.model_dump(mode="json"),
+                "problem_context": problem_context[-1600:],
+                "student_message": student_message[-1200:],
+                "observations": [item.model_dump(mode="json") for item in observations],
+                "budgets": {
+                    "remaining_steps": self.max_iterations - step + 1,
+                    "local_calls": len(runtime.local_search_signatures),
+                    "web_calls": runtime.web_search_count,
+                },
+            }
+            decision: AgentDecision | None = None
+            action_error: Exception | None = None
+            for action_attempt in range(2):
+                action_payload = dict(payload)
+                if action_attempt:
+                    action_payload["action_format_repair"] = self._ACTION_FORMAT_REPAIR
+                try:
+                    decision = AgentDecision.model_validate(
+                        self.action_provider.decide(action_payload)
+                    )
+                    break
+                except Exception as exc:  # noqa: BLE001 - one structured repair
+                    action_error = exc
+                    if isinstance(exc, DeepSeekError):
+                        break
+                    if action_attempt == 0:
+                        self._trace(
+                            trace,
+                            AgentTraceEvent(
+                                step=step,
+                                event_type="action_retry",
+                                summary=self._ACTION_FORMAT_REPAIR,
+                                ok=False,
+                                details={"error_type": type(exc).__name__},
+                            ),
+                            progress_callback,
+                        )
+
+            if decision is None:
+                assert action_error is not None
+                termination_reason = "provider_error"
+                self._trace(
+                    trace,
+                    AgentTraceEvent(
+                        step=step,
+                        event_type="fallback",
+                        summary="编排决策失败，使用已有证据安全收口",
+                        ok=False,
+                        details={"error_type": type(action_error).__name__},
+                    ),
+                    progress_callback,
+                )
+                if self._needs_fallback_local_search(
+                    classification,
+                    runtime,
+                    student_message,
+                ):
+                    fallback_arguments = {
+                        "query": student_message[:800],
+                        "subject": classification.subject.value,
+                        "stage": classification.stage.value,
+                        "top_k": 5,
+                        "sources": ["textbook", "exercise"],
+                    }
+                    result = self.registry.execute(
+                        "search_local_knowledge",
+                        fallback_arguments,
+                        runtime,
+                    )
+                    observations.append(result)
+                    if result.ok:
+                        rag_context = self._merge_rag(rag_context, result.data)
+                    hit_count = len(result.data.get("hits", [])) if result.ok else 0
+                    self._trace(
+                        trace,
+                        AgentTraceEvent(
+                            step=step,
+                            event_type="fallback_tool",
+                            summary=(
+                                f"编排降级后执行本地检索，命中 {hit_count} 条"
+                                if result.ok
+                                else f"编排降级本地检索未执行：{result.error}"
+                            ),
+                            tool_name="search_local_knowledge",
+                            ok=result.ok,
+                            elapsed_seconds=result.elapsed_seconds,
+                            details={"hit_count": hit_count, "error": result.error},
+                        ),
+                        progress_callback,
+                    )
+                break
             self._trace(
                 trace,
                 AgentTraceEvent(
-                    step=1,
+                    step=step,
                     event_type="decision",
                     summary=decision.reason,
-                    details=decision.model_dump(mode="json"),
+                    tool_name=decision.tool_name,
                 ),
                 progress_callback,
             )
+            if decision.kind is AgentActionKind.FINISH:
+                termination_reason = "model_finished"
+                teaching_contract = normalize_teaching_contract(
+                    decision.contract,
+                    student_message,
+                    classification,
+                )
+                if decision.plan in {mode.value for mode in AnswerMode}:
+                    routing_guidance["answer_mode"] = decision.plan
+                break
 
-        local_arguments = {
-            "query": student_message,
-            "subject": classification.subject.value,
-            "stage": classification.stage.value,
-            "top_k": 5,
-            "sources": ["textbook", "exercise"],
-        }
-        web_arguments = {
-            "query": student_message,
-            "subject": classification.subject.value,
-            "stage": classification.stage.value,
-            "evidence_gap": decision.reason,
-        }
-
-        def record(result: Any, step: int) -> None:
-            nonlocal rag_context
+            result = self.registry.execute(decision.tool_name, decision.arguments, runtime)
             observations.append(result)
-            if result.ok:
+            if result.ok and result.name == "load_skill":
+                skill_name = str(result.data.get("name", ""))
+                if skill_name and skill_name not in loaded_skills:
+                    loaded_skills.append(skill_name)
+                    loaded_skill_guidance[skill_name] = str(
+                        result.data.get("content", "")
+                    )
+            if result.ok and result.name in {"search_local_knowledge", "search_web"}:
                 rag_context = self._merge_rag(rag_context, result.data)
             hit_count = len(result.data.get("hits", [])) if result.ok else 0
             summary = (
@@ -273,23 +410,69 @@ class MultisubjectAgentLoop:
                 progress_callback,
             )
 
-        if decision.mode in {RetrievalMode.LOCAL, RetrievalMode.LOCAL_THEN_WEB}:
-            local = self.registry.execute(
-                "search_local_knowledge", local_arguments, runtime
+        if teaching_contract is None:
+            teaching_contract = build_safe_teaching_contract(
+                student_message,
+                classification,
             )
-            record(local, 2)
-        if decision.mode is RetrievalMode.LOCAL_THEN_WEB:
-            web = self.registry.execute("search_web", web_arguments, runtime)
-            record(web, 3)
-
+        self._trace_contract(
+            trace,
+            min(self.max_iterations, len(trace)),
+            teaching_contract,
+            progress_callback,
+        )
         return AgentOrchestrationResult(
             classification=classification,
-            retrieval_decision=decision,
+            teaching_contract=teaching_contract,
             rag_context=rag_context,
             observations=observations,
             trace=trace,
+            loaded_skills=loaded_skills,
+            loaded_skill_guidance=loaded_skill_guidance,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
+        )
+
+    @staticmethod
+    def _needs_fallback_local_search(
+        classification: RequestClassification,
+        runtime: OrchestrationRuntime,
+        student_message: str,
+    ) -> bool:
+        return bool(
+            classification.scope is RequestScope.K9
+            and classification.subject is not None
+            and classification.stage is not SchoolStage.UNKNOWN
+            and not runtime.local_search_succeeded
+            and not runtime.local_search_signatures
+            and (
+                classification.is_new_problem
+                or not runtime.problem_context
+                or is_concept_request(student_message)
+            )
+        )
+
+    @classmethod
+    def _trace_contract(
+        cls,
+        trace: list[AgentTraceEvent],
+        step: int,
+        contract: TeachingContract,
+        callback: Callable[[str | AgentTraceEvent], None] | None,
+    ) -> None:
+        cls._trace(
+            trace,
+            AgentTraceEvent(
+                step=step,
+                event_type="teaching_contract",
+                summary=(
+                    f"教学契约已确定：{contract.response_mode.value}；"
+                    f"应用当前题={'是' if contract.may_apply_to_active_problem else '否'}；"
+                    f"披露最终答案={'是' if contract.may_reveal_final_answer else '否'}"
+                ),
+                details=contract.model_dump(mode="json"),
+            ),
+            callback,
         )
 
     @staticmethod
@@ -343,11 +526,22 @@ class MultisubjectAgentLoop:
     def _trace(
         trace: list[AgentTraceEvent],
         event: AgentTraceEvent,
-        callback: Callable[[AgentTraceEvent], None] | None,
+        callback: Callable[[str | AgentTraceEvent], None] | None,
     ) -> None:
         trace.append(event)
         if callback is not None:
             try:
                 callback(event)
+            except Exception:  # noqa: BLE001 - UI progress must not block teaching
+                pass
+
+    @staticmethod
+    def _report_phase(
+        callback: Callable[[str | AgentTraceEvent], None] | None,
+        phase: str,
+    ) -> None:
+        if callback is not None:
+            try:
+                callback(phase)
             except Exception:  # noqa: BLE001 - UI progress must not block teaching
                 pass

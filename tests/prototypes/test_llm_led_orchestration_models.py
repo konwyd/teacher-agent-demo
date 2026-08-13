@@ -4,9 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from prototypes.llm_led_teacher.orchestration_models import (
+    AgentDecision,
     AgentOrchestrationResult,
     AnswerMode,
+    BoundaryAudit,
     RequestClassification,
+    TeachingContract,
+    TeachingResponseMode,
 )
 
 
@@ -72,18 +76,70 @@ def test_off_topic_rejects_subject_or_non_redirect_mode(
         )
 
 
-def test_orchestration_result_loads_legacy_data_with_no_retrieval_default() -> None:
-    result = AgentOrchestrationResult.model_validate(
-        {
-            "classification": {
-                "scope": "k9",
-                "subject": "数学",
-                "stage": "初中",
-                "is_new_problem": True,
-                "answer_mode": "guided",
-                "reason": "数学问题",
-            }
-        }
+def test_concept_contract_cannot_reveal_or_apply_to_active_problem() -> None:
+    with pytest.raises(ValidationError):
+        TeachingContract(
+            response_mode="concept_explanation",
+            requested_target="解释求根公式",
+            allowed_content=["给出通用公式"],
+            forbidden_content=[],
+            may_apply_to_active_problem=True,
+            may_reveal_final_answer=False,
+            reason="concept only",
+        )
+
+
+def test_only_full_solution_may_reveal_final_answer() -> None:
+    with pytest.raises(ValidationError):
+        TeachingContract(
+            response_mode="guided_solution",
+            requested_target="引导解题",
+            may_reveal_final_answer=True,
+            reason="invalid disclosure",
+        )
+
+
+def test_finish_decision_requires_teaching_contract() -> None:
+    with pytest.raises(ValidationError):
+        AgentDecision(kind="finish", reason="done")
+
+
+def test_full_solution_contract_may_reveal_final_answer() -> None:
+    contract = TeachingContract(
+        response_mode="full_solution",
+        requested_target="完整解答当前题",
+        may_apply_to_active_problem=True,
+        may_reveal_final_answer=True,
+        reason="student requested a complete solution",
     )
 
-    assert result.retrieval_decision.mode.value == "none"
+    assert contract.response_mode is TeachingResponseMode.FULL_SOLUTION
+    assert contract.may_reveal_final_answer is True
+
+
+def test_orchestration_result_requires_teaching_contract() -> None:
+    with pytest.raises(ValidationError):
+        AgentOrchestrationResult(
+            classification=RequestClassification(
+                scope="k9",
+                subject="数学",
+                stage="初中",
+                is_new_problem=False,
+                answer_mode="guided",
+                reason="contract is required",
+            )
+        )
+
+
+def test_boundary_audit_serializes_violation_enum_values() -> None:
+    audit = BoundaryAudit(
+        passed=False,
+        violations=["final_answer_leak", "too_many_steps"],
+        evidence=["draft exposed the final answer"],
+        repair_instructions=["remove the final answer"],
+    )
+
+    assert audit.model_dump(mode="json")["violations"] == [
+        "final_answer_leak",
+        "too_many_steps",
+    ]
