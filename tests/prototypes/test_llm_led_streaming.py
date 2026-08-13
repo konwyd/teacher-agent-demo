@@ -246,6 +246,9 @@ def test_digital_teacher_desk_theme_has_paper_ink_and_responsive_contract():
     assert ".desk-thinking-rail" in DESK_THEME_CSS
     assert ".desk-answer" in DESK_THEME_CSS
     assert ".desk-composer" in DESK_THEME_CSS
+    assert '[data-testid="stHeader"]' in DESK_THEME_CSS
+    assert '[data-testid="stBottom"]' in DESK_THEME_CSS
+    assert ".st-key-teacher_composer_controls" in DESK_THEME_CSS
 
 
 def test_streamlit_source_composes_the_desk_without_hiding_functional_controls():
@@ -253,12 +256,11 @@ def test_streamlit_source_composes_the_desk_without_hiding_functional_controls()
 
     assert "from prototypes.llm_led_teacher.desk_theme import" in source
     assert "DESK_THEME_CSS" in source
-    assert "render_brand_header()" in source
     assert "新建一课" in source
-    assert "备课批注" in source
     assert "def render_thinking_sections(" in source
     assert "turn.sections" in source
     assert "escape(section.summary)" in source
     assert "escape(detail)" in source
     assert "st.markdown(turn.teacher_output.response)" in source
+    assert 'key="teacher_composer_controls"' in source
     assert "Deploy" not in source

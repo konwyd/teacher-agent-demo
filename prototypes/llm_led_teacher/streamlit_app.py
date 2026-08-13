@@ -378,7 +378,15 @@ elif "prototype_episode" not in st.session_state:
 episode: PrototypeEpisode = st.session_state.prototype_episode
 
 with st.sidebar:
-    st.markdown("### ✎ Teacher Agent · 新建一课")
+    st.markdown(
+        """
+        <div class="desk-directory">
+          <div class="desk-directory-kicker">Teacher Agent</div>
+          <div class="desk-directory-title">数字教师书桌 · 新建一课</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     current_conversation_id = st.session_state.get("prototype_conversation_id")
     st.button(
         "开启新对话",
@@ -448,20 +456,6 @@ if restore_error:
 
 render_brand_header()
 st.caption("备课批注 · 题意 / 写法 / 资料 / 成稿")
-current_title = (
-    _conversation_title(episode)
-    if current_conversation_id
-    else "新对话"
-)
-st.markdown(
-    f'<div class="teacher-page-title">{escape(current_title)}</div>',
-    unsafe_allow_html=True,
-)
-st.markdown(
-    '<div class="teacher-page-subtitle">Teacher Agent · 本地知识优先 · 回答经过确定性审计</div>',
-    unsafe_allow_html=True,
-)
-
 if not is_configured():
     st.warning(
         "当前进程没有配置 DEEPSEEK_API_KEY。请在启动 Streamlit 的同一 PowerShell "
@@ -489,8 +483,12 @@ def _format_token_count(value: int) -> str:
 _CONTEXT_USAGE_STYLE = """
 <style>
 .st-key-teacher_composer_actions > div[data-testid="stVerticalBlock"] {
-    gap: 12px;
+    gap: 8px;
     min-width: 0;
+}
+.st-key-teacher_composer_controls [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    gap: 10px;
 }
 .st-key-context_usage_control {
     position: static;
@@ -509,7 +507,7 @@ _CONTEXT_USAGE_STYLE = """
 }
 @media (max-width: 640px) {
     .st-key-teacher_composer_actions > div[data-testid="stVerticalBlock"] {
-        gap: 8px;
+        gap: 6px;
     }
     .st-key-context_usage_control [data-testid="stPopover"] > button p {
         display: none;
@@ -870,13 +868,28 @@ if pending_student_message:
 st.markdown(_CONTEXT_USAGE_STYLE, unsafe_allow_html=True)
 with st.bottom:
     with st.container(key="teacher_composer_actions"):
-        st.caption("写下你的问题，或继续这一课…… · 深度思考已启用 · 联网按需触发")
-        with st.container(key="context_usage_control", width="content"):
-            render_context_usage(episode)
         message = st.chat_input(
             "输入一道小学或初中学习问题，或继续追问……",
             disabled=not is_configured(),
         )
+        with st.container(key="teacher_composer_controls"):
+            context_column, mode_column = st.columns(
+                [1.35, 3.65],
+                vertical_alignment="center",
+            )
+            with context_column:
+                with st.container(key="context_usage_control", width="content"):
+                    render_context_usage(episode)
+            with mode_column:
+                st.markdown(
+                    """
+                    <div class="desk-composer-status">
+                      <span class="desk-mode-chip">深度思考 · 已启用</span>
+                      <span class="desk-mode-chip is-auto">联网检索 · 按需触发</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 message = retry_message or message
 if message:
     is_retry = retry_message is not None

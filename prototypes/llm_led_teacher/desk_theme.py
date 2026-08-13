@@ -33,6 +33,17 @@ body,
     background-size: 19px 19px, 31px 31px;
 }
 
+/* Keep Streamlit's sidebar control usable without leaving a white hosting bar. */
+[data-testid="stHeader"] {
+    background: transparent !important;
+    height: 2.35rem;
+    pointer-events: none;
+}
+[data-testid="stHeader"] button,
+[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"] {
+    pointer-events: auto;
+}
+
 /* Streamlit's own application controls stay visible; only its hosting chrome is removed. */
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
@@ -109,8 +120,8 @@ footer {
 }
 
 [data-testid="stMainBlockContainer"] {
-    max-width: 1160px;
-    padding: 1.45rem 2.2rem 11rem;
+    max-width: 1240px;
+    padding: 1.15rem 2.2rem 9.5rem;
 }
 .desk-brand-header {
     align-items: center;
@@ -147,6 +158,13 @@ footer {
     font-size: .7rem;
     letter-spacing: .06em;
     margin-top: .08rem;
+}
+.desk-brand-header {
+    display: none;
+}
+[data-testid="stElementContainer"]:has(.desk-brand-header),
+[data-testid="stElementContainer"]:has(.desk-brand-header) + [data-testid="stElementContainer"] {
+    display: none;
 }
 
 .desk-paper-sheet,
@@ -356,8 +374,11 @@ footer {
 }
 
 [data-testid="stBottomBlockContainer"] {
-    background: linear-gradient(180deg, transparent, rgba(232,225,209,.96) 25%);
-    padding: 1.4rem 2rem .8rem;
+    background: linear-gradient(180deg, transparent, rgba(232,225,209,.96) 38%);
+    padding: .5rem 2rem .72rem;
+}
+[data-testid="stBottom"] {
+    background: transparent !important;
 }
 .desk-composer,
 .st-key-teacher_composer_actions {
@@ -369,10 +390,10 @@ footer {
     box-shadow: 0 15px 38px rgba(49,38,23,.16);
     margin: 0 auto;
     max-width: 920px;
-    padding: .7rem .85rem .55rem;
+    padding: .58rem .78rem .5rem;
 }
 .st-key-teacher_composer_actions > div[data-testid="stVerticalBlock"] {
-    gap: .42rem;
+    gap: .46rem;
 }
 .st-key-teacher_composer_actions [data-testid="stChatInput"] {
     background: rgba(255,255,255,.54);
@@ -391,7 +412,7 @@ footer {
 }
 .st-key-context_usage_control {
     color: var(--desk-ink-soft);
-    margin-right: 3.3rem;
+    margin-right: 0;
     position: static;
     transform: none;
     width: max-content !important;
@@ -406,19 +427,34 @@ footer {
     padding: .2rem .55rem;
 }
 .desk-composer-status {
+    align-items: center;
     color: var(--desk-ink-soft);
+    display: flex;
     font-size: .65rem;
+    gap: .42rem;
+    justify-content: flex-end;
     letter-spacing: .035em;
     pointer-events: none;
 }
-.desk-composer-dot {
-    background: var(--desk-jade);
-    border-radius: 50%;
-    display: inline-block;
-    height: .38rem;
-    margin: 0 .26rem 0 .55rem;
-    vertical-align: .03rem;
-    width: .38rem;
+.desk-mode-chip {
+    background: rgba(61,118,100,.08);
+    border: 1px solid rgba(61,118,100,.2);
+    border-radius: 999px;
+    color: var(--desk-jade);
+    padding: .24rem .55rem;
+    white-space: nowrap;
+}
+.desk-mode-chip.is-auto {
+    background: rgba(168,65,50,.055);
+    border-color: rgba(168,65,50,.16);
+    color: var(--desk-vermilion);
+}
+.st-key-teacher_composer_controls [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    gap: .6rem;
+}
+.st-key-teacher_composer_controls [data-testid="stColumn"] {
+    min-width: 0;
 }
 
 @media (max-width: 760px) {
@@ -459,8 +495,7 @@ footer {
         max-width: 88%;
     }
     [data-testid="stBottomBlockContainer"] {
-        padding-left: .55rem;
-        padding-right: .55rem;
+        padding: .35rem .55rem .48rem;
     }
     .desk-composer,
     .st-key-teacher_composer_actions {
@@ -503,6 +538,9 @@ footer {
         font-size: .59rem;
         letter-spacing: 0;
         white-space: nowrap;
+    }
+    .desk-mode-chip {
+        padding: .2rem .42rem;
     }
 }
 </style>

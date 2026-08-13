@@ -16,21 +16,25 @@ def test_context_control_stays_in_composer_flow_before_send_area():
     assert "right: 4.35rem" not in context_style
     assert "transform: translateY" not in context_style
     assert ".st-key-teacher_composer_actions" in context_style
-    assert "gap: 12px" in context_style
+    assert "gap: 10px" in context_style
     assert "@media (max-width: 640px)" in context_style
-    assert "gap: 8px" in context_style
+    assert "gap: 6px" in context_style
     assert 'content: "上下文"' in context_style
 
     composer_start = source.index(
         'with st.container(key="teacher_composer_actions"):'
     )
+    send_area = source.index("message = st.chat_input(", composer_start)
+    controls = source.index(
+        'with st.container(key="teacher_composer_controls"):',
+        composer_start,
+    )
     context_control = source.index(
         'with st.container(key="context_usage_control", width="content"):',
         composer_start,
     )
-    send_area = source.index("message = st.chat_input(", composer_start)
 
-    assert composer_start < context_control < send_area
+    assert composer_start < send_area < controls < context_control
 
 
 def test_current_model_limit_wins_over_historical_conversation_limit():
