@@ -35,4 +35,3 @@ def select_skill_for_contract(contract: TeachingContract) -> str:
         "guided_solution": "socratic_guidance",
         "full_solution": "complete_solution",
     }.get(contract.response_mode.value, "")
-
