@@ -7,6 +7,7 @@ API key is read from environment / .env — never hard-coded, never printed.
 from __future__ import annotations
 
 import os
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
@@ -25,6 +26,19 @@ T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
 _LLAMA_SLOT_ID: ContextVar[int | None] = ContextVar("llama_slot_id", default=None)
+_JSON_CODE_FENCE = re.compile(
+    r"\A\s*```(?:json)?\s*(?P<body>\{.*\})\s*```\s*\Z",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def _unwrap_json_code_fence(raw: str) -> str:
+    """Accept one whole-response JSON fence without guessing through prose."""
+
+    match = _JSON_CODE_FENCE.fullmatch(raw)
+    if match is None:
+        return raw
+    return match.group("body")
 
 
 @contextmanager
@@ -316,7 +330,7 @@ class DeepSeekClient:
                 f"{type(exc).__name__}: {exc}"
             ) from exc
         message = resp.choices[0].message
-        raw = message.content or "{}"
+        raw = _unwrap_json_code_fence(message.content or "{}")
         reasoning = getattr(message, "reasoning_content", None) or ""
         self._record_response_metadata(resp, reasoning=reasoning)
         return schema.model_validate_json(raw)

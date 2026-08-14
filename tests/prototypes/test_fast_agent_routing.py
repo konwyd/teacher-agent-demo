@@ -85,6 +85,22 @@ def test_fast_full_solution_loads_only_complete_solution_skill() -> None:
     assert result.teaching_contract.may_reveal_final_answer is True
 
 
+def test_fast_math_attempt_preserves_active_problem_continuity() -> None:
+    client = _NoModelCalls()
+    registry = _FastRegistry()
+    result = MultisubjectAgentLoop(client=client, registry=registry).run(
+        "初中数学：解方程 2x+3=7，请先引导我。",
+        "我把两边都减去3，得到2x=5，对吗？",
+        "数学",
+        "初中",
+    )
+
+    assert client.calls == 0
+    assert result.classification.is_new_problem is False
+    assert registry.calls == [("load_skill", {"name": "socratic_guidance"})]
+    assert result.termination_reason == "deterministic_fast_path"
+
+
 def test_fast_off_topic_route_uses_no_model_or_tools() -> None:
     client = _NoModelCalls()
     registry = _FastRegistry()

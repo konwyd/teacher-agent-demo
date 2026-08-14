@@ -1,9 +1,12 @@
 import json
 
+from app.agent.state import VerificationResult, VerificationStatus
 from prototypes.llm_led_teacher.logic import (
     PacingMode,
     PrototypeEpisode,
+    TeacherResponse,
     TurnGuidance,
+    _enforce_verified_incorrect_feedback,
     run_turn,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
@@ -686,13 +689,10 @@ def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
     assert turn.model_generation_metadata["response_tokens"] == 20
 
 
-def test_agent_advisory_repair_always_runs_post_repair_audit_and_counts_usage():
+def test_multiple_questions_are_collapsed_before_audit_without_model_repair():
     client = _ContractTurnClient(
-        drafts=[
-            "求根公式里的 a 是什么？b 又是什么？",
-            "求根公式中的 a、b、c 表示方程的三个系数。",
-        ],
-        audits=[BoundaryAudit(passed=True), BoundaryAudit(passed=True)],
+        drafts=["求根公式里的 a 是什么？b 又是什么？"],
+        audits=[BoundaryAudit(passed=True)],
         record_usage=True,
     )
 
@@ -703,16 +703,20 @@ def test_agent_advisory_repair_always_runs_post_repair_audit_and_counts_usage():
         orchestrator=_UsageOrchestrator(_concept_formula_result(), client),
     )
 
-    assert turn.repair_performed is True
-    assert client.requested_schemas == [BoundaryAudit, BoundaryAudit]
-    assert turn.post_repair_boundary_audit == BoundaryAudit(passed=True)
-    assert turn.model_generation_metadata["llm_call_count"] == 5
+    assert turn.teacher_output.response == "b 又是什么？"
+    assert turn.repair_performed is False
+    assert turn.remaining_warnings == []
+    assert client.requested_schemas == [BoundaryAudit]
+    assert turn.post_repair_boundary_audit is None
+    assert turn.model_generation_metadata["llm_call_count"] == 3
 
 
-def test_advisory_repair_failed_second_audit_uses_redacted_fixed_fallback():
+def test_failed_second_audit_uses_redacted_fixed_fallback():
     initial_audit = BoundaryAudit(
-        passed=True,
+        passed=False,
+        violations=["off_target"],
         evidence=["INITIAL_REJECTED_EVIDENCE"],
+        repair_instructions=["INITIAL_REPAIR_RAW_TEXT"],
     )
     post_repair_audit = BoundaryAudit(
         passed=False,
@@ -722,7 +726,7 @@ def test_advisory_repair_failed_second_audit_uses_redacted_fixed_fallback():
     )
     client = _ContractTurnClient(
         drafts=[
-            "求根公式里的 a 是什么？b 又是什么？",
+            "这里直接把通用公式用于当前题。",
             "令三个系数分别取当前题中的数值即可得到结果。",
         ],
         audits=[initial_audit, post_repair_audit],
@@ -740,12 +744,16 @@ def test_advisory_repair_failed_second_audit_uses_redacted_fixed_fallback():
         "post_repair_audit_failed:applied_without_permission"
     )
     assert "三个系数分别取当前题" not in turn.teacher_output.response
-    assert turn.boundary_audit == BoundaryAudit(passed=True)
+    assert turn.boundary_audit == BoundaryAudit(
+        passed=False,
+        violations=["off_target"],
+    )
     assert turn.post_repair_boundary_audit == BoundaryAudit(
         passed=False,
         violations=["applied_without_permission"],
     )
     assert "INITIAL_REJECTED_EVIDENCE" not in serialized
+    assert "INITIAL_REPAIR_RAW_TEXT" not in serialized
     assert "POST_REJECTED_EVIDENCE" not in serialized
     assert "POST_REPAIR_RAW_TEXT" not in serialized
 
@@ -1237,3 +1245,43 @@ def test_quadratic_turn_keeps_optional_linear_verifier_neutral() -> None:
     assert turn.claim_audits == []
     assert turn.evidence_level == "unverified"
     assert episode.previous_verified_step == "旧的线性证据"
+
+
+def test_verified_incorrect_feedback_overrides_firm_correctness_claim() -> None:
+    output = _enforce_verified_incorrect_feedback(
+        TeacherResponse(
+            response=(
+                "你的操作方向是对的，这是正确的第一步。"
+                "请再检查一下右边。"
+            )
+        ),
+        VerificationResult(
+            status=VerificationStatus.VERIFIED_INCORRECT,
+            summary="incorrect_step",
+            verifier_name="linear_equation_fraction_checker",
+        ),
+    )
+
+    assert "是正确的" not in output.response
+    assert "完全正确" not in output.response
+    assert output.response.count("？") == 1
+    assert "应得到什么结果" in output.response
+
+
+def test_verified_incorrect_feedback_must_state_the_error_clearly() -> None:
+    output = _enforce_verified_incorrect_feedback(
+        TeacherResponse(
+            response=(
+                "你的思路方向可以继续检查。"
+                "请再算一遍，告诉我结果是多少？"
+            )
+        ),
+        VerificationResult(
+            status=VerificationStatus.VERIFIED_INCORRECT,
+            summary="incorrect_step",
+            verifier_name="linear_equation_fraction_checker",
+        ),
+    )
+
+    assert "还不正确" in output.response
+    assert output.response.count("？") == 1

@@ -181,7 +181,25 @@ def _has_no_apply_request(message: str) -> bool:
 
 def is_concept_request(message: str) -> bool:
     return (
-        any(marker in message for marker in ("是什么", "什么意思", "概念", "定义", "原理", "为什么"))
+        any(
+            marker in message
+            for marker in (
+                "是什么",
+                "什么意思",
+                "概念",
+                "定义",
+                "原理",
+                "为什么",
+                "怎么理解",
+                "怎样理解",
+                "如何理解",
+                "有什么区别",
+                "有何区别",
+                "区别是什么",
+                "异同",
+                "差异",
+            )
+        )
         or any(marker in message for marker in _CONCEPT_ONLY_MARKERS)
         or bool(_CONCEPT_EXPLANATION_PATTERN.search(message))
     )

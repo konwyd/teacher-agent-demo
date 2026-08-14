@@ -391,3 +391,24 @@ def test_shared_fallback_keeps_explicit_full_request_despite_why_cue() -> None:
     assert contract.response_mode is TeachingResponseMode.FULL_SOLUTION
     assert contract.may_apply_to_active_problem is True
     assert contract.may_reveal_final_answer is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "质量守恒定律应该怎样理解？",
+        "一般过去时和现在完成时有什么区别？",
+        "请比较比喻和拟人的异同。",
+    ],
+)
+def test_shared_safe_contract_recognizes_concept_comparison_requests(
+    message: str,
+) -> None:
+    contract = teaching_policy.build_safe_teaching_contract(
+        message,
+        _math_classification(),
+    )
+
+    assert contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+    assert contract.may_apply_to_active_problem is False
+    assert contract.may_reveal_final_answer is False
