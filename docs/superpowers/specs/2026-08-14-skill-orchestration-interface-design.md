@@ -37,8 +37,10 @@
 |---|---|
 | 明确授权完整解答 | `complete_solution` |
 | 概念解释 | `concept_explanation` |
-| 有具体错误诊断信号 | `error_diagnosis` |
+| 上游已有 math_checker 验证的错误证据 | `error_diagnosis` |
 | 其余引导式请求 | `socratic_guidance` |
+
+当前编排接口尚未接收 math_checker 的验证结果，因此本轮不得仅凭学生文字自动选择 `error_diagnosis`；没有已验证错误证据时使用 `socratic_guidance`。该映射保留为后续上游传入确定性验证结果后的合法行为。
 
 当模型提交不存在的 Skill 时，编排器不再次询问模型猜名称，而是加载上述确定性选择结果，并在 trace 中记录原请求失败及自动降级结果。降级不改变教学契约，也不扩大答案披露权限。
 
@@ -114,7 +116,7 @@ Agent trace 增加但不暴露内部推理：
 
 - 明确要求完整解答：自动选择 `complete_solution`，但只在原消息明确授权时允许最终答案。
 - 明确说“不要答案”：保持引导模式，不得因自动降级切换为完整解答。
-- 学生提交错误步骤：有错误诊断信号时选择 `error_diagnosis`。
+- 学生提交错误步骤：当前编排输入没有 math_checker 证据时不得擅自判错，保持 `socratic_guidance`；以后传入已验证错误证据后才选择 `error_diagnosis`。
 - 连续追问：继承当前学科和学段，Skill 目录仍完整传入。
 - 空 Skill 目录：安全收口，不猜名称、不死循环。
 - 重复非法名称：工具层第二次返回 `duplicate skill request`。
