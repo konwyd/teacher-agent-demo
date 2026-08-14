@@ -390,3 +390,64 @@ def test_explicit_timeout_overrides_environment(monkeypatch: pytest.MonkeyPatch)
     deepseek_client.DeepSeekClient(settings=settings, timeout=12.5)
 
     assert calls[-1]["timeout"] == 12.5
+
+
+def test_backend_switch_selects_local_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.llm.deepseek_client import DeepSeekSettings
+
+    monkeypatch.setenv("TEACHER_LLM_BACKEND", "local")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "legacy-key")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://legacy.example/v1")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "legacy-model")
+    monkeypatch.setenv("TEACHER_LOCAL_LLM_API_KEY", "local-key")
+    monkeypatch.setenv("TEACHER_LOCAL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("TEACHER_LOCAL_LLM_MODEL", "local-model")
+    monkeypatch.setenv("TEACHER_LOCAL_LLM_CONTEXT_WINDOW_TOKENS", "262144")
+
+    settings = DeepSeekSettings()
+
+    assert settings.deepseek_api_key == "local-key"
+    assert settings.deepseek_base_url == "http://127.0.0.1:8080/v1"
+    assert settings.deepseek_model == "local-model"
+    assert settings.deepseek_context_window_tokens == 262144
+
+
+def test_backend_switch_selects_api_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.llm.deepseek_client import DeepSeekSettings
+
+    monkeypatch.setenv("TEACHER_LLM_BACKEND", "api")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "legacy-key")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "legacy-model")
+    monkeypatch.setenv("TEACHER_API_LLM_API_KEY", "paid-api-key")
+    monkeypatch.setenv("TEACHER_API_LLM_BASE_URL", "https://api.example/v1")
+    monkeypatch.setenv("TEACHER_API_LLM_MODEL", "api-model")
+    monkeypatch.setenv("TEACHER_API_LLM_CONTEXT_WINDOW_TOKENS", "131072")
+
+    settings = DeepSeekSettings()
+
+    assert settings.deepseek_api_key == "paid-api-key"
+    assert settings.deepseek_base_url == "https://api.example/v1"
+    assert settings.deepseek_model == "api-model"
+    assert settings.deepseek_context_window_tokens == 131072
+
+
+def test_backend_switch_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import ValidationError
+
+    from app.llm.deepseek_client import DeepSeekSettings
+
+    monkeypatch.setenv("TEACHER_LLM_BACKEND", "unknown")
+
+    with pytest.raises(ValidationError, match="TEACHER_LLM_BACKEND"):
+        DeepSeekSettings()
+
+
+def test_is_configured_uses_selected_backend_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("TEACHER_LLM_BACKEND", "api")
+    monkeypatch.setenv("TEACHER_API_LLM_API_KEY", "paid-api-key")
+
+    assert is_configured() is True

@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 在模块导入时把 .env 写入环境变量（已存在的变量不会被覆盖）
@@ -54,13 +54,50 @@ class DeepSeekError(RuntimeError):
 class DeepSeekSettings(BaseSettings):
     """Loaded from environment variables or .env file."""
 
+    teacher_llm_backend: str = ""
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     deepseek_context_window_tokens: int = 131072
 
+    teacher_local_llm_api_key: str = "local"
+    teacher_local_llm_base_url: str = "http://127.0.0.1:8080/v1"
+    teacher_local_llm_model: str = "deepseek-v4-flash"
+    teacher_local_llm_context_window_tokens: int = 524288
+
+    teacher_api_llm_api_key: str = ""
+    teacher_api_llm_base_url: str = "https://api.deepseek.com"
+    teacher_api_llm_model: str = "deepseek-chat"
+    teacher_api_llm_context_window_tokens: int = 131072
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def select_backend_profile(self) -> "DeepSeekSettings":
+        """Select one endpoint profile without changing any call-site behavior."""
+
+        backend = self.teacher_llm_backend.strip().lower()
+        if backend not in {"", "local", "api"}:
+            raise ValueError(
+                "TEACHER_LLM_BACKEND 只能是 local 或 api（留空沿用 DEEPSEEK_*）"
+            )
+        self.teacher_llm_backend = backend
+        if backend == "local":
+            self.deepseek_api_key = self.teacher_local_llm_api_key
+            self.deepseek_base_url = self.teacher_local_llm_base_url
+            self.deepseek_model = self.teacher_local_llm_model
+            self.deepseek_context_window_tokens = (
+                self.teacher_local_llm_context_window_tokens
+            )
+        elif backend == "api":
+            self.deepseek_api_key = self.teacher_api_llm_api_key
+            self.deepseek_base_url = self.teacher_api_llm_base_url
+            self.deepseek_model = self.teacher_api_llm_model
+            self.deepseek_context_window_tokens = (
+                self.teacher_api_llm_context_window_tokens
+            )
+        return self
 
 
 @lru_cache
@@ -69,12 +106,19 @@ def get_settings() -> DeepSeekSettings:
 
 
 def is_configured() -> bool:
-    """是否配置了 DEEPSEEK_API_KEY（load_dotenv 已在模块导入时执行）。
+    """Whether the selected backend has a key (local uses a placeholder key).
 
     TEACHER_FORCE_MOCK=1 时强制返回 False（评测 mock 模式的双保险）。
     """
     if os.getenv("TEACHER_FORCE_MOCK", "").lower() in ("1", "true"):
         return False
+    backend = os.getenv("TEACHER_LLM_BACKEND", "").strip().lower()
+    if backend == "local":
+        return bool(os.getenv("TEACHER_LOCAL_LLM_API_KEY", "local"))
+    if backend == "api":
+        return bool(os.getenv("TEACHER_API_LLM_API_KEY", ""))
+    if backend:
+        DeepSeekSettings()  # Raise the same configuration error as the client.
     return bool(os.getenv("DEEPSEEK_API_KEY"))
 
 
