@@ -269,3 +269,17 @@ def test_hard_recheck_does_not_infer_answer_from_plain_problem_text():
     )
 
     assert violations == []
+
+
+def test_audit_prompt_distinguishes_standalone_concept_from_application() -> None:
+    client = ScriptedAuditClient(BoundaryAudit(passed=True))
+
+    SemanticBoundaryAuditor(client).audit(
+        "惯性是什么？",
+        "惯性是什么？",
+        concept_contract(),
+        "惯性表示物体保持原有运动状态的性质。",
+    )
+
+    assert "独立概念问题" in client.calls[0]["system"]
+    assert "不算应用当前题" in client.calls[0]["system"]

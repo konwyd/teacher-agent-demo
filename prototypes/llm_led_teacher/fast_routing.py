@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.agent import math_checker as mc
 from prototypes.llm_led_teacher.orchestration_models import (
     AnswerMode,
     RequestClassification,
@@ -59,6 +60,15 @@ _CONTINUITY_MARKERS = (
     "上一步",
     "这里",
     "这个式子",
+)
+_NEW_MATH_PROBLEM_MARKERS = (
+    "解方程",
+    "求解",
+    "请解",
+    "新题",
+    "另一题",
+    "换一道",
+    "再做一题",
 )
 _OFF_TOPIC_OBJECT_MARKERS = (
     "手机",
@@ -136,10 +146,18 @@ def choose_fast_route(
 
     continuity_subject = _enum_or_none(Subject, active_subject)
     continuity_stage = _enum_or_none(SchoolStage, active_stage)
+    math_response_kind = mc.classify_student_math_response(clean)
+    is_math_response_continuation = bool(
+        problem_context.strip()
+        and continuity_subject is Subject.MATH
+        and math_response_kind != "unknown"
+        and not any(marker in clean for marker in _NEW_MATH_PROBLEM_MARKERS)
+    )
     has_continuity = bool(problem_context.strip()) and (
         any(marker in clean for marker in _CONTINUITY_MARKERS)
         or has_explicit_full_solution_request(clean)
         or is_concept_request(clean)
+        or is_math_response_continuation
     )
     if (
         has_continuity

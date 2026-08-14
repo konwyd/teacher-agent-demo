@@ -22,13 +22,14 @@ class _ReplySchema(BaseModel):
 
 
 class _RecordingCompletions:
-    def __init__(self) -> None:
+    def __init__(self, content: str = '{"text":"ok"}') -> None:
         self.calls: list[dict] = []
+        self.content = content
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content='{"text":"ok"}'))]
+            choices=[SimpleNamespace(message=SimpleNamespace(content=self.content))]
         )
 
 
@@ -390,3 +391,38 @@ def test_explicit_timeout_overrides_environment(monkeypatch: pytest.MonkeyPatch)
     deepseek_client.DeepSeekClient(settings=settings, timeout=12.5)
 
     assert calls[-1]["timeout"] == 12.5
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '```json\n{"text":"ok"}\n```',
+        '```JSON\n{"text":"ok"}\n```',
+        '```\n{"text":"ok"}\n```',
+    ],
+)
+def test_chat_json_accepts_one_whole_response_code_fence(content: str) -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions(content)
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+
+    assert client.chat_json("system", "user", _ReplySchema).text == "ok"
+
+
+def test_chat_json_does_not_extract_fenced_json_from_surrounding_prose() -> None:
+    from app.llm.deepseek_client import DeepSeekClient, DeepSeekSettings
+
+    completions = _RecordingCompletions(
+        '说明如下：\n```json\n{"text":"ok"}\n```'
+    )
+    client = DeepSeekClient(settings=DeepSeekSettings(deepseek_api_key="test-key"))
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+
+    with pytest.raises(ValueError):
+        client.chat_json("system", "user", _ReplySchema)

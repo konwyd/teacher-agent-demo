@@ -8,6 +8,7 @@ preserves context and audits mathematical claims?
 from __future__ import annotations
 
 import json
+import re
 from enum import Enum
 from time import perf_counter
 from typing import Callable, Protocol
@@ -253,6 +254,17 @@ _FIRM_CORRECTNESS_PHRASES = (
     "结果正确",
 )
 
+_EXPLICIT_INCORRECTNESS_PHRASES = (
+    "不正确",
+    "不对",
+    "有误",
+    "错误",
+    "不等价",
+    "不是",
+    "需要修正",
+)
+
+
 def _verify(
     problem_context: str,
     attempt: str,
@@ -447,6 +459,45 @@ def _question_count(text: str) -> int:
     return text.count("？") + text.count("?")
 
 
+def _keep_single_question(response: str) -> str:
+    """Keep only the final question clause using the established UI invariant."""
+
+    parts = re.split(r"(?<=[。！？!?\n])", response)
+    questions = [part for part in parts if "？" in part or "?" in part]
+    if len(questions) <= 1:
+        return response
+    final_question = questions[-1]
+    return "".join(
+        part
+        for part in parts
+        if ("？" not in part and "?" not in part) or part is final_question
+    ).strip()
+
+
+def _enforce_verified_incorrect_feedback(
+    output: TeacherResponse,
+    verification: VerificationResult,
+) -> TeacherResponse:
+    """Never let a repaired draft contradict an incorrect verifier verdict."""
+
+    if verification.status is not VerificationStatus.VERIFIED_INCORRECT:
+        return output
+    has_firm_correctness = any(
+        phrase in output.response for phrase in _FIRM_CORRECTNESS_PHRASES
+    )
+    has_explicit_incorrectness = any(
+        phrase in output.response for phrase in _EXPLICIT_INCORRECTNESS_PHRASES
+    )
+    if not has_firm_correctness and has_explicit_incorrectness:
+        return output
+    return TeacherResponse(
+        response=(
+            "按原题逐步核对，当前写出的结果还不正确。"
+            "请重新检查这一步的运算，看看应得到什么结果？"
+        )
+    )
+
+
 def _has_verified_final_claim(claim_audits: list[ClaimAudit]) -> bool:
     for audit in claim_audits:
         if audit.verification.status is not VerificationStatus.VERIFIED_CORRECT:
@@ -567,7 +618,8 @@ def _repair(
     repair_system = (
         _SYSTEM_PROMPT
         + "\n你上一版回复与审计证据存在冲突。只修正列出的冲突，保持自然教学和原有有效内容；"
-        "不得退回泛化诊断文案。"
+        "不得退回泛化诊断文案。不要复述内部契约、权限、禁止项或修正要求，"
+        "也不要用‘不套用当前题’‘不披露答案’之类的边界声明代替实际教学内容。"
     )
     repair_payload = json.dumps(
         {
@@ -807,6 +859,7 @@ def _run_turn_impl(
             getattr(active_client, "last_chat_metadata", {}) or {}
         )
     draft_character_count = len(output.response)
+    output = TeacherResponse(response=_keep_single_question(output.response))
     verifier_applicable = LinearEquationVerifier().supports(
         VerificationRequest(problem_context=episode.problem_context)
     )
@@ -871,6 +924,7 @@ def _run_turn_impl(
             repair_reasons,
             max_tokens=generation_max_tokens,
         )
+        output = TeacherResponse(response=_keep_single_question(output.response))
         repair_performed = True
         model_generation_metadata = dict(
             getattr(active_client, "last_chat_metadata", {}) or {}
@@ -924,6 +978,12 @@ def _run_turn_impl(
             if verifier_applicable
             else []
         )
+
+    verifier_safe_output = _enforce_verified_incorrect_feedback(output, verification)
+    if verifier_safe_output is not output:
+        output = verifier_safe_output
+        extracted_equations = []
+        claim_audits = []
 
     if kv_lease is not None:
         kv_lease.save()
