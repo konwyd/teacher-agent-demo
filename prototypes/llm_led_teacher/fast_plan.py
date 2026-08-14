@@ -17,6 +17,7 @@ from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.skill_policy import select_skill_for_contract
 from prototypes.llm_led_teacher.teaching_policy import (
     build_safe_teaching_contract,
     is_concept_request,
@@ -38,7 +39,7 @@ def run_fast_plan(
 
     classification = fast_route.classification
     contract = build_safe_teaching_contract(student_message, classification)
-    skill_name = _skill_for_contract(contract)
+    skill_name = select_skill_for_contract(contract)
     needs_local_search = bool(
         classification.subject is not None
         and classification.stage is not SchoolStage.UNKNOWN
@@ -125,17 +126,6 @@ def run_fast_plan(
             "router": "deterministic_fast_path",
         },
     )
-
-
-def _skill_for_contract(contract: TeachingContract) -> str:
-    mode = contract.response_mode.value
-    if mode == "concept_explanation":
-        return "concept_explanation"
-    if mode in {"one_step", "guided_solution"}:
-        return "socratic_guidance"
-    if mode == "full_solution":
-        return "complete_solution"
-    return ""
 
 
 def _trace_tool_result(
