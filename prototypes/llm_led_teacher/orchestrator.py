@@ -164,7 +164,14 @@ class MultisubjectAgentLoop:
         self.classifier = classifier or RequestClassifier(active_client)
         self.action_provider = action_provider or DeepSeekActionProvider(active_client)
         self.registry = registry or OrchestrationToolRegistry()
-        self.skill_catalog = dict(DEFAULT_SKILL_CATALOG if skill_catalog is None else skill_catalog)
+        configured_skills = (
+            DEFAULT_SKILL_CATALOG if skill_catalog is None else skill_catalog
+        )
+        self.skill_catalog = {
+            name: description
+            for name, description in configured_skills.items()
+            if name != "error_diagnosis"
+        }
         self.max_iterations = max_iterations
         self.enable_fast_routing = (
             uses_default_components
@@ -431,6 +438,17 @@ class MultisubjectAgentLoop:
                         "original_error": result.error,
                     }
                     result = recovered
+            if (
+                result.name == "load_skill"
+                and result.ok
+                and result.data.get("idempotent") is True
+            ):
+                termination_reason = "duplicate_skill_short_circuit"
+                teaching_contract = build_safe_teaching_contract(
+                    student_message,
+                    classification,
+                )
+                stop_after_tool = True
             if result.ok and result.name == "load_skill":
                 skill_name = str(result.data.get("name", ""))
                 if skill_name and skill_name not in loaded_skills:
