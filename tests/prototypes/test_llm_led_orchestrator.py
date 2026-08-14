@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentDecision,
     RequestClassification,
@@ -11,6 +13,7 @@ from prototypes.llm_led_teacher.orchestrator import (
     MultisubjectAgentLoop,
     RequestClassifier,
 )
+from prototypes.llm_led_teacher.orchestration_tools import OrchestrationToolRegistry
 
 
 class _Classifier:
@@ -550,3 +553,128 @@ def test_classifier_repairs_once_then_falls_back_off_topic() -> None:
     assert client.calls == 2
     assert result.scope.value == "off_topic"
     assert result.answer_mode.value == "brief_redirect"
+
+NINE_SUBJECT_SKILL_CASES = [
+    ("数学", "老师，2x + 3 = 9 怎么解？", "socratic_guidance"),
+    ("语文", "拟人这种修辞手法是什么意思？", "concept_explanation"),
+    ("英语", "一般过去时什么时候使用？", "socratic_guidance"),
+    ("物理", "为什么惯性只与质量有关？", "concept_explanation"),
+    ("化学", "怎么判断一个反应是不是置换反应？", "socratic_guidance"),
+    ("生物", "光合作用需要哪些条件？", "socratic_guidance"),
+    ("历史", "辛亥革命的主要影响是什么？", "concept_explanation"),
+    ("地理", "怎么判断一个地方属于什么气候？", "socratic_guidance"),
+    ("道法", "权利和义务是什么关系？", "concept_explanation"),
+]
+
+
+@pytest.mark.parametrize(
+    ("subject", "message", "expected_skill"),
+    NINE_SUBJECT_SKILL_CASES,
+)
+def test_unknown_skill_recovers_once_for_every_subject(
+    subject: str,
+    message: str,
+    expected_skill: str,
+) -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="load_skill",
+                arguments={"name": f"{subject}教学技能"},
+                reason="加载教学方法",
+            ),
+            _finish(),
+        ]
+    )
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9(subject, new=True)),
+        action_provider=provider,
+        registry=OrchestrationToolRegistry(),
+        enable_fast_routing=False,
+    ).run("", message, "", "")
+
+    assert provider.calls == 2
+    assert result.loaded_skills == [expected_skill]
+    assert result.termination_reason == "model_finished"
+    fallback_events = [
+        event
+        for event in result.trace
+        if event.details.get("fallback_reason") == "unknown_skill_fallback"
+    ]
+    assert len(fallback_events) == 1
+    assert fallback_events[0].details["requested_skill"] == f"{subject}教学技能"
+    assert fallback_events[0].details["selected_skill"] == expected_skill
+    assert all(
+        event.summary != "load_skill 未执行：unknown skill"
+        for event in result.trace
+    )
+    assert {
+        item["name"] for item in provider.payloads[0]["available_skills"]
+    } == {
+        "socratic_guidance",
+        "error_diagnosis",
+        "concept_explanation",
+        "complete_solution",
+    }
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_skill"),
+    [
+        ("请完整解答 3x-5=10，并说明每一步。", "complete_solution"),
+        ("请引导我解 4x+1=13，但不要告诉我最后答案。", "socratic_guidance"),
+        ("我觉得 2x+3=9 两边减3以后是 2x=5，对吗？", "socratic_guidance"),
+    ],
+)
+def test_unknown_skill_fallback_preserves_request_boundary(
+    message: str,
+    expected_skill: str,
+) -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="load_skill",
+                arguments={"name": "数学教学技能"},
+                reason="加载数学教学方法",
+            ),
+            _finish(),
+        ]
+    )
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=True)),
+        action_provider=provider,
+        registry=OrchestrationToolRegistry(),
+        enable_fast_routing=False,
+    ).run("", message, "", "")
+
+    assert result.loaded_skills == [expected_skill]
+    if "不要告诉我" in message:
+        assert result.teaching_contract.may_reveal_final_answer is False
+    if "2x=5" in message:
+        assert "error_diagnosis" not in result.loaded_skills
+
+
+def test_empty_skill_catalog_stops_after_first_unknown_request() -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="load_skill",
+                arguments={"name": "数学教学技能"},
+                reason="加载数学教学方法",
+            )
+        ]
+    )
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=True)),
+        action_provider=provider,
+        registry=OrchestrationToolRegistry(),
+        skill_catalog={},
+        enable_fast_routing=False,
+    ).run("", "老师，2x+3=9怎么解？", "", "")
+
+    assert provider.calls == 1
+    assert result.loaded_skills == []
+    assert result.termination_reason == "skill_catalog_unavailable"
