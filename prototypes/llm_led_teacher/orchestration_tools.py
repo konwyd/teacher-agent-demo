@@ -49,6 +49,8 @@ class OrchestrationRuntime:
     local_search_succeeded: bool = False
     web_search_count: int = 0
     skill_catalog: dict[str, str] = field(default_factory=dict)
+    loaded_skill_names: set[str] = field(default_factory=set)
+    failed_skill_names: set[str] = field(default_factory=set)
     local_search_signatures: set[str] = field(default_factory=set)
 
 
@@ -135,10 +137,36 @@ class OrchestrationToolRegistry:
             return self._execute_web(arguments, runtime, started)
         if name == "load_skill":
             skill_name = str(arguments.get("name", ""))
+            if skill_name in runtime.loaded_skill_names:
+                return ToolResult(
+                    name=name,
+                    ok=True,
+                    data={
+                        "name": skill_name,
+                        "content": runtime.skill_catalog[skill_name][:1200],
+                        "idempotent": True,
+                    },
+                )
+            if skill_name in runtime.failed_skill_names:
+                return ToolResult(
+                    name=name,
+                    ok=False,
+                    error="duplicate skill request",
+                )
             content = runtime.skill_catalog.get(skill_name)
             if not content:
+                runtime.failed_skill_names.add(skill_name)
                 return ToolResult(name=name, ok=False, error="unknown skill")
-            return ToolResult(name=name, ok=True, data={"name": skill_name, "content": content[:1200]})
+            runtime.loaded_skill_names.add(skill_name)
+            return ToolResult(
+                name=name,
+                ok=True,
+                data={
+                    "name": skill_name,
+                    "content": content[:1200],
+                    "idempotent": False,
+                },
+            )
         if name == "inspect_student_context":
             return ToolResult(
                 name=name,

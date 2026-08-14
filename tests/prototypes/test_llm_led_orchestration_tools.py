@@ -291,6 +291,29 @@ def _runtime(scope: str = "k9") -> OrchestrationRuntime:
     )
 
 
+def test_unknown_skill_is_rejected_once_then_marked_duplicate() -> None:
+    runtime = _runtime()
+    registry = OrchestrationToolRegistry()
+
+    first = registry.execute("load_skill", {"name": "数学教学技能"}, runtime)
+    second = registry.execute("load_skill", {"name": "数学教学技能"}, runtime)
+
+    assert first.error == "unknown skill"
+    assert second.error == "duplicate skill request"
+
+
+def test_loaded_skill_is_idempotent() -> None:
+    runtime = _runtime()
+    registry = OrchestrationToolRegistry()
+
+    first = registry.execute("load_skill", {"name": "concept_explanation"}, runtime)
+    second = registry.execute("load_skill", {"name": "concept_explanation"}, runtime)
+
+    assert first.ok and second.ok
+    assert second.data["idempotent"] is True
+    assert runtime.loaded_skill_names == {"concept_explanation"}
+
+
 def test_web_requires_k9_and_successful_local_search() -> None:
     registry = OrchestrationToolRegistry(
         local_handler=lambda **kwargs: {"hits": []},
