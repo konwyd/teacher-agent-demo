@@ -678,3 +678,45 @@ def test_empty_skill_catalog_stops_after_first_unknown_request() -> None:
     assert provider.calls == 1
     assert result.loaded_skills == []
     assert result.termination_reason == "skill_catalog_unavailable"
+
+
+def test_search_subject_and_stage_are_bound_to_validated_classification() -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="search_local_knowledge",
+                arguments={
+                    "query": "一元一次方程",
+                    "subject": "数学学科",
+                    "stage": "初中数学",
+                    "top_k": 5,
+                    "sources": ["textbook", "exercise"],
+                },
+                reason="查询本地教材",
+            ),
+            _finish(),
+        ]
+    )
+    registry = _Registry()
+    classification = RequestClassification.model_validate(
+        {**_k9("数学", new=True).model_dump(mode="json"), "stage": "未知"}
+    )
+
+    MultisubjectAgentLoop(
+        classifier=_Classifier(classification),
+        action_provider=provider,
+        registry=registry,
+        enable_fast_routing=False,
+    ).run("", "老师，2x+3=9怎么解？", "", "")
+
+    assert registry.calls[0] == (
+        "search_local_knowledge",
+        {
+            "query": "一元一次方程",
+            "subject": "数学",
+            "stage": "未知",
+            "top_k": 5,
+            "sources": ["textbook", "exercise"],
+        },
+    )

@@ -110,6 +110,7 @@ class DeepSeekActionProvider:
 每步只输出一个动作：call_tool 或 finish。可用工具：
 - load_skill(name)
 load_skill 的 name 必须逐字复制 payload.available_skills 中的规范名称，不得创建新名称。
+检索工具的 subject 和 stage 必须逐字复制 payload.classification 中的值。
 - inspect_student_context()
 - search_local_knowledge(query, subject, stage, top_k, sources)，其中 sources 只能是 ["textbook","exercise"] 的非空子集
 - search_web(query, subject, stage, evidence_gap)
@@ -383,7 +384,16 @@ class MultisubjectAgentLoop:
                     routing_guidance["answer_mode"] = decision.plan
                 break
 
-            result = self.registry.execute(decision.tool_name, decision.arguments, runtime)
+            tool_arguments = dict(decision.arguments)
+            if decision.tool_name in {"search_local_knowledge", "search_web"}:
+                if classification.subject is not None:
+                    tool_arguments["subject"] = classification.subject.value
+                tool_arguments["stage"] = classification.stage.value
+            result = self.registry.execute(
+                decision.tool_name,
+                tool_arguments,
+                runtime,
+            )
             observations.append(result)
             fallback_details: dict[str, Any] = {}
             stop_after_tool = False
