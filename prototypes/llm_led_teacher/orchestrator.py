@@ -27,6 +27,11 @@ from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.skill_policy import (
+    DEFAULT_SKILL_CATALOG,
+    available_skill_descriptors,
+    select_skill_for_contract,
+)
 from prototypes.llm_led_teacher.teaching_policy import (
     build_safe_teaching_contract,
     is_concept_request,
@@ -104,6 +109,7 @@ class DeepSeekActionProvider:
     _SYSTEM_PROMPT = """你是有边界的九学科教师 Agent 编排器，不直接回答学生。
 每步只输出一个动作：call_tool 或 finish。可用工具：
 - load_skill(name)
+load_skill 的 name 必须逐字复制 payload.available_skills 中的规范名称，不得创建新名称。
 - inspect_student_context()
 - search_local_knowledge(query, subject, stage, top_k, sources)，其中 sources 只能是 ["textbook","exercise"] 的非空子集
 - search_web(query, subject, stage, evidence_gap)
@@ -144,6 +150,7 @@ class MultisubjectAgentLoop:
         classifier: Classifier | None = None,
         action_provider: ActionProvider | None = None,
         registry: OrchestrationToolRegistry | None = None,
+        skill_catalog: dict[str, str] | None = None,
         max_iterations: int = 4,
         enable_fast_routing: bool | None = None,
     ) -> None:
@@ -156,6 +163,7 @@ class MultisubjectAgentLoop:
         self.classifier = classifier or RequestClassifier(active_client)
         self.action_provider = action_provider or DeepSeekActionProvider(active_client)
         self.registry = registry or OrchestrationToolRegistry()
+        self.skill_catalog = dict(DEFAULT_SKILL_CATALOG if skill_catalog is None else skill_catalog)
         self.max_iterations = max_iterations
         self.enable_fast_routing = (
             uses_default_components
@@ -240,12 +248,7 @@ class MultisubjectAgentLoop:
             classification=classification,
             problem_context=problem_context,
             student_message=student_message,
-            skill_catalog={
-                "socratic_guidance": "一次推进一个关键步骤，用一个必要问题检查理解。",
-                "error_diagnosis": "指出具体错误证据，再给最小可执行修正。",
-                "concept_explanation": "先讲核心因果，再用贴近学生的例子解释。",
-                "complete_solution": "按明确授权给出完整步骤、关键理由与最终结论。",
-            },
+            skill_catalog=dict(self.skill_catalog),
         )
         observations = []
         loaded_skills: list[str] = []
@@ -270,6 +273,7 @@ class MultisubjectAgentLoop:
                 "classification": classification.model_dump(mode="json"),
                 "problem_context": problem_context[-1600:],
                 "student_message": student_message[-1200:],
+                "available_skills": available_skill_descriptors(runtime.skill_catalog),
                 "observations": [item.model_dump(mode="json") for item in observations],
                 "budgets": {
                     "remaining_steps": self.max_iterations - step + 1,
@@ -381,6 +385,42 @@ class MultisubjectAgentLoop:
 
             result = self.registry.execute(decision.tool_name, decision.arguments, runtime)
             observations.append(result)
+            fallback_details: dict[str, Any] = {}
+            stop_after_tool = False
+            if (
+                result.name == "load_skill"
+                and not result.ok
+                and result.error == "unknown skill"
+            ):
+                requested_skill = str(decision.arguments.get("name", ""))
+                fallback_contract = build_safe_teaching_contract(
+                    student_message,
+                    classification,
+                )
+                selected_skill = select_skill_for_contract(fallback_contract)
+                if not selected_skill or selected_skill not in runtime.skill_catalog:
+                    termination_reason = "skill_catalog_unavailable"
+                    stop_after_tool = True
+                    fallback_details = {
+                        "fallback_reason": "skill_catalog_unavailable",
+                        "requested_skill": requested_skill,
+                        "selected_skill": selected_skill,
+                        "original_error": result.error,
+                    }
+                else:
+                    recovered = self.registry.execute(
+                        "load_skill",
+                        {"name": selected_skill},
+                        runtime,
+                    )
+                    observations.append(recovered)
+                    fallback_details = {
+                        "fallback_reason": "unknown_skill_fallback",
+                        "requested_skill": requested_skill,
+                        "selected_skill": selected_skill,
+                        "original_error": result.error,
+                    }
+                    result = recovered
             if result.ok and result.name == "load_skill":
                 skill_name = str(result.data.get("name", ""))
                 if skill_name and skill_name not in loaded_skills:
@@ -405,10 +445,16 @@ class MultisubjectAgentLoop:
                     tool_name=result.name,
                     ok=result.ok,
                     elapsed_seconds=result.elapsed_seconds,
-                    details={"hit_count": hit_count, "error": result.error},
+                    details={
+                        "hit_count": hit_count,
+                        "error": result.error,
+                        **fallback_details,
+                    },
                 ),
                 progress_callback,
             )
+            if stop_after_tool:
+                break
 
         if teaching_contract is None:
             teaching_contract = build_safe_teaching_contract(
