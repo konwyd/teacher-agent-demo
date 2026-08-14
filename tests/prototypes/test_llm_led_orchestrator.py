@@ -613,7 +613,6 @@ def test_unknown_skill_recovers_once_for_every_subject(
         item["name"] for item in provider.payloads[0]["available_skills"]
     } == {
         "socratic_guidance",
-        "error_diagnosis",
         "concept_explanation",
         "complete_solution",
     }
@@ -720,3 +719,47 @@ def test_search_subject_and_stage_are_bound_to_validated_classification() -> Non
             "sources": ["textbook", "exercise"],
         },
     )
+
+def test_unverified_error_diagnosis_is_hidden_and_falls_back_safely() -> None:
+    provider = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                tool_name="load_skill",
+                arguments={"name": "error_diagnosis"},
+                reason="诊断学生步骤",
+            ),
+            _finish(),
+        ]
+    )
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=True)),
+        action_provider=provider,
+        registry=OrchestrationToolRegistry(),
+        enable_fast_routing=False,
+    ).run("", "我觉得两边减3后是2x=5，对吗？", "", "")
+
+    assert "error_diagnosis" not in {
+        item["name"] for item in provider.payloads[0]["available_skills"]
+    }
+    assert result.loaded_skills == ["socratic_guidance"]
+
+
+def test_repeated_loaded_skill_short_circuits_the_loop() -> None:
+    repeated = AgentDecision(
+        kind="call_tool",
+        tool_name="load_skill",
+        arguments={"name": "socratic_guidance"},
+        reason="加载引导方法",
+    )
+    provider = _ScriptedActions([repeated, repeated.model_copy(deep=True), _finish()])
+    result = MultisubjectAgentLoop(
+        classifier=_Classifier(_k9("数学", new=True)),
+        action_provider=provider,
+        registry=OrchestrationToolRegistry(),
+        enable_fast_routing=False,
+    ).run("", "2x+3=9怎么解？", "", "")
+
+    assert provider.calls == 2
+    assert result.loaded_skills == ["socratic_guidance"]
+    assert result.termination_reason == "duplicate_skill_short_circuit"
