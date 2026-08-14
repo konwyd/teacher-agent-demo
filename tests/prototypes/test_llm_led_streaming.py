@@ -42,13 +42,15 @@ def test_default_display_stream_yields_one_character_with_visible_delay(monkeypa
 
 def test_streamlit_streams_only_final_audited_turn_response():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
-    run_turn_call = "turn = run_turn("
+    run_turn_call = "return run_turn("
     final_stream_call = (
         "st.write_stream(iter_display_chunks(turn.teacher_output.response))"
     )
 
     assert "from prototypes.llm_led_teacher.streaming import iter_display_chunks" in source
-    assert "thinking_callback=live_thinking.append" in source
+    assert "thinking_update_callback=emit_thinking" in source
+    assert "run_with_event_stream(" in source
+    assert "live_thinking.append" in source
     assert run_turn_call in source
     assert final_stream_call in source
     assert source.index(run_turn_call) < source.index(final_stream_call)
@@ -71,7 +73,7 @@ def test_current_turn_details_render_immediately_after_streaming():
     )
 
 
-def test_live_thinking_panel_renders_public_copy_and_updates_elapsed_label():
+def test_live_thinking_panel_appends_content_without_rebuilding_header():
     from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
     from prototypes.llm_led_teacher.public_thinking import (
         PublicThinkingEvent,
@@ -91,8 +93,7 @@ def test_live_thinking_panel_renders_public_copy_and_updates_elapsed_label():
             self.updates.append(kwargs)
 
     status = FakeStatus()
-    clock = iter([10.0, 12.4]).__next__
-    panel = LiveThinkingPanel(status, clock=clock)
+    panel = LiveThinkingPanel(status)
     panel.append(
         PublicThinkingEvent(
             sequence=1,
@@ -101,16 +102,60 @@ def test_live_thinking_panel_renders_public_copy_and_updates_elapsed_label():
             summary="找到 4 条可用的本地参考。",
         )
     )
-    panel.complete(6.8)
 
     assert status.lines == ["✓ 找到 4 条可用的本地参考。"]
-    assert status.updates[0]["label"] == "🧠 思考中…（已用时 2 秒）"
-    assert "expanded" not in status.updates[0]
-    assert status.updates[-1] == {
-        "label": "备课完成 · 7秒",
+    assert status.updates == []
+
+    panel.complete(6.8)
+
+    assert status.updates == [{
+        "label": "🧠 已思考（用时 7 秒）",
         "state": "complete",
         "expanded": False,
-    }
+    }]
+
+
+def test_live_thinking_panel_replaces_one_structured_snapshot_in_place():
+    from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
+    from prototypes.llm_led_teacher.public_thinking import (
+        PublicThinkingEvent,
+        PublicThinkingKind,
+        PublicThinkingSection,
+        PublicThinkingStatus,
+        PublicThinkingUpdate,
+    )
+
+    rendered = []
+
+    class FakeStatus:
+        def write(self, value):
+            raise AssertionError("structured updates should use the renderer")
+
+        def update(self, **kwargs):
+            pass
+
+    panel = LiveThinkingPanel(FakeStatus(), render_update=rendered.append)
+    update = PublicThinkingUpdate(
+        event=PublicThinkingEvent(
+            sequence=1,
+            kind=PublicThinkingKind.CLASSIFICATION,
+            status=PublicThinkingStatus.COMPLETED,
+            summary="已确认题目与作答目标。",
+        ),
+        sections=[
+            PublicThinkingSection(
+                kind=PublicThinkingKind.CLASSIFICATION,
+                title="题意",
+                summary="已确认题目与作答目标。",
+                details=["初中数学新题"],
+                status=PublicThinkingStatus.COMPLETED,
+            )
+        ],
+    )
+
+    panel.append(update)
+
+    assert rendered == [update]
 
 
 def test_live_thinking_panel_completion_updates_expansion_only_once():
@@ -134,11 +179,25 @@ def test_live_thinking_panel_completion_updates_expansion_only_once():
 
     assert status.updates == [
         {
-            "label": "备课完成 · 7秒",
+            "label": "🧠 已思考（用时 7 秒）",
             "state": "complete",
             "expanded": False,
         }
     ]
+
+
+def test_live_timer_runs_in_browser_and_thinking_collapses_before_answer_stream():
+    source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
+    theme = Path("prototypes/llm_led_teacher/desk_theme.py").read_text()
+
+    assert "desk-live-thinking-marker" in source
+    assert "desk-thinking-clock" in theme
+    assert "steps(900, end)" in theme
+    answer_stream = source.index(
+        "st.write_stream(iter_display_chunks(turn.teacher_output.response))"
+    )
+    completion = source.index("live_thinking.complete(turn.backend_total_seconds)")
+    assert completion < answer_stream
 
 
 def test_live_thinking_panel_failure_never_renders_exception_details():
@@ -251,6 +310,12 @@ def test_digital_teacher_desk_theme_has_paper_ink_and_responsive_contract():
     assert '[data-testid="stExpandSidebarButton"]' in DESK_THEME_CSS
     assert '[data-testid="stToolbar"],\n' not in DESK_THEME_CSS
     assert ".st-key-teacher_composer_controls" in DESK_THEME_CSS
+    assert ".desk-auth-page-marker" in DESK_THEME_CSS
+    assert ".desk-auth-panel-header" in DESK_THEME_CSS
+    assert ".desk-auth-collage" in DESK_THEME_CSS
+    assert ".desk-auth-bookmark" in DESK_THEME_CSS
+    assert ":has(.desk-auth-page-marker)" in DESK_THEME_CSS
+    assert "grid-template-columns" in DESK_THEME_CSS
 
 
 def test_streamlit_source_composes_the_desk_without_hiding_functional_controls():
@@ -258,8 +323,8 @@ def test_streamlit_source_composes_the_desk_without_hiding_functional_controls()
 
     assert "from prototypes.llm_led_teacher.desk_theme import" in source
     assert "DESK_THEME_CSS" in source
-    assert source.index("authenticated_user =") < source.index(
-        "st.markdown(DESK_THEME_CSS"
+    assert source.index("st.markdown(DESK_THEME_CSS") < source.index(
+        'if "authenticated_user" not in st.session_state:'
     )
     assert "新建一课" in source
     assert "def render_thinking_sections(" in source
@@ -269,3 +334,35 @@ def test_streamlit_source_composes_the_desk_without_hiding_functional_controls()
     assert "st.markdown(turn.teacher_output.response)" in source
     assert 'key="teacher_composer_controls"' in source
     assert "Deploy" not in source
+
+
+
+def test_event_bridge_delivers_updates_before_background_task_returns():
+    from threading import Event
+
+    from prototypes.llm_led_teacher.live_event_stream import run_with_event_stream
+
+    ui_received = Event()
+    worker_finished = Event()
+    observed = []
+
+    def task(emit):
+        emit("题意已确认")
+        assert ui_received.wait(timeout=1)
+        worker_finished.set()
+        return "回答完成"
+
+    def on_event(event):
+        assert not worker_finished.is_set()
+        observed.append(event)
+        ui_received.set()
+
+    result = run_with_event_stream(
+        task,
+        on_event,
+        poll_interval_seconds=0.005,
+    )
+
+    assert result == "回答完成"
+    assert observed == ["题意已确认"]
+    assert worker_finished.is_set()

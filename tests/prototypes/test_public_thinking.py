@@ -23,6 +23,24 @@ def test_recorder_assigns_strict_sequence_and_emits_callback() -> None:
     assert recorder.events[-1].elapsed_seconds == 2.5
 
 
+def test_update_callback_receives_incremental_stable_section_snapshots() -> None:
+    updates = []
+    recorder = PublicThinkingRecorder(update_callback=updates.append)
+
+    recorder.classification(
+        subject="数学",
+        stage="初中",
+        is_new_problem=True,
+        intent="引导完成当前题目",
+    )
+    recorder.strategy("先验证学生步骤，再给下一步提示")
+
+    assert [section.title for section in updates[0].sections] == ["题意"]
+    assert [section.title for section in updates[1].sections] == ["题意", "写法"]
+    assert updates[0].sections[0].details == ["数学新题", "引导完成当前题目"]
+    assert updates[0].sections is not recorder.sections
+
+
 def test_callback_failure_does_not_remove_recorded_event() -> None:
     def broken_callback(event) -> None:
         raise RuntimeError(f"UI unavailable at event {event.sequence}")
@@ -192,6 +210,26 @@ def test_public_summary_contains_four_useful_sections() -> None:
     ]
 
 
+def test_public_events_explain_how_the_turn_is_being_handled() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.classification(
+        subject="数学",
+        stage="初中",
+        is_new_problem=True,
+        intent="引导完成当前题目",
+    )
+    recorder.strategy("先验证学生步骤，再给下一步提示")
+    recorder.retrieval_decision(mode="none", reason="当前题可直接确定性计算")
+    recorder.composition("先回应当前步骤，再给下一步提示")
+
+    assert [event.summary for event in recorder.events] == [
+        "已识别为初中数学新题；本轮目标是引导完成当前题目。",
+        "将先验证学生当前步骤，再只推进一个关键步骤，避免一次给完答案。",
+        "本题可直接依据题目与确定性工具处理，因此不调用 RAG。",
+        "回答会先回应当前步骤，再给出下一步提示。",
+    ]
+
 def test_public_summary_rejects_private_agent_fields() -> None:
     recorder = PublicThinkingRecorder()
 
@@ -287,7 +325,10 @@ def test_repeated_updates_stay_consolidated_and_keep_legacy_callback() -> None:
     assert recorder.sections[0].details == ["先验证学生步骤，再给下一步提示"]
     assert recorder.sections[-1].elapsed_seconds == 1.25
     assert emitted == recorder.events
-    assert any(event.summary == "已确定本轮处理方式。" for event in emitted)
+    assert any(
+        event.summary == "将先验证学生当前步骤，再只推进一个关键步骤，避免一次给完答案。"
+        for event in emitted
+    )
 
 
 def test_section_subslots_preserve_safe_details_in_stable_order() -> None:

@@ -47,13 +47,29 @@ class PublicThinkingSection(BaseModel):
     elapsed_seconds: float = Field(default=0.0, ge=0.0)
 
 
+class PublicThinkingUpdate(BaseModel):
+    """One safe event plus the section snapshot available at that moment."""
+
+    event: PublicThinkingEvent
+    sections: list[PublicThinkingSection] = Field(default_factory=list)
+
+
 ThinkingEventCallback = Callable[[PublicThinkingEvent], None]
+ThinkingUpdateCallback = Callable[[PublicThinkingUpdate], None]
 
 
 _STAGE_COPY = {
+    "classification": (
+        PublicThinkingKind.CLASSIFICATION,
+        "正在识别题目和学生意图……",
+    ),
     "observing": (
         PublicThinkingKind.CLASSIFICATION,
         "正在识别题目和学生意图……",
+    ),
+    "planning": (
+        PublicThinkingKind.STRATEGY,
+        "正在选择合适的教学路径……",
     ),
     "retrieving": (
         PublicThinkingKind.RETRIEVAL,
@@ -110,6 +126,33 @@ _ROUTE_MODE_COPY = {
     "local": "使用本地 RAG",
     "local_then_web": "先查本地 RAG，必要时联网补充",
 }
+_PUBLIC_STRATEGY_EVENT_COPY = {
+    "从画面、情绪、悬念三个方向改写": (
+        "将分别从画面、情绪和悬念三个角度组织示例，帮助比较表达效果。"
+    ),
+    "先确认题意，再分步讲解": "将先明确题目要求和已知条件，再按关键步骤展开讲解。",
+    "先验证学生步骤，再给下一步提示": (
+        "将先验证学生当前步骤，再只推进一个关键步骤，避免一次给完答案。"
+    ),
+    "先解释概念，再给一个练习": "将先用直白语言解释概念，再用一道练习帮助巩固。",
+    "直接回应并简短说明": "将直接回应当前问题，并补充必要依据。",
+}
+_PUBLIC_COMPOSITION_EVENT_COPY = {
+    "先解释方法，再给三个示例和迁移提示": (
+        "回答会先说明方法，再给出三个示例，并补充可迁移的写法提示。"
+    ),
+    "先给结论，再解释依据": "回答会先给出明确结论，再解释关键依据。",
+    "先回应当前步骤，再给下一步提示": "回答会先回应当前步骤，再给出下一步提示。",
+    "先解释概念，再用例子巩固": "回答会先解释核心概念，再用例子帮助巩固。",
+}
+_ROUTE_EVENT_COPY = {
+    "none": "本题可直接依据题目与确定性工具处理，因此不调用 RAG。",
+    "local": "将检索本地教材与题库，用课程内资料核对概念和解题依据。",
+    "local_then_web": (
+        "将先查本地教材与题库；若证据不足，再补充联网资料并标明来源。"
+    ),
+}
+
 _SECTION_ORDER = {"题意": 0, "写法": 1, "资料": 2, "成稿": 3}
 _SLOT_ORDER = {
     "题意": ("classification",),
@@ -137,11 +180,16 @@ _TOOL_START_COPY = {
 class PublicThinkingRecorder:
     """Build public events from a deliberately narrow set of scalar inputs."""
 
-    def __init__(self, callback: ThinkingEventCallback | None = None) -> None:
+    def __init__(
+        self,
+        callback: ThinkingEventCallback | None = None,
+        update_callback: ThinkingUpdateCallback | None = None,
+    ) -> None:
         self.events: list[PublicThinkingEvent] = []
         self.sections: list[PublicThinkingSection] = []
         self._section_slots: dict[str, dict[str, list[str]]] = {}
         self._callback = callback
+        self._update_callback = update_callback
         self._audit_has_warnings = False
 
     def _upsert_section(
@@ -199,6 +247,15 @@ class PublicThinkingRecorder:
                 self._callback(event)
             except Exception:  # noqa: BLE001 - UI reporting is best effort
                 pass
+        if self._update_callback is not None:
+            update = PublicThinkingUpdate(
+                event=event,
+                sections=[section.model_copy(deep=True) for section in self.sections],
+            )
+            try:
+                self._update_callback(update)
+            except Exception:  # noqa: BLE001 - UI reporting is best effort
+                pass
 
     def stage(self, name: str) -> None:
         mapped = _STAGE_COPY.get(name)
@@ -224,10 +281,15 @@ class PublicThinkingRecorder:
         ):
             relation = "新题" if is_new_problem else "当前题的追问"
             details = [f"{subject}{relation}"]
+            stage_label = "" if stage == "未知" else stage
+            target = f"{stage_label}{subject}{relation}"
+            event_summary = f"已识别为{target}；题目与作答目标已经确认。"
             if isinstance(intent, str) and intent in _PUBLIC_INTENTS:
                 details.append(intent)
+                event_summary = f"已识别为{target}；本轮目标是{intent}。"
         else:
             details = ["题目类型已确认"]
+            event_summary = "题目类型与作答目标已经确认。"
         summary = "已确认题目与作答目标。"
         self._upsert_section(
             slot="classification",
@@ -240,7 +302,7 @@ class PublicThinkingRecorder:
         self._append(
             PublicThinkingKind.CLASSIFICATION,
             PublicThinkingStatus.COMPLETED,
-            summary,
+            event_summary,
         )
 
     def strategy(self, label: object) -> None:
@@ -250,6 +312,10 @@ class PublicThinkingRecorder:
             else "处理方式已确定"
         )
         summary = "已确定本轮处理方式。"
+        event_summary = (
+            _PUBLIC_STRATEGY_EVENT_COPY.get(label, summary)
+            if isinstance(label, str) else summary
+        )
         self._upsert_section(
             slot="strategy",
             kind=PublicThinkingKind.STRATEGY,
@@ -261,7 +327,7 @@ class PublicThinkingRecorder:
         self._append(
             PublicThinkingKind.STRATEGY,
             PublicThinkingStatus.COMPLETED,
-            summary,
+            event_summary,
         )
 
     @staticmethod
@@ -281,6 +347,10 @@ class PublicThinkingRecorder:
         if mode == "none":
             self._section_slots.setdefault("资料", {}).pop("retrieval", None)
         summary = "已确定本轮资料使用方式。"
+        event_summary = (
+            _ROUTE_EVENT_COPY.get(mode, summary)
+            if isinstance(mode, str) else summary
+        )
         self._upsert_section(
             slot="route",
             kind=PublicThinkingKind.RETRIEVAL,
@@ -292,7 +362,7 @@ class PublicThinkingRecorder:
         self._append(
             PublicThinkingKind.RETRIEVAL,
             PublicThinkingStatus.COMPLETED,
-            summary,
+            event_summary,
         )
 
     def composition(self, label: object) -> None:
@@ -302,6 +372,10 @@ class PublicThinkingRecorder:
             else "成稿结构已确定"
         )
         summary = "已确定回答的公开结构。"
+        event_summary = (
+            _PUBLIC_COMPOSITION_EVENT_COPY.get(label, summary)
+            if isinstance(label, str) else summary
+        )
         self._upsert_section(
             slot="composition",
             kind=PublicThinkingKind.GENERATION,
@@ -313,7 +387,7 @@ class PublicThinkingRecorder:
         self._append(
             PublicThinkingKind.GENERATION,
             PublicThinkingStatus.COMPLETED,
-            summary,
+            event_summary,
         )
 
     def agent(self, event: AgentTraceEvent) -> None:

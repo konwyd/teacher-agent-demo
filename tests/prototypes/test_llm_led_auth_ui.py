@@ -21,6 +21,7 @@ from prototypes.llm_led_teacher.logic import (
 from prototypes.llm_led_teacher import logic, rag_hook
 from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
+    PublicThinkingUpdate,
     PublicThinkingKind,
     PublicThinkingStatus,
 )
@@ -80,7 +81,15 @@ def test_logged_out_page_shows_login_and_registration_without_teacher_ui(
 
     assert not app.exception
     assert [tab.label for tab in app.tabs] == ["登录", "注册"]
-    assert any(title.value == "📚 Teacher Agent" for title in app.title)
+    assert any(
+        "desk-auth-page-marker" in markdown.value
+        and "数字教师书桌" in markdown.value
+        for markdown in app.markdown
+    )
+    assert any(
+        "desk-auth-panel-header" in markdown.value and "欢迎回来" in markdown.value
+        for markdown in app.markdown
+    )
     assert not any(title.value == "🧪 LLM 主导 Teacher Prototype" for title in app.title)
 
 
@@ -275,7 +284,9 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
     )
 
     def successful_turn(episode, message, **kwargs):
-        kwargs["thinking_callback"](public_event)
+        kwargs["thinking_update_callback"](
+            PublicThinkingUpdate(event=public_event)
+        )
         turn = PrototypeTurnRecord(
             turn_id=len(episode.turns) + 1,
             student_message=message,
@@ -307,7 +318,7 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
     completed_statuses = [
         status
         for status in app.status
-        if status.label == "备课完成 · 7秒"
+        if status.label == "🧠 已思考（用时 7 秒）"
     ]
     assert len(completed_statuses) == 1
     assert completed_statuses[0].proto.expanded is False

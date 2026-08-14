@@ -32,7 +32,618 @@ body,
         linear-gradient(115deg, rgba(121,96,58,.035) 25%, transparent 25% 75%, rgba(121,96,58,.025) 75%);
     background-size: 19px 19px, 31px 31px;
 }
+/* Login and registration: a compact course card on the same digital desk. */
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand) {
+    background-color: #e7dfcd;
+    background-image:
+        radial-gradient(circle at 18% 14%, rgba(255,253,244,.82), transparent 31%),
+        radial-gradient(circle at 82% 88%, rgba(168,65,50,.055), transparent 26%),
+        repeating-linear-gradient(
+            0deg,
+            transparent 0 31px,
+            rgba(23,41,71,.026) 32px
+        );
+    background-size: auto;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stMainBlockContainer"] {
+    background-color: var(--desk-paper);
+    background-image:
+        radial-gradient(circle at 12% 16%, rgba(71,57,35,.035) 0 .7px, transparent .9px),
+        repeating-linear-gradient(0deg, transparent 0 31px, rgba(23,41,71,.022) 32px);
+    border: 1px solid rgba(91,69,39,.16);
+    border-radius: .7rem;
+    box-shadow: 0 28px 80px rgba(50,39,25,.18);
+    margin: clamp(3.2rem, 9vh, 6.5rem) auto 3rem;
+    max-width: 560px;
+    min-height: 0;
+    overflow: hidden;
+    padding: 3rem 3.35rem 3.2rem 4rem;
+    position: relative;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stMainBlockContainer"]::before {
+    background: rgba(168,65,50,.22);
+    bottom: 0;
+    content: "";
+    left: 2.35rem;
+    position: absolute;
+    top: 0;
+    width: 1px;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stMainBlockContainer"]::after {
+    border: 1px solid rgba(168,65,50,.22);
+    border-radius: 50%;
+    content: "";
+    height: 7rem;
+    position: absolute;
+    right: -4.2rem;
+    top: -4.2rem;
+    width: 7rem;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stExpandSidebarButton"] {
+    display: none !important;
+}
+.st-key-desk_auth_shell {
+    margin-bottom: 1.55rem;
+}
+.desk-auth-brand {
+    position: relative;
+}
+.desk-auth-kicker {
+    color: var(--desk-vermilion);
+    font-size: .67rem;
+    font-weight: 800;
+    letter-spacing: .18em;
+    margin-bottom: 1.15rem;
+}
+.desk-auth-heading {
+    align-items: center;
+    display: flex;
+    gap: .95rem;
+}
+.desk-auth-seal {
+    align-items: center;
+    background: var(--desk-vermilion);
+    border-radius: .22rem;
+    box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,.3),
+        0 6px 16px rgba(168,65,50,.2);
+    color: #fffaf0;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: .76rem;
+    height: 2.75rem;
+    justify-content: center;
+    letter-spacing: .08em;
+    line-height: 1.05;
+    text-align: center;
+    transform: rotate(-2deg);
+    width: 2.75rem;
+}
+.desk-auth-heading h1 {
+    color: var(--desk-ink);
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: 1.72rem;
+    font-weight: 760;
+    letter-spacing: .06em;
+    line-height: 1.15;
+    margin: 0;
+}
+.desk-auth-heading p {
+    color: var(--desk-ink-soft);
+    font-size: .76rem;
+    line-height: 1.6;
+    margin: .34rem 0 0;
+}
+.desk-auth-note {
+    border-left: 2px solid rgba(61,118,100,.42);
+    color: var(--desk-jade);
+    font-size: .7rem;
+    letter-spacing: .035em;
+    margin: 1.45rem 0 0;
+    padding-left: .65rem;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-baseweb="tab-list"] {
+    background: rgba(246,240,223,.72);
+    border: 1px solid rgba(91,69,39,.11);
+    border-radius: .48rem;
+    display: flex;
+    gap: .25rem;
+    padding: .25rem;
+    width: 100%;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-baseweb="tab"] {
+    border-radius: .34rem;
+    color: var(--desk-ink-soft);
+    font-size: .78rem;
+    flex: 1;
+    font-weight: 680;
+    height: 2.4rem;
+    justify-content: center;
+    padding: 0 1.25rem;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-baseweb="tab"][aria-selected="true"] {
+    background: var(--desk-paper);
+    box-shadow: 0 2px 8px rgba(50,39,25,.08);
+    color: var(--desk-vermilion);
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-baseweb="tab-highlight"] {
+    display: none;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-baseweb="tab-border"] {
+    display: none;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stForm"] {
+    border: 0;
+    padding: 1.35rem 0 0;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stTextInput"] label {
+    color: var(--desk-ink);
+    font-size: .75rem;
+    font-weight: 680;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stTextInput"] [data-baseweb="input"] {
+    background: rgba(255,255,255,.7);
+    border: 1px solid rgba(91,69,39,.16);
+    border-radius: .42rem;
+    box-shadow: inset 0 1px 2px rgba(50,39,25,.035);
+    min-height: 2.9rem;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+    border-color: rgba(168,65,50,.55);
+    box-shadow: 0 0 0 3px rgba(168,65,50,.08);
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stTextInput"] input {
+    background: transparent;
+    color: var(--desk-ink);
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stFormSubmitButton"] button {
+    background: var(--desk-ink);
+    border: 0;
+    border-radius: .42rem;
+    box-shadow: 0 8px 18px rgba(23,41,71,.16);
+    color: #fffdf4;
+    font-weight: 720;
+    min-height: 2.9rem;
+    transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+    [data-testid="stFormSubmitButton"] button:hover {
+    background: var(--desk-vermilion);
+    box-shadow: 0 10px 22px rgba(168,65,50,.2);
+    color: #fffdf4;
+    transform: translateY(-1px);
+}
+@media (max-width: 760px) {
+    [data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+        [data-testid="stMainBlockContainer"] {
+        margin: 1rem .75rem 2rem;
+        max-width: none;
+        padding: 2.2rem 1.35rem 2.4rem 2rem;
+    }
+    [data-testid="stAppViewContainer"]:has(.desk-auth-brand)
+        [data-testid="stMainBlockContainer"]::before {
+        left: 1.15rem;
+    }
+    .desk-auth-heading h1 {
+        font-size: 1.42rem;
+    }
+    .desk-auth-heading p {
+        font-size: .7rem;
+    }
+}
+@media (max-width: 390px) {
+    .desk-auth-heading {
+        align-items: flex-start;
+    }
+    .desk-auth-note {
+        line-height: 1.55;
+    }
+}
 
+/* Auth v2: visual design follows the approved asymmetric editorial mockup. */
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker) {
+    background-color: #f0eadf;
+    background-image:
+        radial-gradient(circle at 14% 18%, rgba(255,255,255,.92), transparent 28%),
+        radial-gradient(circle at 86% 78%, rgba(183,71,54,.055), transparent 24%),
+        linear-gradient(112deg, rgba(255,253,246,.72), rgba(232,222,203,.48));
+    background-size: auto;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stMainBlockContainer"] {
+    margin: 0 auto;
+    max-width: 1440px;
+    min-height: 100vh;
+    padding: clamp(2.5rem, 6vh, 5.2rem) clamp(2rem, 6vw, 6.5rem);
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stMainBlockContainer"] > div {
+    min-height: calc(100vh - clamp(5rem, 12vh, 10.4rem));
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    display: grid;
+    gap: clamp(3rem, 7vw, 8rem);
+    grid-template-columns: minmax(0, 1.12fr) minmax(420px, .88fr);
+    min-height: inherit;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    flex: initial !important;
+    min-width: 0;
+    width: auto !important;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stColumn"]:has(.desk-auth-panel-header) {
+    background: rgba(255,253,246,.94);
+    border: 1px solid rgba(96,73,43,.14);
+    border-radius: .85rem;
+    box-shadow:
+        0 28px 70px rgba(53,41,24,.16),
+        0 3px 9px rgba(53,41,24,.06);
+    max-width: 470px;
+    overflow: hidden;
+    padding: 3.15rem 3.1rem 2.6rem;
+    position: relative;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stColumn"]:has(.desk-auth-panel-header)::before {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(183,71,54,.92) 42% 58%,
+        transparent
+    );
+    content: "";
+    height: 2px;
+    left: 32%;
+    position: absolute;
+    right: 32%;
+    top: 5.2rem;
+}
+[data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+    [data-testid="stExpandSidebarButton"] {
+    display: none !important;
+}
+.desk-auth-hero {
+    max-width: 660px;
+    padding-top: .5rem;
+}
+.desk-auth-wordmark {
+    align-items: center;
+    color: var(--desk-ink);
+    display: flex;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: .86rem;
+    font-weight: 720;
+    gap: .75rem;
+    letter-spacing: .12em;
+}
+.desk-auth-mini-seal {
+    align-items: center;
+    border: 2px solid var(--desk-vermilion);
+    border-radius: .18rem;
+    color: var(--desk-vermilion);
+    display: inline-flex;
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: .62rem;
+    font-weight: 800;
+    height: 2.15rem;
+    justify-content: center;
+    letter-spacing: -.04em;
+    transform: rotate(-2deg);
+    width: 2.15rem;
+}
+.desk-auth-hero h1 {
+    color: var(--desk-ink);
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: clamp(3rem, 5.1vw, 5rem);
+    font-weight: 760;
+    letter-spacing: .025em;
+    line-height: 1.08;
+    margin: 1.6rem 0 .85rem;
+}
+.desk-auth-title-rule {
+    background: var(--desk-vermilion);
+    border-radius: 999px;
+    height: 3px;
+    margin-bottom: 1.15rem;
+    width: 3.2rem;
+}
+.desk-auth-tagline {
+    color: var(--desk-ink-soft);
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: 1rem;
+    letter-spacing: .045em;
+    line-height: 1.8;
+    margin: 0;
+}
+.desk-auth-collage {
+    height: 320px;
+    margin-top: 2.1rem;
+    position: relative;
+}
+.desk-auth-paper {
+    background-color: #fffdf6;
+    background-image:
+        repeating-linear-gradient(0deg, transparent 0 25px, rgba(49,95,196,.07) 26px);
+    border: 1px solid rgba(96,73,43,.12);
+    box-shadow: 0 18px 34px rgba(53,41,24,.12);
+    position: absolute;
+}
+.desk-auth-paper-back {
+    height: 220px;
+    left: 8.5rem;
+    top: 2.3rem;
+    transform: rotate(7deg);
+    width: min(68%, 410px);
+}
+.desk-auth-paper-back span {
+    color: rgba(23,42,74,.35);
+    font-size: .67rem;
+    left: 1.3rem;
+    letter-spacing: .16em;
+    position: absolute;
+    top: 1.2rem;
+}
+.desk-auth-paper-main {
+    height: 230px;
+    left: 4.5rem;
+    overflow: hidden;
+    padding: 1.7rem 2rem;
+    top: 1.2rem;
+    transform: rotate(-3deg);
+    width: min(70%, 430px);
+}
+.desk-auth-paper-main small {
+    color: var(--desk-vermilion);
+    display: block;
+    font-size: .58rem;
+    letter-spacing: .14em;
+}
+.desk-auth-paper-main strong {
+    color: var(--desk-ink);
+    display: block;
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: 1.16rem;
+    margin-top: .85rem;
+}
+.desk-auth-paper-main p {
+    color: rgba(23,42,74,.55);
+    font-size: .63rem;
+    letter-spacing: .04em;
+    margin-top: .45rem;
+}
+.desk-auth-handnote {
+    color: #3567cf;
+    font-family: "KaiTi", "STKaiti", cursive;
+    font-size: .82rem;
+    left: -1.4rem;
+    line-height: 1.75;
+    position: absolute;
+    top: 5.8rem;
+    transform: rotate(-7deg);
+    z-index: 4;
+}
+.desk-auth-bookmark {
+    background: #456d5e;
+    box-shadow: 0 7px 16px rgba(30,68,55,.2);
+    color: #fff9e9;
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: .62rem;
+    height: 8.4rem;
+    letter-spacing: .1em;
+    padding-top: 2rem;
+    position: absolute;
+    right: 4rem;
+    text-align: center;
+    top: 7rem;
+    transform: rotate(11deg);
+    width: 2.15rem;
+    writing-mode: vertical-rl;
+    z-index: 5;
+}
+.desk-auth-bookmark::after {
+    border-left: 1.075rem solid transparent;
+    border-right: 1.075rem solid transparent;
+    border-top: 1rem solid #456d5e;
+    bottom: -1rem;
+    content: "";
+    left: 0;
+    position: absolute;
+}
+.desk-auth-geometry {
+    border: 1px solid rgba(49,95,196,.28);
+    border-radius: 50%;
+    bottom: 1.3rem;
+    height: 5.2rem;
+    position: absolute;
+    right: 2.1rem;
+    width: 5.2rem;
+}
+.desk-auth-geometry::before,
+.desk-auth-geometry::after {
+    background: rgba(49,95,196,.24);
+    content: "";
+    height: 1px;
+    left: -.6rem;
+    position: absolute;
+    top: 50%;
+    width: 6.4rem;
+}
+.desk-auth-geometry::after {
+    transform: rotate(60deg);
+}
+.desk-auth-geometry i {
+    background: #3567cf;
+    border-radius: 50%;
+    height: .26rem;
+    position: absolute;
+    width: .26rem;
+}
+.desk-auth-geometry i:nth-child(1) { left: 48%; top: -.13rem; }
+.desk-auth-geometry i:nth-child(2) { bottom: .45rem; left: .6rem; }
+.desk-auth-geometry i:nth-child(3) { bottom: .45rem; right: .6rem; }
+.desk-auth-panel-header {
+    text-align: center;
+}
+.desk-auth-panel-kicker {
+    color: var(--desk-ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: .66rem;
+    font-weight: 720;
+    letter-spacing: .14em;
+    margin-bottom: 2.8rem;
+}
+.desk-auth-panel-header h2 {
+    color: var(--desk-ink);
+    font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+    font-size: 1.75rem;
+    letter-spacing: .08em;
+    margin: 0;
+}
+.desk-auth-panel-header p {
+    color: var(--desk-ink-soft);
+    font-size: .72rem;
+    margin: .6rem 0 1.7rem;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-baseweb="tab-list"] {
+    background: transparent;
+    border-bottom: 1px solid rgba(96,73,43,.16);
+    display: flex;
+    gap: 0;
+    padding: 0;
+    width: 100%;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-baseweb="tab"] {
+    color: var(--desk-ink-soft);
+    flex: 1;
+    font-size: .78rem;
+    font-weight: 680;
+    height: 2.6rem;
+    justify-content: center;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-baseweb="tab"][aria-selected="true"] {
+    color: var(--desk-vermilion);
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-baseweb="tab-highlight"] {
+    background: var(--desk-vermilion);
+    height: 2px;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stForm"] {
+    border: 0;
+    padding: 1.35rem 0 .2rem;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stTextInput"] label {
+    color: var(--desk-ink);
+    font-size: .72rem;
+    font-weight: 680;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stTextInput"] [data-baseweb="input"] {
+    background: #fffef9;
+    border: 1px solid rgba(70,71,74,.2);
+    border-radius: .35rem;
+    box-shadow: none;
+    min-height: 3rem;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stTextInput"] input {
+    background: transparent;
+    color: var(--desk-ink);
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+    border-color: rgba(49,95,196,.6);
+    box-shadow: 0 0 0 3px rgba(49,95,196,.09);
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stFormSubmitButton"] button {
+    background: linear-gradient(100deg, #142a4a, #18365e);
+    border: 0;
+    border-radius: .35rem;
+    box-shadow: 0 9px 20px rgba(20,42,74,.18);
+    color: #fffdf6;
+    font-weight: 720;
+    letter-spacing: .08em;
+    min-height: 3.05rem;
+    position: relative;
+}
+[data-testid="stColumn"]:has(.desk-auth-panel-header)
+    [data-testid="stFormSubmitButton"] button:hover {
+    background: #315fc4;
+    box-shadow: 0 11px 25px rgba(49,95,196,.23);
+    color: #fff;
+    transform: translateY(-1px);
+}
+.desk-auth-privacy {
+    color: rgba(23,42,74,.48);
+    font-size: .62rem;
+    margin-top: .8rem;
+    text-align: center;
+}
+@media (max-width: 980px) {
+    [data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+        [data-testid="stHorizontalBlock"] {
+        gap: 2.2rem;
+        grid-template-columns: minmax(0, 1fr) minmax(380px, .9fr);
+    }
+    .desk-auth-hero h1 {
+        font-size: 3rem;
+    }
+}
+@media (max-width: 760px) {
+    [data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+        [data-testid="stMainBlockContainer"] {
+        padding: 1.5rem 1rem 3rem;
+    }
+    [data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+        [data-testid="stHorizontalBlock"] {
+        display: block;
+        min-height: 0;
+    }
+    .desk-auth-hero {
+        margin: 0 auto 1.8rem;
+        max-width: 470px;
+        padding: .4rem .35rem 0;
+    }
+    .desk-auth-hero h1 {
+        font-size: 2.45rem;
+        margin-top: 1.1rem;
+    }
+    .desk-auth-collage {
+        display: none;
+    }
+    [data-testid="stAppViewContainer"]:has(.desk-auth-page-marker)
+        [data-testid="stColumn"]:has(.desk-auth-panel-header) {
+        margin: 0 auto;
+        max-width: 470px;
+        padding: 2.5rem 1.5rem 2.2rem;
+    }
+}
 /* Keep Streamlit's sidebar control usable without leaving a white hosting bar. */
 [data-testid="stHeader"] {
     background: transparent !important;
@@ -399,6 +1010,30 @@ footer {
 [data-testid="stExpander"]:has(.desk-thinking-rail) summary {
     color: var(--desk-ink);
     font-size: .73rem;
+}
+
+@property --desk-thinking-seconds {
+    syntax: "<integer>";
+    initial-value: 0;
+    inherits: false;
+}
+@keyframes desk-thinking-clock {
+    from { --desk-thinking-seconds: 0; }
+    to { --desk-thinking-seconds: 900; }
+}
+.desk-live-thinking-marker {
+    display: none;
+}
+[data-testid="stExpander"]:has(.desk-live-thinking-marker) summary p::after,
+[data-testid="stExpander"]:has(.desk-live-thinking-marker) button p::after {
+    animation: desk-thinking-clock 900s steps(900, end) forwards;
+    color: var(--desk-ink-soft);
+    content: "（已用时 " counter(deskThinkingSeconds) " 秒）";
+    counter-reset: deskThinkingSeconds var(--desk-thinking-seconds);
+    display: inline-block;
+    font-variant-numeric: tabular-nums;
+    margin-left: .35rem;
+    min-width: 7.4em;
 }
 
 [data-testid="stBottomBlockContainer"] {

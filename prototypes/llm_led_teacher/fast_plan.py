@@ -69,6 +69,7 @@ def run_fast_plan(
     step = 2
 
     if skill_name:
+        _trace_tool_start(trace, step, "load_skill", callback)
         result = registry.execute("load_skill", {"name": skill_name}, runtime)
         observations.append(result)
         if result.ok:
@@ -81,6 +82,7 @@ def run_fast_plan(
 
     if needs_local_search:
         assert classification.subject is not None
+        _trace_tool_start(trace, step, "search_local_knowledge", callback)
         result = registry.execute(
             "search_local_knowledge",
             {
@@ -149,6 +151,26 @@ def _trace_tool_result(
             ok=result.ok,
             elapsed_seconds=result.elapsed_seconds,
             details={"hit_count": hit_count, "error": result.error},
+        ),
+        callback,
+    )
+
+
+def _trace_tool_start(
+    trace: list[AgentTraceEvent],
+    step: int,
+    tool_name: str,
+    callback: TraceCallback,
+) -> None:
+    """Publish a safe start marker before a potentially slow tool blocks."""
+
+    _append_trace(
+        trace,
+        AgentTraceEvent(
+            step=step,
+            event_type="decision",
+            summary=f"准备执行 {tool_name}",
+            tool_name=tool_name,
         ),
         callback,
     )

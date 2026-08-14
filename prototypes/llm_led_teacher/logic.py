@@ -37,6 +37,7 @@ from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
     PublicThinkingRecorder,
     PublicThinkingSection,
+    ThinkingUpdateCallback,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
 from prototypes.llm_led_teacher.retrieval_policy import (
@@ -619,6 +620,7 @@ def _run_turn_impl(
     enable_agent_loop: bool = False,
     progress_callback: ProgressCallback | None = None,
     thinking_callback: ThinkingCallback | None = None,
+    thinking_update_callback: ThinkingUpdateCallback | None = None,
     clock: Callable[[], float] = perf_counter,
     kv_lease=None,
 ) -> PrototypeTurnRecord:
@@ -641,7 +643,11 @@ def _run_turn_impl(
     stage_started_at = started_at
     current_stage = "classification" if orchestrator is not None else "observing"
     stage_timings: dict[str, float] = {}
-    thinking = PublicThinkingRecorder(callback=thinking_callback)
+    thinking = PublicThinkingRecorder(
+        callback=thinking_callback,
+        update_callback=thinking_update_callback,
+    )
+    thinking.stage(current_stage)
 
     def enter_stage(stage: str) -> None:
         nonlocal current_stage, stage_started_at
@@ -1038,6 +1044,7 @@ def run_turn(
     enable_agent_loop: bool = False,
     progress_callback: ProgressCallback | None = None,
     thinking_callback: ThinkingCallback | None = None,
+    thinking_update_callback: ThinkingUpdateCallback | None = None,
     clock: Callable[[], float] = perf_counter,
     kv_identity: KvCacheIdentity | None = None,
     kv_manager: KvCacheManager | None = None,
@@ -1056,6 +1063,7 @@ def run_turn(
         "enable_agent_loop": enable_agent_loop,
         "progress_callback": progress_callback,
         "thinking_callback": thinking_callback,
+        "thinking_update_callback": thinking_update_callback,
         "clock": clock,
     }
     if kv_identity is None or manager is None:

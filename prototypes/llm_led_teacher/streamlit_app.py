@@ -36,8 +36,12 @@ from prototypes.llm_led_teacher.conversation_ui import (
     episode_has_content,
 )
 from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
+from prototypes.llm_led_teacher.live_event_stream import run_with_event_stream
 from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
-from prototypes.llm_led_teacher.public_thinking import format_public_thinking_event
+from prototypes.llm_led_teacher.public_thinking import (
+    PublicThinkingUpdate,
+    format_public_thinking_event,
+)
 from prototypes.llm_led_teacher.rag_hook import warmup_rag
 from prototypes.llm_led_teacher.streaming import iter_display_chunks
 from prototypes.llm_led_teacher.thinking_state import (
@@ -156,6 +160,8 @@ _DEEPSEEK_STYLE = """
 }
 </style>
 """
+st.markdown(DESK_THEME_CSS, unsafe_allow_html=True)
+
 _PENDING_STUDENT_MESSAGE_KEY = "prototype_pending_student_message"
 
 
@@ -304,16 +310,59 @@ def _activate_conversation_by_id(conversation_id: str) -> None:
 
 
 def _render_auth_gate() -> None:
-    st.title("📚 Teacher Agent")
-    st.caption("登录后进入你的专属学习空间")
-    login_tab, register_tab = st.tabs(["登录", "注册"])
     account_store = get_local_account_store()
+    hero_column, panel_column = st.columns([1.12, 0.88], gap="large")
+
+    with hero_column:
+        st.markdown(
+            """
+            <section class="desk-auth-page-marker desk-auth-hero">
+              <div class="desk-auth-wordmark">
+                <span class="desk-auth-mini-seal" aria-hidden="true">师案</span>
+                <span>TEACHER AGENT</span>
+              </div>
+              <h1>数字教师书桌</h1>
+              <div class="desk-auth-title-rule" aria-hidden="true"></div>
+              <p class="desk-auth-tagline">把每一次提问，整理成一页可以继续学习的讲义。</p>
+              <div class="desk-auth-collage" aria-hidden="true">
+                <div class="desk-auth-handnote">提出问题 →<br>理解本质<br>形成方法</div>
+                <div class="desk-auth-paper desk-auth-paper-back">
+                  <span>课堂随记</span>
+                </div>
+                <div class="desk-auth-paper desk-auth-paper-main">
+                  <small>今日讲义 · LESSON 08</small>
+                  <strong>从问题出发</strong>
+                  <p>理解概念&nbsp;&nbsp;·&nbsp;&nbsp;逐步推导&nbsp;&nbsp;·&nbsp;&nbsp;迁移应用</p>
+                  <div class="desk-auth-geometry">
+                    <i></i><i></i><i></i>
+                  </div>
+                </div>
+                <div class="desk-auth-bookmark">继续学习</div>
+              </div>
+            </section>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with panel_column:
+        st.markdown(
+            """
+            <header class="desk-auth-panel-header">
+              <div class="desk-auth-panel-kicker">TEACHER AGENT</div>
+              <h2>欢迎回来</h2>
+              <p>登录后继续你的课程与学习记录</p>
+            </header>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    login_tab, register_tab = panel_column.tabs(["登录", "注册"])
 
     with login_tab:
         with st.form("login_form"):
             username = st.text_input("用户名", key="login_username")
             password = st.text_input("密码", type="password", key="login_password")
-            submitted = st.form_submit_button("登录", use_container_width=True)
+            submitted = st.form_submit_button("进入书桌", use_container_width=True)
         if submitted:
             try:
                 account = account_store.authenticate(username, password)
@@ -341,7 +390,7 @@ def _render_auth_gate() -> None:
                 type="password",
                 key="register_password_confirm",
             )
-            submitted = st.form_submit_button("注册并登录", use_container_width=True)
+            submitted = st.form_submit_button("创建书桌并登录", use_container_width=True)
         if submitted:
             if password != password_confirm:
                 st.error("两次输入的密码不一致。")
@@ -354,13 +403,19 @@ def _render_auth_gate() -> None:
                     _start_authenticated_session(account.user_id, account.username)
                     st.rerun()
 
+    panel_column.markdown(
+        """
+        <div class="desk-auth-privacy">◇ 密码仅以加盐哈希保存</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 if "authenticated_user" not in st.session_state:
     _render_auth_gate()
     st.stop()
 
 authenticated_user = st.session_state.authenticated_user
-st.markdown(DESK_THEME_CSS, unsafe_allow_html=True)
 warmup_status = warmup_rag()
 
 if (
@@ -802,9 +857,11 @@ def render_public_thinking(
         on_change=_remember_thinking_expansion,
         args=(state_key, expanded_key),
     ):
-        render_thinking_sections(turn, expanded=panel_state.expanded)
-        for event in turn.public_thinking_events:
-            st.markdown(format_public_thinking_event(event))
+        if turn.sections:
+            render_thinking_sections(turn, expanded=panel_state.expanded)
+        else:
+            for event in turn.public_thinking_events:
+                st.markdown(format_public_thinking_event(event))
 
 
 def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
@@ -918,21 +975,50 @@ if message:
             previous_thinking_state
         )
         with live_rail:
-            progress_status = st.status("🧠 思考中…（已用时 0 秒）", expanded=True)
-            live_thinking = LiveThinkingPanel(progress_status)
+            progress_status = st.status("🧠 思考中…", expanded=True)
+            timer_marker = progress_status.empty()
+            timer_marker.markdown(
+                '<span class="desk-live-thinking-marker" aria-hidden="true"></span>',
+                unsafe_allow_html=True,
+            )
+            thinking_content = progress_status.empty()
 
-        try:
-            turn = run_turn(
+            def render_live_update(update: PublicThinkingUpdate) -> None:
+                if update.sections:
+                    desk_render_thinking_sections(
+                        update,
+                        expanded=True,
+                        container=thinking_content,
+                    )
+                else:
+                    thinking_content.markdown(
+                        format_public_thinking_event(update.event)
+                    )
+
+            live_thinking = LiveThinkingPanel(
+                progress_status,
+                render_update=render_live_update,
+            )
+
+        def execute_turn(emit_thinking):
+            return run_turn(
                 episode,
                 message,
                 enable_agent_loop=True,
-                thinking_callback=live_thinking.append,
+                thinking_update_callback=emit_thinking,
                 kv_identity=KvCacheIdentity(
                     authenticated_user["user_id"],
                     target_conversation_id,
                 ),
             )
+
+        try:
+            turn = run_with_event_stream(
+                execute_turn,
+                live_thinking.append,
+            )
         except (DeepSeekError, ValueError) as exc:
+            timer_marker.empty()
             st.session_state[thinking_state_key] = fail_thinking(
                 st.session_state[thinking_state_key]
             )
@@ -951,13 +1037,7 @@ if message:
                 history_save_error = str(exc)
             if history_save_error:
                 st.warning(f"历史记录保存失败：{history_save_error}")
-            if turn.sections:
-                with progress_status:
-                    render_thinking_sections(
-                        turn,
-                        expanded=True,
-                        container=progress_status,
-                    )
+            timer_marker.empty()
             st.session_state[thinking_state_key] = complete_thinking(
                 st.session_state[thinking_state_key]
             )
