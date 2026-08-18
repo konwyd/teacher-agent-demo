@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from prototypes.llm_led_teacher.context_usage import (
+    build_conversation_context_usage_display,
     build_context_usage_display,
     build_kv_persistence_display,
 )
@@ -21,9 +22,7 @@ def test_context_control_stays_in_composer_flow_before_send_area():
     assert "gap: 6px" in context_style
     assert 'content: "上下文"' in context_style
 
-    composer_start = source.index(
-        'with st.container(key="teacher_composer_actions"):'
-    )
+    composer_start = source.index('with st.container(key="teacher_composer_actions"):')
     send_area = source.index("message = st.chat_input(", composer_start)
     controls = source.index(
         'with st.container(key="teacher_composer_controls"):',
@@ -75,6 +74,46 @@ def test_usage_over_current_limit_remains_visible_without_changing_capacity():
     assert display.used_tokens == 216_500
     assert display.current_window_tokens == 131_072
     assert display.usage_ratio > 1.0
+
+
+def test_conversation_usage_keeps_peak_when_latest_turn_is_smaller():
+    display = build_conversation_context_usage_display(
+        [
+            {
+                "context_used_tokens": 11_832,
+                "context_window_tokens": 524_288,
+            },
+            {
+                "context_used_tokens": 1_100,
+                "context_window_tokens": 524_288,
+            },
+        ],
+        current_window_tokens=524_288,
+    )
+
+    assert display.used_tokens == 11_832
+    assert display.usage_ratio == 11_832 / 524_288
+    assert display.historical_window_tokens == 524_288
+
+
+def test_conversation_usage_uses_latest_recorded_historical_limit():
+    display = build_conversation_context_usage_display(
+        [
+            {
+                "context_used_tokens": 65_536,
+                "context_window_tokens": 524_288,
+            },
+            {
+                "context_used_tokens": 32_768,
+                "context_window_tokens": 131_072,
+            },
+        ],
+        current_window_tokens=131_072,
+    )
+
+    assert display.used_tokens == 65_536
+    assert display.historical_window_tokens == 131_072
+    assert display.historical_limit_changed is False
 
 
 def test_kv_persistence_display_reads_directory_and_error_as_metadata_keys():

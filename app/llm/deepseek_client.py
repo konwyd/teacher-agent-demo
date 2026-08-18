@@ -339,7 +339,7 @@ class DeepSeekClient:
 def summarize_usage_metadata(
     records: list[dict[str, object]],
 ) -> dict[str, object]:
-    """Aggregate all LLM calls in a turn while keeping latest context occupancy."""
+    """Aggregate all LLM calls in a turn while keeping peak context occupancy."""
 
     if not records:
         return {}
@@ -367,8 +367,12 @@ def summarize_usage_metadata(
     cache_hits = int(summary["prompt_cache_hit_tokens"])
     cache_misses = int(summary["prompt_cache_miss_tokens"])
     cache_denominator = cache_hits + cache_misses
-    context_used = int(latest.get("context_used_tokens", 0) or 0)
-    context_window = int(latest.get("context_window_tokens", 0) or 0)
+    peak = max(
+        records,
+        key=lambda record: int(record.get("context_used_tokens", 0) or 0),
+    )
+    context_used = int(peak.get("context_used_tokens", 0) or 0)
+    context_window = int(peak.get("context_window_tokens", 0) or 0)
     summary.update(
         {
             "llm_call_count": len(records),

@@ -15,6 +15,9 @@ def _settings(tmp_path: Path, **overrides):
         "parallel": 4,
         "http_timeout_seconds": 30.0,
         "keep_versions": 2,
+        "max_bytes": 100,
+        "high_water_bytes": 80,
+        "low_water_bytes": 70,
     }
     values.update(overrides)
     return KvCacheSettings(**values)
@@ -62,7 +65,12 @@ def test_settings_are_disabled_by_default(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("parallel", 0), ("http_timeout_seconds", 0), ("keep_versions", 0)],
+    [
+        ("parallel", 0),
+        ("http_timeout_seconds", 0),
+        ("keep_versions", 0),
+        ("max_bytes", 0),
+    ],
 )
 def test_settings_reject_invalid_runtime_limits(tmp_path: Path, field: str, value):
     values = {field: value}
@@ -222,3 +230,112 @@ def test_current_llama_server_counter_names_are_recorded(tmp_path: Path):
     assert lease.status.restored_bytes == 99
     assert lease.status.saved_tokens == 34
     assert lease.status.saved_bytes == 144
+
+
+def test_budget_cleanup_starts_above_high_water_and_stops_at_low_water(tmp_path: Path):
+    from app.llm.kv_cache import KvCacheManager
+
+    manager = KvCacheManager(_settings(tmp_path), opener=object())
+    oldest = tmp_path / "kv_a_100.bin"
+    middle = tmp_path / "kv_b_200.bin"
+    protected = tmp_path / "kv_c_300.bin"
+    oldest.write_bytes(b"a" * 30)
+    middle.write_bytes(b"b" * 30)
+    protected.write_bytes(b"c" * 30)
+
+    result = manager.cleanup_cache(protected={protected})
+
+    assert result.before_bytes == 90
+    assert result.after_bytes == 60
+    assert oldest.exists() is False
+    assert middle.exists() is True
+    assert protected.exists() is True
+
+
+def test_budget_cleanup_is_noop_at_or_below_high_water(tmp_path: Path):
+    from app.llm.kv_cache import KvCacheManager
+
+    manager = KvCacheManager(_settings(tmp_path), opener=object())
+    snapshot = tmp_path / "kv_a_100.bin"
+    snapshot.write_bytes(b"a" * 80)
+
+    result = manager.cleanup_cache()
+
+    assert result.before_bytes == result.after_bytes == 80
+    assert snapshot.exists() is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("model_id", "another-model"),
+        ("cache_format", "llama-server-slot-v2"),
+        ("context_tokens", 262_144),
+        ("parallel", 2),
+        ("unified_kv", True),
+        ("cache_type_k", "f16"),
+        ("cache_type_v", "f16"),
+    ],
+)
+def test_snapshot_prefix_changes_for_every_compatibility_field(
+    tmp_path: Path, field: str, value
+):
+    from app.llm.kv_cache import KvCacheIdentity, KvCacheManager
+
+    identity = KvCacheIdentity("usr_a", "conv_a")
+    baseline = KvCacheManager(_settings(tmp_path), opener=object())
+    changed = KvCacheManager(_settings(tmp_path, **{field: value}), opener=object())
+
+    assert baseline.cache_prefix(identity) != changed.cache_prefix(identity)
+
+
+def test_budget_cleanup_never_deletes_snapshot_from_active_slot(tmp_path: Path):
+    from app.llm.kv_cache import KvCacheIdentity, KvCacheManager
+
+    manager = KvCacheManager(_settings(tmp_path, parallel=1), opener=object())
+    active_identity = KvCacheIdentity("usr_active", "conv_active")
+    same_slot_identity = KvCacheIdentity("usr_other", "conv_other")
+    snapshot = tmp_path / f"{manager.cache_prefix(same_slot_identity)}_100.bin"
+    snapshot.write_bytes(b"x" * 90)
+
+    with manager.lease(active_identity):
+        result = manager.cleanup_cache()
+
+    assert result.before_bytes == result.after_bytes == 90
+    assert snapshot.exists() is True
+
+
+def test_hard_budget_discards_replacement_and_keeps_last_known_good(tmp_path: Path):
+    from app.llm.kv_cache import KvCacheIdentity, KvCacheManager
+
+    class SavingOpener(_RecordingOpener):
+        def open(self, request, timeout):
+            body = json.loads((request.data or b"{}").decode("utf-8"))
+            response = super().open(request, timeout)
+            if request.full_url.endswith("action=save"):
+                (tmp_path / body["filename"]).write_bytes(b"n" * 60)
+            return response
+
+    identity = KvCacheIdentity("usr_a", "conv_a")
+    opener = SavingOpener(
+        [
+            {"id_slot": 0, "n_restored": 10},
+            {"id_slot": 0, "n_saved": 20},
+        ]
+    )
+    manager = KvCacheManager(
+        _settings(tmp_path, parallel=1, keep_versions=1),
+        opener=opener,
+    )
+    previous = tmp_path / f"{manager.cache_prefix(identity)}_100.bin"
+    previous.write_bytes(b"o" * 50)
+
+    with manager.lease(identity) as lease:
+        assert lease.restore() is True
+        assert lease.save() is False
+
+    assert lease.status.save_status == "discarded_budget"
+    assert previous.read_bytes() == b"o" * 50
+    assert sorted(tmp_path.glob(f"{manager.cache_prefix(identity)}_*.bin")) == [
+        previous
+    ]

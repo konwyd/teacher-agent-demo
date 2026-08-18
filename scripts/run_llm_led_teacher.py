@@ -26,7 +26,12 @@ DEFAULT_MODEL_HOST = "127.0.0.1"
 DEFAULT_MODEL_PORT = 8080
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
 DEFAULT_CTX_SIZE = 524288
-DEFAULT_PARALLEL = 1
+DEFAULT_PARALLEL = 4
+DEFAULT_UNIFIED_KV = True
+DEFAULT_CONTINUOUS_BATCHING = True
+DEFAULT_CACHE_RAM_MIB = 65536
+DEFAULT_CACHE_IDLE_SLOTS = True
+DEFAULT_KV_CACHE_BUDGET_GIB = 100
 DEFAULT_BATCH_SIZE = 128
 DEFAULT_UBATCH_SIZE = 128
 
@@ -87,11 +92,19 @@ def build_model_env(
     cache_type_k: str,
     cache_type_v: str,
     kv_cache_dir: Path = DEFAULT_KV_CACHE_DIR,
+    unified_kv: bool = DEFAULT_UNIFIED_KV,
+    continuous_batching: bool = DEFAULT_CONTINUOUS_BATCHING,
+    cache_ram_mib: int = DEFAULT_CACHE_RAM_MIB,
+    cache_idle_slots: bool = DEFAULT_CACHE_IDLE_SLOTS,
 ) -> dict[str, str]:
     env = dict(base)
     env["PORT"] = str(model_port)
     env["CTX_SIZE"] = str(ctx_size)
     env["PARALLEL"] = str(parallel)
+    env["KV_UNIFIED"] = "1" if unified_kv else "0"
+    env["CONT_BATCHING"] = "1" if continuous_batching else "0"
+    env["CACHE_RAM_MIB"] = str(cache_ram_mib)
+    env["CACHE_IDLE_SLOTS"] = "1" if cache_idle_slots else "0"
     env["BATCH_SIZE"] = str(batch_size)
     env["UBATCH_SIZE"] = str(ubatch_size)
     env["LLAMA_ARG_CACHE_TYPE_K"] = cache_type_k
@@ -119,6 +132,10 @@ def build_runtime_env(
     context_window_tokens: int = DEFAULT_CTX_SIZE,
     kv_cache_dir: Path = DEFAULT_KV_CACHE_DIR,
     parallel: int = DEFAULT_PARALLEL,
+    unified_kv: bool = DEFAULT_UNIFIED_KV,
+    kv_cache_budget_gib: int = DEFAULT_KV_CACHE_BUDGET_GIB,
+    cache_type_k: str = "q8_0",
+    cache_type_v: str = "q4_0",
 ) -> dict[str, str]:
     env = dict(base)
     env["CHROMA_HOST"] = rag_host
@@ -129,10 +146,27 @@ def build_runtime_env(
     env["DEEPSEEK_MODEL"] = model_name
     env["DEEPSEEK_TIMEOUT_SECONDS"] = str(request_timeout)
     env["DEEPSEEK_CONTEXT_WINDOW_TOKENS"] = str(context_window_tokens)
-    env["TEACHER_KV_PERSIST"] = "1"
+    env.setdefault("TEACHER_KV_PERSIST", "1")
+    env.setdefault("TEACHER_KV_KEEP_VERSIONS", "1")
     env["TEACHER_KV_CACHE_DIR"] = str(kv_cache_dir.resolve())
     env["TEACHER_KV_SERVER_URL"] = f"http://{model_host}:{model_port}"
     env["TEACHER_LLAMA_PARALLEL"] = str(parallel)
+    env["TEACHER_LLAMA_UNIFIED_KV"] = "1" if unified_kv else "0"
+    env["TEACHER_MAX_CONCURRENT_GENERATIONS"] = str(parallel)
+    env["TEACHER_KV_MODEL_ID"] = model_name
+    env.setdefault("TEACHER_KV_CACHE_FORMAT", "llama-server-slot-v2-dsv4-unified")
+    env["TEACHER_KV_CONTEXT_TOKENS"] = str(context_window_tokens)
+    env["TEACHER_KV_CACHE_TYPE_K"] = cache_type_k
+    env["TEACHER_KV_CACHE_TYPE_V"] = cache_type_v
+    env["TEACHER_KV_CACHE_BUDGET_GIB"] = str(kv_cache_budget_gib)
+    env["TEACHER_KV_CACHE_HIGH_WATER_GIB"] = str(kv_cache_budget_gib * 0.8)
+    env["TEACHER_KV_CACHE_LOW_WATER_GIB"] = str(kv_cache_budget_gib * 0.7)
+    env.setdefault("TEACHER_CONTEXT_COMPACTION_ENABLED", "1")
+    env.setdefault("TEACHER_CONTEXT_COMPACTION_TRIGGER_RATIO", "0.80")
+    env.setdefault("TEACHER_CONTEXT_COMPACTION_TARGET_RATIO", "0.55")
+    env.setdefault("TEACHER_CONTEXT_COMPACTION_MIN_RECENT_TURNS", "12")
+    env.setdefault("TEACHER_CONTEXT_OUTPUT_RESERVE_TOKENS", "8192")
+    env.setdefault("TEACHER_CONTEXT_SUMMARY_MAX_TOKENS", "4096")
     env.setdefault("TEACHER_RAG_DEVICE", "cpu")
     env.setdefault("TEACHER_RAG_CPU_THREADS", "4")
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -277,7 +311,23 @@ def main() -> int:
         "--parallel",
         type=int,
         default=DEFAULT_PARALLEL,
-        help="llama-server slots; keep 1 on 8x16 GB GPUs to avoid deferred CUDA OOM",
+        help="llama-server logical slots sharing the unified KV pool",
+    )
+    parser.add_argument(
+        "--unified-kv",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_UNIFIED_KV,
+    )
+    parser.add_argument(
+        "--continuous-batching",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_CONTINUOUS_BATCHING,
+    )
+    parser.add_argument("--cache-ram-mib", type=int, default=DEFAULT_CACHE_RAM_MIB)
+    parser.add_argument(
+        "--cache-idle-slots",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_CACHE_IDLE_SLOTS,
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--ubatch-size", type=int, default=DEFAULT_UBATCH_SIZE)
@@ -286,7 +336,29 @@ def main() -> int:
     parser.add_argument("--rag-port", type=int, default=8002)
     parser.add_argument("--app-port", type=int, default=8502)
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB)
+    parser.add_argument(
+        "--quality-qa-nightly",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="enable curated Q&A retrieval and the nightly incremental daemon",
+    )
+    parser.add_argument(
+        "--quality-qa-window-start-hour",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--quality-qa-window-end-hour",
+        type=int,
+        default=2,
+    )
     args = parser.parse_args()
+    for name, value in (
+        ("--quality-qa-window-start-hour", args.quality_qa_window_start_hour),
+        ("--quality-qa-window-end-hour", args.quality_qa_window_end_hour),
+    ):
+        if not 0 <= value <= 23:
+            parser.error(f"{name} must be between 0 and 23")
 
     try:
         ensure_app_port_available(args.app_port)
@@ -296,13 +368,15 @@ def main() -> int:
 
     owned: list[subprocess.Popen] = []
     owned_names: list[str] = []
+    optional_owned: list[subprocess.Popen] = []
 
     def stop_owned() -> None:
-        for proc in reversed(owned):
+        all_owned = owned + optional_owned
+        for proc in reversed(all_owned):
             if proc.poll() is None:
                 proc.terminate()
         deadline = time.time() + 5
-        for proc in reversed(owned):
+        for proc in reversed(all_owned):
             while proc.poll() is None and time.time() < deadline:
                 time.sleep(0.1)
             if proc.poll() is None:
@@ -328,12 +402,17 @@ def main() -> int:
         cache_type_k=args.cache_type_k,
         cache_type_v=args.cache_type_v,
         kv_cache_dir=DEFAULT_KV_CACHE_DIR,
+        unified_kv=args.unified_kv,
+        continuous_batching=args.continuous_batching,
+        cache_ram_mib=args.cache_ram_mib,
+        cache_idle_slots=args.cache_idle_slots,
     )
     print(
         "启动或复用本地 DeepSeek-V4："
         f"http://{args.model_host}:{args.model_port} "
         f"(model={args.model_name}, ctx={args.ctx_size}, parallel={args.parallel}, "
-        f"batch={args.batch_size}/{args.ubatch_size}, timeout={args.model_startup_timeout:g}s)"
+        f"batch={args.batch_size}/{args.ubatch_size}, timeout={args.model_startup_timeout:g}s, "
+        f"unified_kv={args.unified_kv}, cache_ram={args.cache_ram_mib}MiB)"
     )
     try:
         model_process = ensure_model_server(
@@ -399,7 +478,37 @@ def main() -> int:
         context_window_tokens=args.ctx_size,
         kv_cache_dir=DEFAULT_KV_CACHE_DIR,
         parallel=args.parallel,
+        unified_kv=args.unified_kv,
+        cache_type_k=args.cache_type_k,
+        cache_type_v=args.cache_type_v,
     )
+    quality_qa_enabled = (
+        args.quality_qa_nightly
+        if args.quality_qa_nightly is not None
+        else env.get("TEACHER_QUALITY_QA_NIGHTLY", "0") == "1"
+    )
+    if quality_qa_enabled:
+        env["TEACHER_QUALITY_QA_ENABLE"] = "1"
+        optional_owned.append(
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "scripts/update_quality_qa.py",
+                    "--daemon",
+                    "--window-start-hour",
+                    str(args.quality_qa_window_start_hour),
+                    "--window-end-hour",
+                    str(args.quality_qa_window_end_hour),
+                ],
+                cwd=ROOT,
+                env=env,
+            )
+        )
+        print(
+            "优质问答增量任务已启用："
+            f"{args.quality_qa_window_start_hour}:00–"
+            f"{args.quality_qa_window_end_hour}:00 UTC"
+        )
     print(
         "启动 LLM-led Teacher Prototype："
         f"http://localhost:{args.app_port} "

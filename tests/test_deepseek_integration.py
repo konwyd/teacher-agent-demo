@@ -336,6 +336,37 @@ def test_chat_json_also_records_usage_for_turn_level_aggregation() -> None:
     assert len(client.usage_history) == 1
 
 
+def test_turn_usage_uses_peak_context_occupancy_not_last_call() -> None:
+    from app.llm.deepseek_client import summarize_usage_metadata
+
+    summary = summarize_usage_metadata(
+        [
+            {
+                "prompt_tokens": 490_000,
+                "completion_tokens": 1_000,
+                "total_tokens": 491_000,
+                "context_used_tokens": 491_000,
+                "context_window_tokens": 524_288,
+                "finish_reason": "stop",
+            },
+            {
+                "prompt_tokens": 800,
+                "completion_tokens": 20,
+                "total_tokens": 820,
+                "context_used_tokens": 820,
+                "context_window_tokens": 524_288,
+                "finish_reason": "stop",
+            },
+        ]
+    )
+
+    assert summary["context_used_tokens"] == 491_000
+    assert summary["context_window_tokens"] == 524_288
+    assert summary["context_usage_percent"] == pytest.approx(
+        491_000 / 524_288 * 100
+    )
+
+
 def test_client_can_disable_transport_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.llm import deepseek_client
 

@@ -113,9 +113,10 @@ def test_service_base_env_loads_dotenv_before_rag_warmup(tmp_path):
 
     assert env["ONLY_FILE"] == "loaded"
 
-def test_local_launcher_defaults_to_512k_context():
+def test_local_launcher_defaults_to_unified_512k_context():
     from scripts.run_llm_led_teacher import (
         DEFAULT_BATCH_SIZE,
+        DEFAULT_CACHE_RAM_MIB,
         DEFAULT_CTX_SIZE,
         DEFAULT_PARALLEL,
         DEFAULT_UBATCH_SIZE,
@@ -123,7 +124,8 @@ def test_local_launcher_defaults_to_512k_context():
     )
 
     assert DEFAULT_CTX_SIZE == 524288
-    assert DEFAULT_PARALLEL == 1
+    assert DEFAULT_PARALLEL == 4
+    assert DEFAULT_CACHE_RAM_MIB == 65536
     assert DEFAULT_BATCH_SIZE == 128
     assert DEFAULT_UBATCH_SIZE == 128
 
@@ -136,11 +138,19 @@ def test_local_launcher_defaults_to_512k_context():
         ubatch_size=DEFAULT_UBATCH_SIZE,
         cache_type_k="q8_0",
         cache_type_v="q4_0",
+        unified_kv=True,
+        continuous_batching=True,
+        cache_ram_mib=DEFAULT_CACHE_RAM_MIB,
+        cache_idle_slots=True,
     )
 
     assert env["PORT"] == "8080"
     assert env["CTX_SIZE"] == "524288"
-    assert env["PARALLEL"] == "1"
+    assert env["PARALLEL"] == "4"
+    assert env["KV_UNIFIED"] == "1"
+    assert env["CONT_BATCHING"] == "1"
+    assert env["CACHE_RAM_MIB"] == "65536"
+    assert env["CACHE_IDLE_SLOTS"] == "1"
     assert env["BATCH_SIZE"] == "128"
     assert env["UBATCH_SIZE"] == "128"
     assert env["LLAMA_ARG_CACHE_TYPE_K"] == "q8_0"
@@ -177,9 +187,21 @@ def test_kv_environment_reuses_existing_model_address_and_parallel(tmp_path):
     assert service_env["DEEPSEEK_BASE_URL"] == "http://10.0.0.8:9099/v1"
     assert service_env["TEACHER_KV_SERVER_URL"] == "http://10.0.0.8:9099"
     assert service_env["TEACHER_LLAMA_PARALLEL"] == "4"
+    assert service_env["TEACHER_LLAMA_UNIFIED_KV"] == "1"
+    assert service_env["TEACHER_MAX_CONCURRENT_GENERATIONS"] == "4"
     assert service_env["TEACHER_KV_PERSIST"] == "1"
+    assert service_env["TEACHER_KV_KEEP_VERSIONS"] == "1"
     assert service_env["TEACHER_KV_CACHE_DIR"] == str(tmp_path.resolve())
     assert model_env["KV_SLOT_SAVE_PATH"] == f"{tmp_path.resolve()}/"
+
+
+def test_model_script_consumes_unified_kv_and_ram_cache_flags():
+    source = Path("../run_deepseek_v4_8x4080.sh").read_text()
+
+    assert "--kv-unified" in source
+    assert "--cont-batching" in source
+    assert "--cache-ram" in source
+    assert "--cache-idle-slots" in source
 
 
 def test_model_health_requires_health_expected_alias_and_real_inference():
@@ -401,3 +423,16 @@ def test_model_startup_timeout_terminates_owned_process(tmp_path):
         )
 
     assert process.terminated is True
+
+
+def test_explicit_runtime_env_can_disable_heavy_kv_persistence(tmp_path):
+    from scripts.run_llm_led_teacher import build_runtime_env
+
+    env = build_runtime_env(
+        {"TEACHER_KV_PERSIST": "0"},
+        rag_host="127.0.0.1",
+        rag_port=8002,
+        kv_cache_dir=tmp_path,
+    )
+
+    assert env["TEACHER_KV_PERSIST"] == "0"

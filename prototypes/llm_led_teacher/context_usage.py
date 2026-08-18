@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class ContextUsageDisplay:
-    """Current request occupancy plus read-only historical capacity metadata."""
+    """Conversation peak occupancy plus read-only historical capacity metadata."""
 
     used_tokens: int
     current_window_tokens: int
@@ -51,7 +51,7 @@ def build_context_usage_display(
     metadata: Mapping[str, object],
     current_window_tokens: int,
 ) -> ContextUsageDisplay:
-    """Build meter values without letting historical limits replace runtime config."""
+    """Build peak-occupancy meter values without replacing runtime capacity."""
 
     current_window = max(int(current_window_tokens), 0)
     used = max(int(metadata.get("context_used_tokens", 0) or 0), 0)
@@ -66,4 +66,35 @@ def build_context_usage_display(
         historical_limit_changed=(
             historical is not None and historical != current_window
         ),
+    )
+
+
+def build_conversation_context_usage_display(
+    metadata_history: Iterable[Mapping[str, object]],
+    current_window_tokens: int,
+) -> ContextUsageDisplay:
+    """Build a monotonic meter from the peak usage across the conversation."""
+
+    history = list(metadata_history)
+    if not history:
+        return build_context_usage_display({}, current_window_tokens)
+
+    peak_used = max(
+        max(int(metadata.get("context_used_tokens", 0) or 0), 0)
+        for metadata in history
+    )
+    latest_historical_window = next(
+        (
+            metadata.get("context_window_tokens")
+            for metadata in reversed(history)
+            if metadata.get("context_window_tokens")
+        ),
+        None,
+    )
+    return build_context_usage_display(
+        {
+            "context_used_tokens": peak_used,
+            "context_window_tokens": latest_historical_window,
+        },
+        current_window_tokens,
     )
