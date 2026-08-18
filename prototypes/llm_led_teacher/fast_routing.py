@@ -28,6 +28,19 @@ class FastRoute:
 
 
 _SUBJECT_LABELS = {subject.value: subject for subject in Subject}
+_PURE_SOCIAL_MESSAGES = {
+    "你好",
+    "您好",
+    "老师好",
+    "早上好",
+    "上午好",
+    "下午好",
+    "晚上好",
+    "谢谢",
+    "谢谢老师",
+    "再见",
+    "老师再见",
+}
 _MIDDLE_STAGE_MARKERS = (
     "初中",
     "中考",
@@ -60,6 +73,13 @@ _CONTINUITY_MARKERS = (
     "上一步",
     "这里",
     "这个式子",
+    "上次",
+    "之前说的",
+    "接着",
+    "这个作文",
+    "那个作文",
+    "这篇作文",
+    "那篇作文",
 )
 _NEW_MATH_PROBLEM_MARKERS = (
     "解方程",
@@ -91,10 +111,30 @@ _OFF_TOPIC_INTENT_MARKERS = (
     "值得买",
     "比较几款",
     "哪一款",
+    "用什么",
     "介绍一下",
     "是什么东西",
 )
+_QUALITY_QA_BENEFIT_MARKERS = (
+    "怎么办",
+    "为什么",
+    "为啥",
+    "怎么解释",
+    "怎么理解",
+    "怎么记",
+    "有什么方法",
+    "有什么技巧",
+    "容易错",
+    "总是错",
+    "区别",
+    "思路",
+    "反馈",
+    "批改",
+    "作文",
+    "阅读理解",
+)
 _UNIQUE_SUBJECT_CUES: tuple[tuple[Subject, tuple[str, ...]], ...] = (
+    (Subject.CHINESE, ("作文", "阅读理解", "文言文", "古诗词")),
     (
         Subject.PHYSICS,
         (
@@ -131,6 +171,17 @@ def choose_fast_route(
     """Route only explicit cases; ambiguous input stays in the model-led loop."""
 
     clean = message.strip()
+    if _is_pure_social_message(clean):
+        classification = RequestClassification(
+            scope=RequestScope.SOCIAL,
+            subject=None,
+            stage=SchoolStage.UNKNOWN,
+            is_new_problem=False,
+            answer_mode=AnswerMode.BRIEF_REDIRECT,
+            reason="deterministic pure social interaction",
+        )
+        return FastRoute(classification, "明确的简短问候或礼貌用语")
+
     explicit_subject = _subject_from_message(clean)
     inferred_subject = explicit_subject or _subject_from_unique_cue(clean)
     if _is_high_confidence_off_topic(clean, inferred_subject):
@@ -186,10 +237,7 @@ def choose_fast_route(
         ):
             inferred_stage = SchoolStage.MIDDLE
 
-    if (
-        inferred_subject is not None
-        and inferred_stage in {SchoolStage.PRIMARY, SchoolStage.MIDDLE}
-    ):
+    if inferred_subject is not None:
         classification = _k9_classification(
             clean,
             inferred_subject,
@@ -209,6 +257,9 @@ def _k9_classification(
     is_new_problem: bool,
     reason: str,
 ) -> RequestClassification:
+    use_quality_qa = any(
+        marker in message for marker in _QUALITY_QA_BENEFIT_MARKERS
+    )
     return RequestClassification(
         scope=RequestScope.K9,
         subject=subject,
@@ -219,8 +270,19 @@ def _k9_classification(
             if has_explicit_full_solution_request(message)
             else AnswerMode.GUIDED
         ),
+        use_quality_qa=use_quality_qa,
+        quality_qa_reason=(
+            "当前问题包含解释、方法或经验型诉求，可参考历史优质问答"
+            if use_quality_qa
+            else "当前问题走教材、题库或当前步骤链路即可"
+        ),
         reason=reason,
     )
+
+
+def _is_pure_social_message(message: str) -> bool:
+    normalized = re.sub(r"[\s，。！？!?、~～]+", "", message)
+    return normalized in _PURE_SOCIAL_MESSAGES
 
 
 def _subject_from_message(message: str) -> Subject | None:
@@ -251,10 +313,8 @@ def _stage_from_message(message: str) -> SchoolStage:
 
 def _is_high_confidence_off_topic(
     message: str,
-    inferred_subject: Subject | None,
+    _inferred_subject: Subject | None,
 ) -> bool:
-    if inferred_subject is not None:
-        return False
     has_object = any(marker in message for marker in _OFF_TOPIC_OBJECT_MARKERS)
     has_intent = any(marker in message for marker in _OFF_TOPIC_INTENT_MARKERS)
     return has_object and has_intent

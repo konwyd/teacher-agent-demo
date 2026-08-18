@@ -40,6 +40,21 @@ def test_off_topic_classification_forces_brief_redirect() -> None:
     assert item.answer_mode is AnswerMode.BRIEF_REDIRECT
 
 
+def test_social_classification_has_no_subject_and_uses_brief_response() -> None:
+    item = RequestClassification(
+        scope="social",
+        subject=None,
+        stage="未知",
+        is_new_problem=False,
+        answer_mode="brief_redirect",
+        reason="pure greeting",
+    )
+
+    assert item.subject is None
+    assert item.scope.value == "social"
+    assert item.answer_mode is AnswerMode.BRIEF_REDIRECT
+
+
 @pytest.mark.parametrize(
     "subject", ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "道法"]
 )
@@ -73,6 +88,25 @@ def test_off_topic_rejects_subject_or_non_redirect_mode(
             is_new_problem=True,
             answer_mode=answer_mode,
             reason="invalid off-topic shape",
+        )
+
+
+@pytest.mark.parametrize(
+    ("subject", "answer_mode"),
+    [("语文", "brief_redirect"), (None, "guided")],
+)
+def test_social_rejects_subject_or_non_redirect_mode(
+    subject: str | None,
+    answer_mode: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        RequestClassification(
+            scope="social",
+            subject=subject,
+            stage="未知",
+            is_new_problem=False,
+            answer_mode=answer_mode,
+            reason="invalid social shape",
         )
 
 

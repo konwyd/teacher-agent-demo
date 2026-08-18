@@ -270,15 +270,28 @@ def normalize_teaching_contract(
 ) -> TeachingContract:
     """Normalize model-proposed permissions using only trusted request evidence."""
 
-    if classification.scope is RequestScope.OFF_TOPIC:
+    if classification.scope in {RequestScope.SOCIAL, RequestScope.OFF_TOPIC}:
+        is_social = classification.scope is RequestScope.SOCIAL
         return TeachingContract(
             response_mode=TeachingResponseMode.BRIEF_REDIRECT,
-            requested_target="简短引导学生回到九年义务教育学习问题",
-            allowed_content=["简短范围说明", "回到 K9 学习的邀请"],
-            forbidden_content=["展开题外内容", "套用当前题", "披露最终答案"],
+            requested_target=(
+                "自然回应学生的简短问候"
+                if is_social
+                else "简短引导学生回到九年义务教育学习问题"
+            ),
+            allowed_content=(
+                ["简短问候", "邀请学生提出课程问题"]
+                if is_social
+                else ["简短范围说明", "回到 K9 学习的邀请"]
+            ),
+            forbidden_content=["展开无关内容", "套用当前题", "披露最终答案"],
             may_apply_to_active_problem=False,
             may_reveal_final_answer=False,
-            reason="off-topic requests must use a brief redirect",
+            reason=(
+                "social interactions use a brief friendly response"
+                if is_social
+                else "off-topic requests must use a brief redirect"
+            ),
         )
 
     no_answer = has_no_answer_request(student_message)
@@ -336,10 +349,14 @@ def build_safe_teaching_contract(
     """Build a conservative fallback contract from trusted request evidence."""
 
     target = student_message.strip()[:300] or "当前学习问题"
-    if classification.scope is RequestScope.OFF_TOPIC:
+    if classification.scope in {RequestScope.SOCIAL, RequestScope.OFF_TOPIC}:
         response_mode = TeachingResponseMode.BRIEF_REDIRECT
         may_apply = False
-        allowed_content = ["简短范围说明", "回到 K9 学习的邀请"]
+        allowed_content = (
+            ["简短问候", "邀请学生提出课程问题"]
+            if classification.scope is RequestScope.SOCIAL
+            else ["简短范围说明", "回到 K9 学习的邀请"]
+        )
     elif _has_no_apply_request(student_message):
         response_mode = TeachingResponseMode.CONCEPT_EXPLANATION
         may_apply = False

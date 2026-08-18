@@ -92,7 +92,7 @@ def test_concept_turn_uses_one_generation_and_one_small_audit() -> None:
         orchestrator=_ResultOrchestrator(_result("concept_explanation")),
     )
 
-    assert client.chat_limits == [640]
+    assert client.chat_limits == [1024]
     assert client.audit_limits == [320]
     assert turn.boundary_audit == BoundaryAudit(passed=True)
 
@@ -115,10 +115,44 @@ def test_full_solution_turn_uses_one_generation_and_skips_semantic_audit() -> No
         orchestrator=_ResultOrchestrator(_result("full_solution")),
     )
 
-    assert client.chat_limits == [1024]
+    assert client.chat_limits == [2048]
     assert client.audit_limits == []
     assert turn.boundary_audit is None
     assert turn.repair_performed is False
+
+
+def test_length_limited_generation_is_rewritten_once_before_audit() -> None:
+    class LengthAwareClient(_BudgetClient):
+        def __init__(self) -> None:
+            super().__init__("", allow_audit=True)
+            self.responses = iter(
+                [
+                    ("这是一段没有写完的概念解释，因为", "length"),
+                    ("这是完整的概念解释。你想先练习哪个部分？", "stop"),
+                ]
+            )
+
+        def chat(self, system, user, temperature=0.0, max_tokens=None):
+            self.chat_limits.append(max_tokens)
+            response, finish_reason = next(self.responses)
+            self.last_chat_metadata = {"finish_reason": finish_reason}
+            self.usage_history.append(dict(self.last_chat_metadata))
+            return response
+
+    client = LengthAwareClient()
+    episode = PrototypeEpisode(active_subject="语文", active_stage="小学")
+
+    turn = run_turn(
+        episode,
+        "如何学习语文",
+        client=client,
+        orchestrator=_ResultOrchestrator(_result("concept_explanation")),
+    )
+
+    assert client.chat_limits == [1024, 2048]
+    assert client.audit_limits == [320]
+    assert turn.teacher_output.response == "这是完整的概念解释。你想先练习哪个部分？"
+    assert turn.model_generation_metadata["finish_reason"] == "stop"
 
 
 def test_off_topic_direct_response_uses_zero_model_calls() -> None:

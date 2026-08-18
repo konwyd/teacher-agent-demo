@@ -239,13 +239,14 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
 
     assert "def render_context_usage(" in source
-    assert "build_context_usage_display(" in source
+    assert "build_conversation_context_usage_display(" in source
     assert "with st.bottom:" in source
     assert 'key="context_usage_control"' in source
     assert "st-key-context_usage_control" in source
     assert "context_usage_slot" not in source
     assert "position-anchor" not in source
-    assert "本轮请求占用" in source
+    assert "当前对话上下文" in source
+    assert "并发生成" in source
     assert "当前模型上限" in source
     assert "该对话历史上限" in source
     assert "旧配置记录" in source

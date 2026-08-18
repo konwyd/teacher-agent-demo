@@ -476,6 +476,72 @@ def test_first_message_and_follow_up_stay_isolated_in_the_new_conversation(
     assert [turn["student_message"] for turn in original.episode["turns"]] == ["你好"]
 
 
+def test_new_conversation_defers_topic_selection_and_passes_memory_identity(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    observed: list[tuple[str, str, str, str, str]] = []
+
+    def memory_aware_turn(episode, message, **kwargs):
+        memory = episode.cross_session_memory
+        identity = kwargs["memory_identity"]
+        observed.append(
+            (
+                episode.problem_context,
+                episode.active_subject,
+                memory.source_conversation_id if memory else "",
+                identity.user_id,
+                identity.conversation_id,
+            )
+        )
+        return _successful_turn(episode, message, **kwargs)
+
+    monkeypatch.setattr(logic, "run_turn", memory_aware_turn)
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    account = LocalAccountStore(account_db).register(
+        "memory_student",
+        "history-password",
+    )
+    old = LocalConversationStore(conversation_db).create(
+        account.user_id,
+        PrototypeEpisode(
+            problem_context="怎么写好《难忘的一天》这篇作文？",
+            active_subject="语文",
+            active_stage="小学",
+            turns=[_turn("怎么写好《难忘的一天》这篇作文？")],
+        ).model_dump(mode="json"),
+        title="难忘的一天作文",
+    )
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("memory_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    next(button for button in app.button if button.label == "开启新对话").click().run()
+    app.chat_input[0].set_value("这个作文的开头怎么写？").run()
+
+    new_conversation_id = app.session_state.prototype_conversation_id
+    assert new_conversation_id != old.conversation_id
+    assert observed == [
+        ("", "", "", account.user_id, new_conversation_id)
+    ]
+
+
 def test_history_switch_and_schema_reload_preserve_one_authoritative_id(
     tmp_path,
     monkeypatch,

@@ -225,6 +225,39 @@ class LocalConversationStore:
             for row in rows
         ]
 
+    def list_updated_between(
+        self,
+        updated_after: str,
+        updated_through: str,
+    ) -> list[ConversationRecord]:
+        """System-only incremental scan for the curated Q&A batch pipeline.
+
+        The caller receives ownership metadata for traceability, but must never
+        send user_id to the extraction model or store it in Chroma.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT conversation_id, user_id, title, episode_json,
+                       created_at, updated_at
+                FROM conversations
+                WHERE updated_at > ? AND updated_at <= ?
+                ORDER BY updated_at ASC, conversation_id ASC
+                """,
+                (updated_after, updated_through),
+            ).fetchall()
+        return [
+            ConversationRecord(
+                conversation_id=row["conversation_id"],
+                user_id=row["user_id"],
+                title=row["title"],
+                episode=_decode_episode(row["episode_json"]),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
 
 @lru_cache
 def get_local_conversation_store() -> LocalConversationStore:

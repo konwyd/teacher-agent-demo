@@ -18,7 +18,6 @@ from prototypes.llm_led_teacher.desk_theme import (
     render_brand_header,
     render_thinking_sections as desk_render_thinking_sections,
 )
-
 from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
 from app.llm.deepseek_client import DeepSeekError, is_configured
 from app.llm.kv_cache import KvCacheIdentity
@@ -27,15 +26,20 @@ from app.memory.conversation_archive import (
     ConversationRecord,
     get_local_conversation_store,
 )
+from app.memory.learner_memory import StudentMemoryIdentity
 from prototypes.llm_led_teacher.context_usage import (
-    build_context_usage_display,
+    build_conversation_context_usage_display,
     build_kv_persistence_display,
 )
 from prototypes.llm_led_teacher.conversation_ui import (
     build_conversation_history,
     episode_has_content,
 )
-from prototypes.llm_led_teacher.logic import PrototypeEpisode, PrototypeTurnRecord, run_turn
+from prototypes.llm_led_teacher.logic import (
+    PrototypeEpisode,
+    PrototypeTurnRecord,
+    run_turn,
+)
 from prototypes.llm_led_teacher.live_event_stream import run_with_event_stream
 from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
 from prototypes.llm_led_teacher.public_thinking import (
@@ -54,7 +58,7 @@ from prototypes.llm_led_teacher.thinking_state import (
 )
 
 
-_SESSION_SCHEMA_VERSION = 12
+_SESSION_SCHEMA_VERSION = 13
 
 
 st.set_page_config(page_title="Teacher Agent", page_icon="🧠", layout="wide")
@@ -282,7 +286,6 @@ def _ensure_target_conversation(
     st.session_state.prototype_user_id = user_id
     st.session_state.prototype_session_schema_version = _SESSION_SCHEMA_VERSION
     return record.conversation_id
-
 
 def _save_conversation(
     target_conversation_id: str,
@@ -577,15 +580,21 @@ _CONTEXT_USAGE_STYLE = """
 def render_context_usage(current_episode: PrototypeEpisode) -> None:
     """Render the conversation context meter inside Streamlit's bottom root."""
 
-    metadata = (
+    latest_metadata = (
         current_episode.turns[-1].model_generation_metadata
         if current_episode.turns
         else {}
     )
     configured_window = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW_TOKENS", "131072"))
-    display = build_context_usage_display(
-        metadata,
+    display = build_conversation_context_usage_display(
+        (turn.model_generation_metadata for turn in current_episode.turns),
         current_window_tokens=configured_window,
+    )
+    concurrent_limit = max(
+        int(os.getenv("TEACHER_MAX_CONCURRENT_GENERATIONS", "1")), 1
+    )
+    concurrent_peak = max(
+        int(latest_metadata.get("concurrent_generation_peak", 0) or 0), 0
     )
     label = (
         f"{display.usage_ratio:.1%} · {_format_token_count(display.used_tokens)} / "
@@ -594,13 +603,14 @@ def render_context_usage(current_episode: PrototypeEpisode) -> None:
     with st.popover(
         label,
         icon=":material/data_usage:",
-        help="本轮最后一次模型请求占用 / 当前模型上限",
+        help="当前对话上下文峰值 / 每对话逻辑上限",
         type="tertiary",
         key="context_usage_popover",
     ):
         st.markdown("#### 上下文占用")
         st.progress(min(max(display.usage_ratio, 0.0), 1.0))
-        st.write("**本轮请求占用**", _format_token_count(display.used_tokens))
+        st.write("**当前对话上下文峰值**", _format_token_count(display.used_tokens))
+        st.write("**并发生成**", f"{concurrent_peak} / {concurrent_limit}")
         st.write(
             "**当前模型上限**",
             _format_token_count(display.current_window_tokens),
@@ -612,9 +622,18 @@ def render_context_usage(current_episode: PrototypeEpisode) -> None:
             if display.historical_limit_changed:
                 historical_label += "（旧配置记录）"
         st.write("**该对话历史上限**", historical_label)
+        compaction = current_episode.context_compaction
+        st.write(
+            "**长会话压缩**",
+            f"{compaction.last_status} · 已归档 {compaction.compacted_turns} 轮 · "
+            f"触发 {compaction.compaction_count} 次",
+        )
+        if compaction.last_error:
+            st.caption(f"最近一次语义摘要降级：{compaction.last_error}")
         st.caption(
-            "占用值来自本轮最后一次模型请求，不是整段对话累计 Token，"
-            "也不是 GPU 显存占用。"
+            "占用值取当前对话所有轮次、且每轮所有模型调用中的峰值，因此不会因后一轮较短而回退；"
+            "接近上限时，完整历史仍保存在归档中，模型工作上下文自动切换为滚动摘要加近期原文。"
+            "它不是累计 Token，也不是 GPU 显存占用。"
         )
 
 
@@ -716,6 +735,49 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
         st.caption(
             "这里展示可复核的决策依据和审计结果；不展示模型私有的逐字思维链。"
         )
+        quality_qa_meta = turn.model_generation_metadata
+        if quality_qa_meta.get("quality_qa_used"):
+            hit_count = int(quality_qa_meta.get("quality_qa_hit_count") or 0)
+            st.info(
+                "🧭 本轮按独立路由查询了优质问答库；历史回答只作为生成参考。\n\n"
+                f"- 知识库版本 **v{int(quality_qa_meta.get('quality_qa_version') or 1)}**\n"
+                f"- 相似历史问答 **{hit_count}** 条\n"
+                f"- 检索结果缓存 **{'命中' if quality_qa_meta.get('quality_qa_retrieval_cache_hit') else '未命中'}**"
+            )
+        if turn.memory_resolution is not None:
+            memory_resolution = turn.memory_resolution
+            st.write(
+                "**学生记忆解析**",
+                {
+                    "档案 ID": memory_resolution.student_profile_id,
+                    "状态": memory_resolution.status.value,
+                    "学科": memory_resolution.subject,
+                    "领域": memory_resolution.domain,
+                    "查询主题": memory_resolution.query_topic,
+                    "选中主题": (
+                        memory_resolution.selected.topic
+                        if memory_resolution.selected is not None
+                        else ""
+                    ),
+                    "候选": [
+                        {
+                            "主题": candidate.memory.topic,
+                            "得分": candidate.match_score,
+                            "来源": candidate.source,
+                        }
+                        for candidate in memory_resolution.candidates
+                    ],
+                    "原因": memory_resolution.reason,
+                },
+            )
+        if turn.memory_writeback_status != "not_scheduled":
+            st.write(
+                "**记忆写回**",
+                {
+                    "状态": turn.memory_writeback_status,
+                    "任务 ID": turn.memory_writeback_job_id,
+                },
+            )
         st.write("**观察器原始输出**", turn.observer_raw_guidance.model_dump(mode="json"))
         st.write("**规范化后的有效 guidance**", turn.turn_guidance.model_dump(mode="json"))
         if turn.observer_error:
@@ -799,7 +861,7 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 st.success("🎯 找到同题或高度相似题目")
             for index, hit in enumerate(turn.rag_hits, start=1):
                 similarity = float(hit.get("similarity", 0.0))
-                title = hit.get("reference", "检索片段")
+                title = hit.get("reference") or hit.get("question") or "检索片段"
                 with st.expander(f"片段 {index} · 相似度 {similarity:.0%} · {title}"):
                     document = hit.get("document", "")
                     if document:
@@ -904,6 +966,14 @@ def render_desk_turn(turn: PrototypeTurnRecord, *, conversation_id: str) -> None
         with answer:
             with st.container(key=f"desk_answer_{turn.turn_id}"):
                 st.markdown(turn.teacher_output.response)
+                turn_metadata = turn.model_generation_metadata
+                if turn_metadata.get("quality_qa_used"):
+                    st.caption(
+                        "🧭 优质问答参考 · "
+                        f"v{int(turn_metadata.get('quality_qa_version') or 1)} · "
+                        f"{int(turn_metadata.get('quality_qa_hit_count') or 0)} 条 · "
+                        f"检索缓存{'命中' if turn_metadata.get('quality_qa_retrieval_cache_hit') else '未命中'}"
+                    )
                 render_turn_token_usage(turn)
                 render_turn_details(turn)
 
@@ -1007,6 +1077,10 @@ if message:
                 enable_agent_loop=True,
                 thinking_update_callback=emit_thinking,
                 kv_identity=KvCacheIdentity(
+                    authenticated_user["user_id"],
+                    target_conversation_id,
+                ),
+                memory_identity=StudentMemoryIdentity(
                     authenticated_user["user_id"],
                     target_conversation_id,
                 ),

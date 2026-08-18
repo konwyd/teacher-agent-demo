@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from prototypes.llm_led_teacher import qa_cache
 from prototypes.llm_led_teacher.fast_routing import FastRoute
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
@@ -45,8 +46,13 @@ def run_fast_plan(
         and classification.stage is not SchoolStage.UNKNOWN
         and (classification.is_new_problem or is_concept_request(student_message))
     )
-    planned_tools = (["load_skill"] if skill_name else []) + (
-        ["search_local_knowledge"] if needs_local_search else []
+    needs_quality_qa = bool(
+        qa_cache.lookup_enabled() and classification.use_quality_qa
+    )
+    planned_tools = (
+        (["load_skill"] if skill_name else [])
+        + (["search_local_knowledge"] if needs_local_search else [])
+        + (["search_quality_qa"] if needs_quality_qa else [])
     )
     _append_trace(
         trace,
@@ -96,7 +102,26 @@ def run_fast_plan(
         )
         observations.append(result)
         if result.ok:
-            rag_context = _rag_from_tool(result)
+            rag_context = _merge_rag(rag_context, _rag_from_tool(result))
+        _trace_tool_result(trace, step, result, callback)
+        step += 1
+
+    if needs_quality_qa:
+        assert classification.subject is not None
+        _trace_tool_start(trace, step, "search_quality_qa", callback)
+        result = registry.execute(
+            "search_quality_qa",
+            {
+                "query": student_message[:800],
+                "subject": classification.subject.value,
+                "stage": classification.stage.value,
+                "top_k": 3,
+            },
+            runtime,
+        )
+        observations.append(result)
+        if result.ok:
+            rag_context = _merge_rag(rag_context, _rag_from_tool(result))
         _trace_tool_result(trace, step, result, callback)
         step += 1
 
@@ -202,4 +227,38 @@ def _rag_from_tool(result: ToolResult) -> RagContext:
         online_reason=str(data.get("online_reason", "")),
         local_top_score=float(data.get("local_top_score", 0.0)),
         diagnostics=dict(data.get("diagnostics", {})),
+    )
+
+
+def _merge_rag(current: RagContext, incoming: RagContext) -> RagContext:
+    if not current.text and not current.hits:
+        return incoming
+    if not incoming.text and not incoming.hits:
+        return RagContext(
+            text=current.text,
+            refs=current.refs,
+            is_exact_match=current.is_exact_match,
+            source=current.source,
+            hits=current.hits,
+            online_triggered=current.online_triggered,
+            online_status=current.online_status,
+            online_reason=current.online_reason,
+            local_top_score=current.local_top_score,
+            diagnostics={**current.diagnostics, **incoming.diagnostics},
+        )
+    return RagContext(
+        text="\n\n".join(part for part in (current.text, incoming.text) if part),
+        refs=list(dict.fromkeys(current.refs + incoming.refs)),
+        is_exact_match=current.is_exact_match or incoming.is_exact_match,
+        source="hybrid",
+        hits=current.hits + incoming.hits,
+        online_triggered=current.online_triggered or incoming.online_triggered,
+        online_status=(
+            incoming.online_status
+            if incoming.online_triggered
+            else current.online_status
+        ),
+        online_reason=incoming.online_reason or current.online_reason,
+        local_top_score=max(current.local_top_score, incoming.local_top_score),
+        diagnostics={**current.diagnostics, **incoming.diagnostics},
     )

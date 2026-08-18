@@ -6,7 +6,10 @@ from prototypes.llm_led_teacher.logic import (
     PrototypeEpisode,
     TeacherResponse,
     TurnGuidance,
+    PrototypeTurnRecord,
+    _history_payload,
     _enforce_verified_incorrect_feedback,
+    _keep_single_question,
     run_turn,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
@@ -86,6 +89,25 @@ class _ScriptedClient(_ObservedClient):
         if "turn_context" not in payload:
             self.teacher_payloads.append(payload)
         return next(self.drafts)
+
+
+def test_teacher_history_payload_keeps_earliest_turn_after_twelve_turns():
+    turns = [
+        PrototypeTurnRecord.model_construct(
+            turn_id=index,
+            student_message=f"student-{index}",
+            teacher_output=TeacherResponse(response=f"teacher-{index}"),
+            evidence_level="llm_only",
+        )
+        for index in range(1, 14)
+    ]
+    episode = PrototypeEpisode.model_construct(turns=turns)
+
+    history = _history_payload(episode)
+
+    assert len(history) == 13
+    assert history[0]["student"] == "student-1"
+    assert history[-1]["teacher"] == "teacher-13"
 
 
 def _no_rag(monkeypatch):
@@ -229,6 +251,17 @@ def test_teacher_generation_and_repair_have_no_hard_token_cap(monkeypatch):
     assert client.teacher_token_limits == [None, None]
 
 
+def test_question_normalization_preserves_earlier_sentence_content() -> None:
+    draft = "你可能会问为什么？因为两边保持相等，所以要做同样的运算。你愿意试一步吗？"
+
+    normalized = _keep_single_question(draft)
+
+    assert "你可能会问为什么" in normalized
+    assert "因为两边保持相等" in normalized
+    assert normalized.count("？") + normalized.count("?") == 1
+    assert normalized.endswith("你愿意试一步吗？")
+
+
 def test_turn_records_safe_generation_metadata_without_raw_reasoning(monkeypatch):
     _no_rag(monkeypatch)
 
@@ -248,7 +281,10 @@ def test_turn_records_safe_generation_metadata_without_raw_reasoning(monkeypatch
 
     turn = run_turn(PrototypeEpisode(), "2x+9=14，这道题怎么解", client=client)
 
-    assert turn.model_generation_metadata == MetadataClient.last_chat_metadata
+    for key, value in MetadataClient.last_chat_metadata.items():
+        assert turn.model_generation_metadata[key] == value
+    assert turn.model_generation_metadata["concurrent_generation_peak"] == 1
+    assert turn.model_generation_metadata["concurrent_generation_limit"] >= 1
     assert "reasoning_content" not in turn.model_generation_metadata
     assert "chain_of_thought" not in turn.model_dump()
 
@@ -689,7 +725,7 @@ def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
     assert turn.model_generation_metadata["response_tokens"] == 20
 
 
-def test_multiple_questions_are_collapsed_before_audit_without_model_repair():
+def test_multiple_question_marks_are_normalized_without_dropping_content():
     client = _ContractTurnClient(
         drafts=["求根公式里的 a 是什么？b 又是什么？"],
         audits=[BoundaryAudit(passed=True)],
@@ -703,7 +739,7 @@ def test_multiple_questions_are_collapsed_before_audit_without_model_repair():
         orchestrator=_UsageOrchestrator(_concept_formula_result(), client),
     )
 
-    assert turn.teacher_output.response == "b 又是什么？"
+    assert turn.teacher_output.response == "求根公式里的 a 是什么；b 又是什么？"
     assert turn.repair_performed is False
     assert turn.remaining_warnings == []
     assert client.requested_schemas == [BoundaryAudit]
@@ -1285,3 +1321,17 @@ def test_verified_incorrect_feedback_must_state_the_error_clearly() -> None:
 
     assert "还不正确" in output.response
     assert output.response.count("？") == 1
+
+
+def test_run_turn_concurrency_metadata_is_json_serializable(monkeypatch) -> None:
+    _no_rag(monkeypatch)
+    client = _ScriptedClient(
+        TurnGuidance(starts_new_problem=True, pacing=PacingMode.SINGLE_MOVE),
+        ["先整理题目中的已知条件。你准备先写哪一条？"],
+    )
+    episode = PrototypeEpisode()
+
+    turn = run_turn(episode, "小学数学：怎么学好数学？", client=client)
+
+    assert isinstance(turn.model_generation_metadata["concurrent_generation_peak"], int)
+    episode.model_dump(mode="json")

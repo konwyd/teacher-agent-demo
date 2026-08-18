@@ -1,3 +1,6 @@
+import pytest
+
+from prototypes.llm_led_teacher.fast_routing import choose_fast_route
 from prototypes.llm_led_teacher.orchestration_models import (
     TeachingResponseMode,
     ToolResult,
@@ -116,3 +119,64 @@ def test_fast_off_topic_route_uses_no_model_or_tools() -> None:
     assert result.classification.scope.value == "off_topic"
     assert result.direct_response
     assert result.termination_reason == "off_topic_redirect"
+
+
+@pytest.mark.parametrize("message", ["你好", "老师好！", "早上好", "谢谢老师", "再见"])
+def test_pure_social_messages_skip_model_and_tools(message: str) -> None:
+    client = _NoModelCalls()
+    registry = _FastRegistry()
+
+    result = MultisubjectAgentLoop(client=client, registry=registry).run(
+        "", message, "", ""
+    )
+
+    assert client.calls == 0
+    assert registry.calls == []
+    assert result.classification.scope.value == "social"
+    assert result.termination_reason == "social_response"
+    assert "课程" in result.direct_response
+    assert "不在当前" not in result.direct_response
+
+
+@pytest.mark.parametrize("subject", ["数学", "语文", "英语", "物理"])
+def test_explicit_subject_routes_as_curriculum_without_stage(subject: str) -> None:
+    client = _NoModelCalls()
+    registry = _FastRegistry()
+
+    result = MultisubjectAgentLoop(client=client, registry=registry).run(
+        "", f"老师好，如何学习{subject}？", "", ""
+    )
+
+    assert client.calls == 0
+    assert result.classification.scope.value == "k9"
+    assert result.classification.subject.value == subject
+    assert result.classification.stage.value == "未知"
+    assert result.termination_reason == "deterministic_fast_path"
+
+
+def test_greeting_prefix_does_not_hide_curriculum_content() -> None:
+    route = choose_fast_route("你好，请问小学数学分数怎么计算？", "", "", "")
+
+    assert route is not None
+    assert route.classification.scope.value == "k9"
+    assert route.classification.subject.value == "数学"
+    assert route.classification.stage.value == "小学"
+
+
+def test_ni_hao_substring_is_not_treated_as_a_greeting() -> None:
+    route = choose_fast_route("你好像算错了", "", "", "")
+
+    assert route is None or route.classification.scope.value != "social"
+
+
+def test_subject_word_does_not_override_clear_consumer_intent() -> None:
+    client = _NoModelCalls()
+    registry = _FastRegistry()
+
+    result = MultisubjectAgentLoop(client=client, registry=registry).run(
+        "", "数学老师用什么手机最值得买？", "", ""
+    )
+
+    assert client.calls == 0
+    assert registry.calls == []
+    assert result.classification.scope.value == "off_topic"

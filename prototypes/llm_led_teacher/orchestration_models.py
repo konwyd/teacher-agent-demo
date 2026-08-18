@@ -6,6 +6,8 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.memory.learner_memory import StudentMemoryResolution
+
 
 from prototypes.llm_led_teacher.retrieval_policy import (
     RetrievalDecision,
@@ -33,6 +35,7 @@ class SchoolStage(str, Enum):
 
 class RequestScope(str, Enum):
     K9 = "k9"
+    SOCIAL = "social"
     OFF_TOPIC = "off_topic"
 
 
@@ -97,17 +100,23 @@ class RequestClassification(BaseModel):
     stage: SchoolStage = SchoolStage.UNKNOWN
     is_new_problem: bool
     answer_mode: AnswerMode
+    use_quality_qa: bool = False
+    quality_qa_reason: str = Field(default="", max_length=240)
     reason: str = Field(min_length=1, max_length=240)
 
     @model_validator(mode="after")
     def validate_scope(self) -> "RequestClassification":
         if self.scope is RequestScope.K9 and self.subject is None:
             raise ValueError("k9 classification requires subject")
-        if self.scope is RequestScope.OFF_TOPIC and (
+        if self.scope in {RequestScope.SOCIAL, RequestScope.OFF_TOPIC} and (
             self.subject is not None
             or self.answer_mode is not AnswerMode.BRIEF_REDIRECT
+            or self.use_quality_qa
         ):
-            raise ValueError("off_topic requires no subject and brief_redirect")
+            raise ValueError(
+                "social and off_topic require no subject, brief_redirect, "
+                "and no quality-Q&A retrieval"
+            )
         return self
 
 
@@ -176,3 +185,4 @@ class AgentOrchestrationResult(BaseModel):
     termination_reason: str = ""
     routing_guidance: dict[str, Any] = Field(default_factory=dict)
     direct_response: str = ""
+    memory_resolution: StudentMemoryResolution | None = None

@@ -9,6 +9,7 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
+from prototypes.llm_led_teacher import qa_cache
 from prototypes.llm_led_teacher.orchestration_models import (
     RequestClassification,
     RequestScope,
@@ -34,6 +35,13 @@ class LocalSearchArguments(BaseModel):
     )
 
 
+class QualityQaSearchArguments(BaseModel):
+    query: str = Field(min_length=1, max_length=800)
+    subject: Subject
+    stage: SchoolStage
+    top_k: int = Field(default=3, ge=1, le=5)
+
+
 class WebSearchArguments(BaseModel):
     query: str = Field(min_length=1, max_length=800)
     subject: Subject
@@ -48,10 +56,12 @@ class OrchestrationRuntime:
     student_message: str
     local_search_succeeded: bool = False
     web_search_count: int = 0
+    quality_qa_search_count: int = 0
     skill_catalog: dict[str, str] = field(default_factory=dict)
     loaded_skill_names: set[str] = field(default_factory=set)
     failed_skill_names: set[str] = field(default_factory=set)
     local_search_signatures: set[str] = field(default_factory=set)
+    quality_qa_search_signatures: set[str] = field(default_factory=set)
 
 
 TimeoutRunner = Callable[[Callable[..., Any], dict[str, Any], float], Any]
@@ -90,15 +100,19 @@ class OrchestrationToolRegistry:
         self,
         *,
         local_handler: Callable[..., Any] | None = None,
+        quality_qa_handler: Callable[..., Any] | None = None,
         web_handler: Callable[..., Any] | None = None,
         timeout_runner: TimeoutRunner = _bounded_call,
         local_timeout_seconds: float = 3.0,
+        quality_qa_timeout_seconds: float = 3.0,
         web_timeout_seconds: float = 12.0,
     ) -> None:
         self.local_handler = local_handler or self._search_local
+        self.quality_qa_handler = quality_qa_handler or self._search_quality_qa
         self.web_handler = web_handler or self._search_web
         self.timeout_runner = timeout_runner
         self.local_timeout_seconds = local_timeout_seconds
+        self.quality_qa_timeout_seconds = quality_qa_timeout_seconds
         self.web_timeout_seconds = web_timeout_seconds
 
     @staticmethod
@@ -109,6 +123,49 @@ class OrchestrationToolRegistry:
             stage=kwargs["stage"],
             topk=kwargs["top_k"],
             sources=kwargs["sources"],
+        )
+
+    @staticmethod
+    def _search_quality_qa(**kwargs: Any) -> RagContext:
+        subject = kwargs["subject"]
+        stage = kwargs["stage"]
+        subject_value = subject.value if isinstance(subject, Subject) else str(subject)
+        stage_value = stage.value if isinstance(stage, SchoolStage) else str(stage)
+        if stage_value == SchoolStage.UNKNOWN.value:
+            stage_value = ""
+        lookup = qa_cache.retrieve(
+            kwargs["query"],
+            subject=subject_value,
+            stage=stage_value,
+            top_k=kwargs["top_k"],
+        )
+        hits = [
+            {
+                "id": hit.id,
+                "source": "quality_qa",
+                "question": hit.question,
+                "answer": hit.answer,
+                "similarity": hit.similarity,
+                "quality_score": hit.quality_score,
+                "category": hit.category,
+            }
+            for hit in lookup.hits
+        ]
+        return RagContext(
+            text=lookup.text,
+            refs=lookup.refs,
+            source="quality_qa" if hits else "quality_qa_empty",
+            hits=hits,
+            local_top_score=max(
+                (float(hit["similarity"]) for hit in hits),
+                default=0.0,
+            ),
+            diagnostics={
+                "quality_qa_used": True,
+                "quality_qa_version": lookup.version,
+                "quality_qa_retrieval_cache_hit": lookup.retrieval_cache_hit,
+                "quality_qa_hit_count": len(hits),
+            },
         )
 
     @staticmethod
@@ -127,12 +184,26 @@ class OrchestrationToolRegistry:
         runtime: OrchestrationRuntime,
     ) -> ToolResult:
         started = perf_counter()
-        if name in {"search_local_knowledge", "search_web"} and (
-            runtime.classification.scope is RequestScope.OFF_TOPIC
-        ):
-            return ToolResult(name=name, ok=False, error="off-topic knowledge search forbidden")
+        if name in {
+            "search_local_knowledge",
+            "search_quality_qa",
+            "search_web",
+        } and runtime.classification.scope is not RequestScope.K9:
+            return ToolResult(
+                name=name,
+                ok=False,
+                error="non-K9 knowledge search forbidden",
+            )
         if name == "search_local_knowledge":
             return self._execute_local(arguments, runtime, started)
+        if name == "search_quality_qa":
+            if not runtime.classification.use_quality_qa:
+                return ToolResult(
+                    name=name,
+                    ok=False,
+                    error="quality-Q&A route is disabled for this request",
+                )
+            return self._execute_quality_qa(arguments, runtime, started)
         if name == "search_web":
             return self._execute_web(arguments, runtime, started)
         if name == "load_skill":
@@ -217,6 +288,56 @@ class OrchestrationToolRegistry:
             started,
             local=True,
             timeout_seconds=self.local_timeout_seconds,
+        )
+
+    def _execute_quality_qa(
+        self,
+        arguments: dict[str, Any],
+        runtime: OrchestrationRuntime,
+        started: float,
+    ) -> ToolResult:
+        try:
+            parsed = QualityQaSearchArguments.model_validate(arguments)
+        except ValidationError as exc:
+            return ToolResult(
+                name="search_quality_qa",
+                ok=False,
+                error=f"invalid arguments: {exc.errors()[0]['msg']}",
+            )
+        if (
+            parsed.subject is not runtime.classification.subject
+            or (
+                runtime.classification.stage is not SchoolStage.UNKNOWN
+                and parsed.stage is not runtime.classification.stage
+            )
+        ):
+            return ToolResult(
+                name="search_quality_qa",
+                ok=False,
+                error="quality-Q&A search boundary does not match classification",
+            )
+        signature = parsed.model_dump_json()
+        if signature in runtime.quality_qa_search_signatures:
+            return ToolResult(
+                name="search_quality_qa",
+                ok=False,
+                error="duplicate quality-Q&A search",
+            )
+        if runtime.quality_qa_search_count >= 1:
+            return ToolResult(
+                name="search_quality_qa",
+                ok=False,
+                error="quality-Q&A search budget exhausted",
+            )
+        runtime.quality_qa_search_signatures.add(signature)
+        runtime.quality_qa_search_count += 1
+        return self._run_handler(
+            "search_quality_qa",
+            self.quality_qa_handler,
+            parsed.model_dump(),
+            runtime,
+            started,
+            timeout_seconds=self.quality_qa_timeout_seconds,
         )
 
     def _execute_web(
