@@ -1,5 +1,21 @@
 # 当前工作交接
 
+## 最新增量：结构化学生记忆（2026-08-17）
+
+- 已按 `user_id -> student_profile_id -> global / subject / domain / topic` 接入 SQLite 结构化记忆；8502 UI 只绑定身份，不再抢先选择最近会话。
+- Agent Loop 在现有 Fast Router / RequestClassifier 之后解析主题：唯一高置信候选恢复上下文并以软参考注入；多个候选先返回一个确定性澄清问题；无候选只注入 global 档案。
+- 澄清候选保存在 Episode，下一轮支持主题名或“第一个/第二个/第三个”，通过 `memory_clarification_reply` 继续，不重复调用分类模型。
+- 回答完成后投递 SQLite outbox，由单后台 worker 确定性提取年级、称呼、教学偏好、学科主题、进度和困难；失败最多重试三次，进程恢复时重置遗留 processing 任务。
+- 旧 `cross_session_memory` 仅保留反序列化兼容，不再进入 Teacher payload；旧 Conversation Archive 只作为结构化表回填前的候选来源。
+- 关键实现：`app/memory/learner_memory.py`、`prototypes/llm_led_teacher/orchestrator.py`、`prototypes/llm_led_teacher/logic.py`、`prototypes/llm_led_teacher/streamlit_app.py`。
+- 行为测试：`tests/behavior/test_structured_student_memory.py`，覆盖异步写回、用户隔离、唯一/多候选/无候选、旧 Archive fallback、零 LLM 澄清和下一轮确定性选题。
+- 本次最终验证：`python3 -m pytest -q --tb=short` 为 681/681 通过；`python3 scripts/run_eval.py` 为 38/38 通过；`git diff --check` 通过。
+- 当前运行参数已核实为 launcher `--parallel 4 --unified-kv`，llama-server `--parallel 4 --kv-unified --cont-batching`。`TEACHER_KV_PERSIST=0` 只关闭 SSD slot 快照，不关闭 unified KV。
+- 权威链路说明见 `docs/8502_Teacher_Agent_Loop_全链路说明.md`。当前工作树还有其他未提交改动与运行时数据，后续提交时必须只选择本功能相关文件。
+
+---
+
+
 ## 0. 第二轮优化完成状态（2026-08-14，优先于下方第一轮快照）
 
 - 隔离分支已提交 `5b5288f fix: stabilize live agent loop boundaries`，完整测试 604/604、离线评测 38/38 通过。

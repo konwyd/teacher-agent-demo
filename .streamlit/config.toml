@@ -1,0 +1,6 @@
+# The digital desk is a light-paper design. Pin Streamlit's own base theme to
+# light so a browser/OS-level dark mode cannot flip intrinsic component colors
+# (password field, chat-input text/placeholder, chat bubbles) to light-on-dark
+# and make them unreadable on the desk's forced-light backgrounds.
+[theme]
+base = "light"

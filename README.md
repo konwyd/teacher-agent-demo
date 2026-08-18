@@ -1,105 +1,21 @@
-# LLM-led Teacher — 中文 K9 多学科教师原型
+# LLM-led Teacher：中文 K9 多学科教师原型
 
-这是一个面向中文小学、初中九学科的研究型教学原型。当前主入口是 **LLM-led Teacher Prototype**：有界 Agent Loop 识别学科并按需调用 Skill、本地知识和联网工具，DeepSeek 负责自然语言教学，可选的确定性 verifier 为其支持的数学步骤提供证据。
+这是一个面向中文小学、初中九学科的研究型教学 Agent。当前主入口是运行在 `8502` 的 **LLM-led Teacher Prototype**：DeepSeek 负责教学表达，有界 Agent Loop 负责学科识别、Skill 选择和工具调用，本地策略、确定性 verifier 与语义边界审计共同约束回答范围。
 
-项目关注的不是让模型无条件一次性给出答案，而是让每轮回答服从明确的教学契约：概念提问只讲通用概念，普通求解只推进允许的步骤，只有学生明确索要完整解答时才开放最终答案。
+项目的目标不是让模型无条件一次性给出答案，而是让每轮回复服从明确的教学契约：概念问题只解释概念，普通求解只推进允许的步骤，只有学生明确索要完整解答时才开放最终答案。
 
-## 当前主版本
+> 当前默认演示是 `8502`。旧结构化 Teacher Agent 仍保留为研究 baseline（Streamlit `8501`、FastAPI `8000`），但不是同一条运行链路。
 
-- 网页入口：`http://localhost:8502`
-- 一键启动：`python3 scripts/run_llm_led_teacher.py`
-- 教师模型：本地 DeepSeek-V4 Flash GGUF（llama.cpp OpenAI-compatible 服务）
-- 本地检索：bge-m3 + Chroma Server + BM25 + RRF
-- 学科范围：数学、语文、英语、物理、化学、生物、历史、地理、道法
-- 教学防线：六步 Agent Loop + 工具门禁 + disclosure-aware `TeachingContract` + 本地语义边界审计 + 可选确定性 verifier
-- 展示方式：先完成审计，再将最终安全回答逐字符显示
+## 快速开始
 
-旧的结构化 Teacher Agent 仍保留为研究 baseline，入口为 Streamlit `8501` 和 FastAPI `8000`，但它不是当前默认演示。
-
-## 单轮处理流程
-
-```text
-学生消息
-  ↓
-Agent 强制分类学科、学段、是否新题
-  ↓
-有界 Loop 按需加载 Skill、检索本地知识，必要时受控联网
-  ↓
-Agent 提交 TeachingContract：目标、回答模式、允许/禁止内容、当前题应用与答案披露权限
-  ↓
-本地策略根据学生原始请求收紧契约；可选 verifier 只检查其支持的数学步骤
-  ↓
-DeepSeek 按契约生成教师初稿
-  ↓
-本地模型做语义边界审计；越界时按公开修正指令重写，并做高置信字面复查
-  ↓
-将公式规范化为 MathJax 兼容 Markdown，持久化本轮契约、公开 Agent trace 与审计结果
-  ↓
-只把审计后的回答逐字符展示给学生
-```
-
-8502 的 Agent 路径不再以实验性 Observer 作为节奏来源；Observer 仅留在未启用 Agent Loop 的兼容路径。Agent 必须以 `concept_explanation`、`one_step`、`guided_solution`、`full_solution` 或 `brief_redirect` 提交教学契约。本地策略再以学生原始措辞为可信依据收紧权限；旧的 `single_move` / `complete_response` 只是由契约派生的兼容字段，不再决定披露边界。
-
-例如，追问“求根公式是什么”会规范化为 `concept_explanation`，不允许把公式代入 active problem，也不允许披露该题答案；学生明确要求“完整步骤和答案”时才可使用 `full_solution` 并开放这两项权限。语义边界审计检查的是回答是否服从该目标、应用权限、披露权限和步骤范围，**不是**对数学、物理或其他学科陈述做通用事实验证。
-
-确定性 verifier 是可选的学科工具，而不是生成回答的前置条件。当前实现只把既有的 Fraction 一元一次方程 checker 暴露为 verifier；超出支持域时记录 `not_applicable` / `unable_to_verify`，回答仍受教学契约与边界审计约束。不要把“边界审计通过”解释成“所有事实均已验证正确”。
-
-## RAG 的实际工作方式
-
-RAG 在服务端运行，用户浏览器不需要下载向量库或嵌入模型。
-
-```text
-学生题目
-  ├─ bge-m3：在应用进程生成查询向量，可使用 GPU
-  ├─ Chroma Server：通过服务器内部 HTTP API 查询本地 HNSW 索引
-  ├─ BM25：关键词召回
-  ├─ RRF：融合语义与关键词排序
-  └─ Agent 判断存在具体证据缺口时：通过门禁后至多调用一次 Tavily
-```
-
-- `bge-m3` 是本地 embedding 模型，不是 Chroma 自带模型，也不是付费 embedding API。
-- Chroma 既是 Python 包，也能作为独立服务运行。本项目由启动脚本执行 `chroma run`，应用再通过 `chromadb.HttpClient` 访问它。
-- Chroma 的 HNSW 检索当前主要使用 CPU；GPU 用于加速 bge-m3 查询向量和联网结果重排。
-- 8502 的本地工具复用 `llm-test/rag_retriever.py` 的教材/题库、BM25、bge-m3 和 RRF，但不应用固定阈值，也绝不会隐式联网；raw vector、BM25、RRF 和融合分会作为诊断返回 Agent。
-- 联网只能用于 K9 请求，并且本轮必须已经成功执行本地检索、提供具体证据缺口；每轮最多一次。非 K9 请求不调用本地库或联网，只简短回答并引导回学习内容。
-
-RAG 是有边界的参考数据：它只能通过 Agent 的受控工具调用进入教师生成请求，不能改变请求分类、`TeachingContract` 或当前 `active problem`。检索内容与题目无关时，教师可以忽略。
-
-## 化学分子结构图增强（MolScribe + RDKit）
-
-现有 OCR/RAG 数据中的 `metadata.images` 和图片存储保持不变。可选的数据预处理命令只对化学块中命中“结构式/结构简式/分子结构/化学式/分子式/电子式/分子模型/球棍模型”等上下文的图片运行 MolScribe，并把经 RDKit 校验后的规范 SMILES、分子式和官能团描述追加到文本中。它不处理实验装置图、曲线图或普通插图，也不会覆盖原始 OCR。
-
-MolScribe 1.1.1 要求 `torch<2.0`，与当前本地模型环境的 PyTorch 2.x 不兼容，因此必须使用隔离环境：
-
-```bash
-cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
-bash scripts/install_molscribe_env.sh
-```
-
-图片根目录和历史 `source_md` 路径映射需要按实际挂载位置填写。默认 `keyword` 模式较安全；确认希望尝试所有化学块图片时才使用 `--candidate-mode all`：
-
-```bash
-.venv-molscribe/bin/python scripts/enrich_molecular_structures.py \
-  data/china_textbook_k9_chunks/chunks.jsonl \
-  data/china_textbook_k9_chunks/chunks.molscribe.jsonl \
-  --image-root /实际的图片存储根目录 \
-  --path-map /data/wyd-workspace/education=/home/dockerContainerSave/data/wyd-workspace/education \
-  --device cuda:0
-```
-
-输出包括增强后的 JSONL、结构明细 JSONL、预测缓存和统计报告。增强后的文本可以按原有流程重新写入 Chroma；原始 `chunks.jsonl` 不会被原地覆盖。若只想处理人工确认的图片，可准备每行一个图片文件名的 allowlist，并使用 `--candidate-mode allowlist --allowlist images.txt`。
-
-MolScribe 结果只作为机器生成证据保留：SMILES 经 RDKit 解析失败、原子数不足或置信度低于 `0.80` 时会被丢弃。低置信度图片仍保留在原 `metadata.images` 中，便于人工复核。
-
-## 环境要求
+### 环境要求
 
 - Python 3.10+
-- 本地存在 bge-m3 模型和 Chroma 向量库
-- 本地存在 DeepSeek-V4 GGUF、CUDA 版 llama.cpp 和现有 8-GPU 启动脚本
-- 8×RTX 4080 或能够容纳当前权重与 KV cache 的等效环境
-- 使用 GPU embedding 时需要可用的 CUDA/PyTorch 环境
+- 本地 bge-m3 模型与 Chroma 向量库
+- CUDA 版 llama.cpp、本地 DeepSeek-V4 Flash GGUF 和对应模型启动脚本
+- 当前默认参数按 8×RTX 4080（每卡 16 GiB）环境设计；其他硬件需要重新验证显存、上下文和并发参数
 
-安装示例：
+安装项目依赖：
 
 ```bash
 cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
@@ -108,164 +24,326 @@ pip install -r llm-test/requirements.txt
 pip install jieba rank-bm25
 ```
 
-当前一键启动不需要 DeepSeek API key。启动器会只在 Teacher 子进程中强制使用本地 `8080/v1` 服务，覆盖 `.env` 中可能残留的付费 API 地址、模型名和密钥，避免意外回退。
-
-联网检索是可选能力，继续复用 `llm-test/config.py` 中的原项目 Tavily 配置。正式部署时应通过安全的服务端配置提供凭据，不要把真实密钥写进 README、前端或公开仓库。
-
-## 一键启动当前原型
+### 一键启动本地版本
 
 ```bash
 cd /home/dockerContainerSave/data/wyd-workspace/teacher-agent-demo
 python3 scripts/run_llm_led_teacher.py
 ```
 
-脚本会：
+启动器会依次：
 
 1. 在 `8080` 启动本地 DeepSeek-V4，或复用模型别名匹配的健康服务；
-2. 等待 `/health` 和 `/v1/models` 均验证通过；
+2. 验证 `/health`、`/v1/models` 和最小真实推理；
 3. 在 `8002` 启动或复用 Chroma Server；
-4. 在应用进程中预热 bge-m3；
-5. 在 `8502` 启动 LLM-led Teacher 页面；
-6. 退出时关闭由本脚本启动的模型、Chroma 和网页子进程。
+4. 预热 bge-m3 检索模型；
+5. 在 `8502` 启动 Streamlit 页面；
+6. 退出时关闭由本次启动器创建的子进程。
 
-启动成功后只需访问 `http://localhost:8502`。默认向量库路径为 `data/china_textbook_k9_vectordb`。
+启动成功后访问：<http://localhost:8502>
 
-首次打开页面会先看到“登录 / 注册”窗口。新用户在注册页输入用户名和至少 8 位密码，
-系统会自动创建不可重复的内部学生 ID 并立即登录；之后使用同一用户名和密码登录即可。
-本地账号默认保存在 `data/runtime/users.sqlite3`，密码只保存加盐哈希，不保存明文。
-该功能是本地演示级账号系统，不包含短信验证码、找回密码或公网生产级安全防护。
+查看全部启动参数：
 
-每轮成功回答会自动把完整对话保存到
-`data/runtime/conversations.sqlite3`。重新登录后自动打开最近一次对话，也可以在侧边栏
-“历史对话”中切换或新建；查询始终同时校验内部学生 ID 和对话 ID，不同账号不能读取彼此记录。
-每个新回合还会随 episode 持久化请求分类、TeachingContract、真实执行过的公开 Agent/Tool 事件、边界审计、可选 verifier 结果和公式规范化标记；历史详情页可重新展示这些 trace，但不会保存或展示 prompt、私有 tool details 或模型思维链。
+```bash
+python3 scripts/run_llm_led_teacher.py --help
+```
 
-模型默认使用 `131072` 上下文、单并发槽、K=`q8_0`、V=`q4_0`，并把 batch/ubatch 都限制为 `128`。这套配置已在当前 8×16 GiB GPU 环境完成真实长提示词回归；旧的 `262144 / parallel=-1 / batch=512` 配置会在首轮计算时使 GPU4 OOM。首次加载可能需要数分钟，启动器最多等待 900 秒，并在开放网页前执行一次最小真实推理来验证 CUDA 计算可用。模型端口被未知或不健康服务占用、模型提前退出或健康检查超时时，整套启动直接失败，不会调用 DeepSeek 付费 API。
-
-## 端口与对外访问
-
-| 端口 | 服务 | 是否需要公开 |
-|---:|---|---|
-| `8502` | 当前 LLM-led Teacher 网页 | 是，用户只访问这个端口 |
-| `8002` | Chroma 内部 HTTP API | 否，只供服务器上的应用访问 |
-| `8080` | 本地 llama.cpp OpenAI-compatible API | 否，只供服务器上的 Teacher 访问 |
-| `8501` | 旧结构化 Agent Streamlit | 否，除非专门展示 baseline |
-| `8000` | 旧结构化 Agent FastAPI | 否，除非有独立调用方 |
-
-通过 VS Code 端口转发或反向代理发布时，只需公开 `8502`。浏览器不会直接访问 `8002` 或 `8080`；网页服务在服务器内部调用 Chroma 和本地模型。正式对外使用时应采用稳定域名、HTTPS、反向代理和访问控制，开发隧道只适合临时演示。
-
-可覆盖的一键启动参数：
+常用覆盖示例：
 
 ```bash
 python3 scripts/run_llm_led_teacher.py \
-  --app-port 8502 \
-  --rag-port 8002 \
   --model-port 8080 \
-  --model-startup-timeout 900 \
-  --llm-request-timeout 300 \
+  --rag-port 8002 \
+  --app-port 8502 \
+  --ctx-size 524288 \
+  --parallel 4 \
+  --unified-kv \
+  --continuous-batching \
+  --batch-size 128 \
+  --ubatch-size 128 \
   --db-path data/china_textbook_k9_vectordb
 ```
 
-关键默认配置：
+不要直接沿用旧 README 中的 `131072`、`262144` 或 `parallel=1` 配置；当前启动器默认值以 `python3 scripts/run_llm_led_teacher.py --help` 和脚本内常量为准。
 
-| 配置 | 默认值 | 用途 |
-|---|---|---|
-| 模型别名 | `deepseek-v4-flash` | 由 `/v1/models` 健康检查验证 |
-| 模型地址 | `http://127.0.0.1:8080/v1` | Agent 分类/决策、教师生成、语义边界审计和修正请求 |
-| `DEEPSEEK_TIMEOUT_SECONDS` | `300` | 单次本地模型请求超时 |
-| `TEACHER_RAG_DEVICE` | `cpu` | 512K 本地模型占满 GPU 时避免 bge-m3 OOM；显式环境变量优先 |
-| `TEACHER_RAG_CPU_THREADS` | `4` | RAG 相关 CPU 线程数 |
-| `CHROMA_SERVER` | `127.0.0.1:8002` | 原检索器访问的 Chroma Server |
+## 当前能力
 
-需要查看全部覆盖项时运行 `python3 scripts/run_llm_led_teacher.py --help`。只有确认某张 GPU 留有足够模型权重和推理峰值之外的余量时，才应显式设置 `TEACHER_RAG_DEVICE=cuda:N`。
+- 九学科：数学、语文、英语、物理、化学、生物、历史、地理、道法
+- 有界 Agent Loop：强制分类学科、学段、新题/追问，并按需选择规范 Skill 与工具
+- 教学契约：`concept_explanation`、`one_step`、`guided_solution`、`full_solution`、`brief_redirect`
+- 回答边界：本地策略根据学生原始请求收紧题目应用权和答案披露权
+- 确定性验证：当前 verifier 支持 Fraction 一元一次方程；超出支持域时明确记录不可验证，不伪造证据
+- 安全展示：初稿完成边界审计和必要修正后，才逐字符显示给学生
+- 混合检索：bge-m3 + Chroma + BM25 + RRF，可选且受门禁约束的 Tavily 联网
+- 登录与会话：本地账号、会话历史、跨账号隔离、Agent trace 和教学契约持久化
+- 学习连续性：同一账号的跨会话承接、结构化学生档案和主题记忆；记忆始终是软参考
+- 长对话：完整历史保存在 SQLite，工作上下文接近窗口时对旧轮次做有界语义压缩
+- 本地/API 双后端：同一教学工作流可切换本地 llama.cpp 或托管 DeepSeek API
 
-## 回答速度与流式展示
+## 单轮处理流程
 
-一次普通回合通常包括请求分类、若干有界 Agent 决策、TeachingContract 提交、教师生成和语义边界审计；触发安全修正时还会多一次模型调用。页面会显示分类、工具、生成、审计和修正等真实阶段状态。
-
-回答生成期间，展开的状态框会实时追加实际发生的 Agent 决策、Tool 结果及各后台阶段，并在阶段结束时显示耗时；完成后还会追加教学契约、RAG 和审计摘要。最终文本中的明确 LaTeX 分隔符和高置信公式块会转换成 Streamlit/MathJax 可渲染的 `$...$` 或 `$$...$$`，围栏代码块保持原样；规范化后的文本会进入显示和后续对话历史。
-
-最终回答采用安全流式展示：初稿不会直接发给学生，必须先完成审计和必要修正，随后安全版本才逐字符显示。它改善等待体验，但不会缩短上游模型和检索本身的耗时。
-
-## 验证
-
-所有自动化测试都使用 fake client/mock LLM，不调用真实付费 API：
-
-```bash
-python -m pytest tests/prototypes/test_llm_led_turn_contract.py -q
-python -m pytest tests/prototypes/test_llm_led_streaming.py -q
-python -m pytest
-python scripts/run_eval.py
+```text
+学生消息
+  ↓
+恢复会话、KV 状态与有界学习记忆；必要时压缩旧工作上下文
+  ↓
+强制分类学科、学段、是否新题
+  ↓
+有界 Agent Loop 按需加载 Skill、检索本地知识，必要时受控联网
+  ↓
+提交 TeachingContract：目标、模式、允许/禁止内容、题目应用与答案披露权限
+  ↓
+本地策略按学生原始请求收紧契约；可选 verifier 检查支持域内的数学步骤
+  ↓
+DeepSeek 生成教师初稿
+  ↓
+语义边界审计；越界时按公开修正指令重写并执行高置信字面复查
+  ↓
+规范化 MathJax Markdown，保存对话、契约、公开 trace、审计与记忆回写任务
+  ↓
+只展示最终安全回答
 ```
 
-重点保护的教学不变式：
+语义边界审计检查的是回答是否服从教学目标、题目应用权限、答案披露权限和步骤范围，**不是通用事实核验器，也不是数学正确性的完整证明**。
 
-- 概念解释契约不能应用 active problem 或披露最终答案；
-- 只有学生明确索要完整解答时才允许 `full_solution` 和最终答案；
-- 旧 `turn_guidance` 由 TeachingContract 派生，不能反向放宽契约；
-- 初稿越过目标、应用或披露边界时触发语义修正；
-- 修正后最多推进一个有意义步骤，且最多一个结尾问题；
-- 缺少适用 verifier 时不会阻断回答，也不会伪造“已验证”证据；
-- 公式输出规范化为 MathJax 兼容 Markdown，并持久化规范化结果；
-- 历史记录保存真实公开 Agent trace、TeachingContract 和边界审计；
-- RAG 不改变 TeachingContract 或 active problem；
-- 九学科新题可以自动切换，追问继承当前学科和学段；
-- 非 K9 请求以及未先查本地的联网动作会被工具门禁拒绝。
+## 教学边界
 
-## 旧结构化 Agent baseline
+- `concept_explanation` 只讲通用概念，不代入当前题，也不披露当前题答案。
+- 普通求解只推进契约允许的范围；学生明确要求“完整步骤和答案”时才允许 `full_solution`。
+- 旧兼容字段 `single_move` / `complete_response` 从 `TeachingContract` 派生，不能反向放宽权限。
+- verifier 支持域内的步骤对错由确定性 checker 裁决；支持域外记录 `not_applicable` / `unable_to_verify`。
+- RAG、Skill、历史对话与学生记忆都是不可信软参考，不能覆盖当前消息、active problem、教学契约或确定性验证。
+- 非 K9 请求不访问本地教材库或联网，只做简短回应并引导回学习内容。
 
-旧版用于研究 Agent workflow、student memory、math_checker、evaluation 和 Pedagogical Graph RAG，仍可单独运行：
+## 模型后端配置
+
+复制示例配置并只在本地填写真实凭据：
 
 ```bash
-python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+cp .env.example .env
+```
+
+可以一次配置两个 profile，再通过 `TEACHER_LLM_BACKEND` 切换：
+
+```dotenv
+TEACHER_LLM_BACKEND=local
+
+TEACHER_LOCAL_LLM_API_KEY=local
+TEACHER_LOCAL_LLM_BASE_URL=http://127.0.0.1:8080/v1
+TEACHER_LOCAL_LLM_MODEL=deepseek-v4-flash
+TEACHER_LOCAL_LLM_CONTEXT_WINDOW_TOKENS=524288
+
+TEACHER_API_LLM_API_KEY=
+TEACHER_API_LLM_BASE_URL=https://api.deepseek.com
+TEACHER_API_LLM_MODEL=deepseek-chat
+TEACHER_API_LLM_CONTEXT_WINDOW_TOKENS=131072
+```
+
+- `TEACHER_LLM_BACKEND=local`：使用本地 profile。
+- `TEACHER_LLM_BACKEND=api`：使用托管 API profile，会产生外部请求和费用。
+- 留空：沿用兼容的 `DEEPSEEK_*` 配置。
+
+一键启动器负责启动本地模型并设置本地 `DEEPSEEK_*` 地址。若 `.env` 中显式设置了 `TEACHER_LLM_BACKEND=api`，profile 选择仍会优先，因此启动本地演示前请设为 `local` 或留空，避免误用付费 API。
+
+对比两个后端时可使用固定题集工具：
+
+```bash
+python3 scripts/run_backend_comparison.py --backend both --repeats 3
+```
+
+结果默认写入 `logs/backend_comparison/`；该目录不应提交。
+
+## 512K unified-KV、并发与上下文
+
+当前本地启动器默认配置：
+
+| 配置 | 默认值 | 说明 |
+|---|---:|---|
+| 总上下文 | `524288` | 单会话逻辑上限与共享物理 KV 池大小 |
+| 并发槽 | `4` | 四个逻辑 slot 共享 unified KV，不是每槽固定分到 131K |
+| unified KV | 开启 | 活跃序列竞争同一个物理 KV 池 |
+| continuous batching | 开启 | 支持多个请求并行推进 |
+| RAM prompt cache | `65536 MiB` | llama.cpp 空闲 slot 缓存 |
+| K/V cache 类型 | `q8_0` / `q4_0` | 当前显存折中 |
+| batch / ubatch | `128 / 128` | 当前验证配置 |
+| SSD KV 预算 | `100 GiB` | 80 GiB 开始清理，降至 70 GiB |
+
+四个请求可以并发解码，但它们的活跃 KV 总量仍必须装入共享的 524,288-token 物理池。`parallel=4` 不代表四个会话都能同时占满 512K；高压场景可能排队或由 llama-server 拒绝。
+
+缓存分为四层：
+
+1. GPU unified KV：最快，模型服务退出后消失；
+2. 64 GiB RAM prompt cache：保存空闲 slot，机器或服务重启后消失；
+3. `data/runtime/kv-states/`：按用户和会话保存兼容性校验后的 SSD 快照；
+4. `data/runtime/conversations.sqlite3`：完整对话的持久化事实来源。
+
+KV 快照丢失、过期或不兼容只影响恢复速度，不应丢失对话；系统会从 SQLite 文本重建。可运行基础并发验证：
+
+```bash
+python3 scripts/validate_unified_kv.py --base-url http://127.0.0.1:8080/v1 --rounds 2
+```
+
+完整历史始终保存在 SQLite。模型工作上下文接近窗口时，系统将较旧的完整轮次合并为有界语义摘要，保留最近完整轮次和当前消息。默认触发比例为 `0.80`，目标比例为 `0.55`，最少保留最近 `12` 轮；摘要失败时使用有界降级记录，不能阻断当前教学。
+
+## 登录、会话与学习记忆
+
+首次进入 `8502` 会显示登录/注册页面。用户名不能重复，密码至少 8 位；本地账号保存在 `data/runtime/users.sqlite3`，只保存加盐哈希。
+
+完整对话保存在 `data/runtime/conversations.sqlite3`。查询同时校验内部学生 ID 和会话 ID，不同账号不能读取彼此记录。历史详情可展示公开 Agent/Tool 事件、TeachingContract、审计、verifier、上下文压缩与 KV 状态，但不保存或展示模型思维链、私有 prompt 或私有 tool details。
+
+学习记忆包含两类：
+
+- 跨会话承接：仅在“上次、继续、这个”等明确承接表达出现时，检索同一账号的相关历史。
+- 结构化学生记忆：保存称呼、讲解偏好、主题进度、困难和建议下一步，并通过异步 outbox 回写。
+
+记忆有歧义时应先澄清；记忆故障不能阻断回答。任何历史文字都按不可信数据处理，不能作为系统指令执行。
+
+## RAG 与联网边界
+
+```text
+学生题目
+  ├─ bge-m3：在应用进程生成查询向量，默认使用 CPU
+  ├─ Chroma Server：查询本地 HNSW 索引
+  ├─ BM25：关键词召回
+  ├─ RRF：融合语义与关键词排序
+  └─ Agent 确认存在具体证据缺口时：门禁允许后至多调用一次 Tavily
+```
+
+- 浏览器不下载向量库或 embedding 模型，所有检索都在服务端完成。
+- Chroma 当前主要使用 CPU；bge-m3 可指定 GPU，但默认 `TEACHER_RAG_DEVICE=cpu`，避免与 8-GPU 模型争抢显存。
+- 本地工具返回 raw vector、BM25、RRF 与融合分，供 Agent 判断证据质量；不会因低分自动联网。
+- 联网只允许 K9 请求，且本轮必须已成功执行本地检索并给出具体证据缺口；每轮最多一次。
+- 检索内容不能改变分类、TeachingContract 或 active problem，与当前题无关时应忽略。
+
+系统使用两个逻辑隔离的知识库：
+
+- 教材题库库：保留原有教材、题目和标准知识检索逻辑；
+- 优质问答库：独立 Chroma collection，只存夜间任务从历史对话中提炼的可复用问答。
+
+请求分类器独立输出“是否参考优质问答”开关；没有打开该开关时，即使优质问答库刚发布新版本也不会执行向量检索。打开后，历史回答只作为生成参考，不能直接返回、不能覆盖当前题、教学契约或确定性验证。正命中和空结果缓存都绑定优质问答库版本，新版本发布后才重新检索。
+
+该功能默认关闭。随一键启动器启用在线检索和 UTC 0–2 点夜间任务：
+
+```bash
+python3 scripts/run_llm_led_teacher.py --quality-qa-nightly
+```
+
+也可以手动执行一次增量更新：
+
+```bash
+python3 scripts/update_quality_qa.py
+```
+
+任务按会话 `updated_at` 水位扫描，只把结构化质量筛选、隐私与提示注入检查通过的内容入库；相同来源会幂等替换，删除已失效条目，并执行内容指纹和语义去重。模型使用过优质问答参考的回答不会再次回流。只有实际内容变化才提升库版本。
+
+## 端口
+
+| 端口 | 服务 | 是否需要公开 |
+|---:|---|---|
+| `8502` | 当前 LLM-led Teacher 网页 | 是，用户入口 |
+| `8002` | Chroma 内部 HTTP API | 否 |
+| `8080` | 本地 llama.cpp OpenAI-compatible API | 否 |
+| `8501` | 旧结构化 Agent Streamlit | 仅展示 baseline 时 |
+| `8000` | 旧结构化 Agent FastAPI | 仅独立调用 baseline 时 |
+
+通过 VS Code 端口转发或反向代理发布时通常只公开 `8502`。正式对外使用应增加 HTTPS、稳定域名、反向代理和访问控制；当前账号系统是本地研究演示，不包含短信验证、找回密码或公网生产级安全防护。
+
+## 测试与评测
+
+默认自动化测试使用 fake client/mock LLM，不调用真实付费 API：
+
+```bash
+python3 -m pytest
+python3 scripts/run_eval.py
+```
+
+Prototype 聚焦回归：
+
+```bash
+python3 -m pytest tests/prototypes/test_llm_led_turn_contract.py -q
+python3 -m pytest tests/prototypes/test_llm_led_streaming.py -q
+python3 -m pytest tests/prototypes/test_context_compaction.py -q
+python3 -m pytest tests/test_kv_cache.py -q
+```
+
+真实模型烟测会产生较高算力成本：
+
+```bash
+python3 scripts/run_llm_led_agent_smoke.py --live
+```
+
+主要回归不变式：
+
+- 概念解释不能代入 active problem 或披露最终答案；
+- 只有明确索要完整解答时才允许 `full_solution`；
+- verifier 支持域内的结论不能被 LLM 推翻，支持域外不能伪称已验证；
+- Skill、RAG、旧 guidance 和记忆都不能放宽 TeachingContract；
+- 边界修正后仍服从步骤范围和结尾提问约束；
+- 九学科新题可切换，追问继承当前学科与学段；
+- 非 K9 请求和未先查本地的联网动作会被门禁拒绝；
+- KV、压缩、记忆或缓存故障不会造成对话丢失或阻断正常教学。
+
+## 旧结构化 baseline
+
+```bash
+python3 -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000
 streamlit run app/ui/streamlit_app.py --server.port 8501
 ```
 
-当前 LLM-led Prototype 刻意绕过 TeachingPlanner、掌握度控制和 Pedagogical Graph RAG，不要把两个入口混为同一实现。
+旧 baseline 用于研究 LangGraph workflow、mastery memory、math_checker、evaluation 与 Pedagogical Graph RAG。当前 LLM-led Prototype 不经过相同的 TeachingPlanner 流程，不要把两个入口视为同一实现。
 
-## 本地 DeepSeek-V4 运行参数
+## 可选：化学分子结构图增强
 
-当前网页默认使用 `DeepSeek-V4-Flash-GGUF-IQ3_XXS`。一键脚本复用现有 8-GPU 模型启动脚本，并自动传入已在当前 8 张 RTX 4080 上验证的 256K 总上下文、4 个共享 KV 槽位与混合量化 KV cache 配置：
+MolScribe 1.1.1 要求 `torch<2.0`，必须使用隔离环境，不能安装进当前 PyTorch 2.x 项目环境：
 
 ```bash
-python3 scripts/run_llm_led_teacher.py
+bash scripts/install_molscribe_env.sh
+
+.venv-molscribe/bin/python scripts/enrich_molecular_structures.py \
+  data/china_textbook_k9_chunks/chunks.jsonl \
+  data/china_textbook_k9_chunks/chunks.molscribe.jsonl \
+  --image-root /实际的图片存储根目录 \
+  --device cuda:0
 ```
 
-当前配置下 DeepSeek 分片已占用全部 8 张 GPU；GPU7 再加载 bge-m3 后实测只剩约 52 MiB，并在检索峰值触发过 `OutOfMemoryError`。因此一键启动默认让 RAG embedding 使用 CPU。增加并发、改变 tensor split、扩大上下文或重新启用 GPU RAG 前，需要重新验证显存与延迟。
+该工具只增强命中结构式相关关键词的化学图片，不覆盖原始 OCR 或 `metadata.images`。RDKit 解析失败、原子数不足或置信度低于 `0.80` 的预测会被丢弃。
 
 ## 项目结构
 
 ```text
 app/
-  agent/                         旧结构化 Agent、策略与 math_checker
+  agent/                         旧结构化 Agent、策略、checker/verifier
   api/                           旧 baseline FastAPI
-  llm/deepseek_client.py         DeepSeek OpenAI-compatible 统一客户端
+  auth/                          本地账号
+  llm/                           DeepSeek 客户端与 KV 持久化
+  memory/                        会话归档、跨会话与结构化学生记忆
 prototypes/llm_led_teacher/
-  logic.py                       LLM-led 编排、规范化与审计
-  orchestrator.py                九学科强制分类与六步 Agent Loop
-  teaching_policy.py             从原始请求收紧 TeachingContract 权限
-  boundary_audit.py              教学范围/披露边界的语义审计与保守复查
-  math_markdown.py               MathJax 兼容 Markdown 公式规范化
-  orchestration_tools.py         本地/联网/Skill 工具及确定性门禁
-  orchestration_models.py        可持久化分类、动作和公开 trace 契约
-  rag_hook.py                    纯本地和纯联网 RAG 适配层
-  streaming.py                   审计后逐字符展示
+  logic.py                       当前回合编排、生成、审计与持久化
+  orchestrator.py                九学科分类和有界 Agent Loop
+  teaching_policy.py             TeachingContract 权限收紧
+  boundary_audit.py              教学范围与披露边界审计
+  orchestration_tools.py         Skill、本地/联网工具与门禁
+  context_compaction.py          长对话工作上下文压缩
+  qa_cache.py                    独立的版本化优质问答参考库
   streamlit_app.py               当前 8502 页面
 scripts/
-  run_llm_led_teacher.py         本地模型 + Chroma + 当前网页一键启动
-  run_warmed_streamlit.py        RAG 预热后启动 Streamlit
-tests/prototypes/                Prototype 离线回归测试
-llm-test/                        原混合 RAG、联网搜索和试卷评测
+  run_llm_led_teacher.py         本地模型 + Chroma + 页面一键启动
+  run_backend_comparison.py      本地/API 固定题集对比
+  validate_unified_kv.py         unified-KV 并发验证
+  run_eval.py                    离线教学评测
+tests/                           离线单元、集成与行为回归
+llm-test/                        混合 RAG、联网搜索和试卷评测
 data/china_textbook_k9_vectordb/ 本地 Chroma 向量库
+data/runtime/                    账号、会话、KV 等运行时数据（不提交）
 ```
 
 ## 开发约束
 
-- 先阅读 [`AGENTS.md`](AGENTS.md)、[`CLAUDE.md`](CLAUDE.md)、[`CODEX_HANDOFF.md`](CODEX_HANDOFF.md) 和 [`prototypes/llm_led_teacher/README.md`](prototypes/llm_led_teacher/README.md)。
-- 修改行为必须先写失败测试，所有测试使用 fake client/mock LLM。
-- verifier 支持域内的学生步骤对错由确定性 checker/verifier 裁决，不由 LLM 自行宣判；支持域外不得伪称已验证。
-- Agent、RAG 和兼容 `turn_guidance` 都不能覆盖本地策略收紧后的 TeachingContract 或原题上下文。
-- 不通过无限加长 system prompt 代替可测试的节奏不变式。
-- `.env`、API key 和其他凭据不得提交或打印。
+- 开始修改前阅读 [`AGENTS.md`](AGENTS.md)、[`CLAUDE.md`](CLAUDE.md)、[`CURRENT_WORK_HANDOFF.md`](CURRENT_WORK_HANDOFF.md) 和 [`prototypes/llm_led_teacher/README.md`](prototypes/llm_led_teacher/README.md)。
+- 修改行为时先补失败测试；所有默认测试必须保持离线。
+- 不绕过确定性 checker/verifier，不让记忆或 RAG 成为硬流程控制。
+- 不通过无限加长 prompt 代替可测试的教学不变式。
+- 不提交 `.env`、API key、`logs/`、SQLite、KV 快照或其他运行时数据。
+- 合入前至少执行 `python3 -m pytest`、`python3 scripts/run_eval.py` 和 `git diff --check`。
 
-更详细的设计与交接信息见 [`CODEX_HANDOFF.md`](CODEX_HANDOFF.md)。
+最新阶段状态优先查看 [`CURRENT_WORK_HANDOFF.md`](CURRENT_WORK_HANDOFF.md)、[`progress.md`](progress.md) 和实际代码；较早的 [`CODEX_HANDOFF.md`](CODEX_HANDOFF.md) 与 [`HANDOFF.md`](HANDOFF.md) 仅作为历史背景。
