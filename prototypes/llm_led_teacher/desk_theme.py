@@ -1206,6 +1206,33 @@ footer {
         padding: .2rem .42rem;
     }
 }
+
+/* Browser dark mode: the desk is a light-paper design, so pin Streamlit's own
+   intrinsic colors back to light. This mirrors the base="light" theme in
+   .streamlit/config.toml and keeps password/question text readable even when
+   the app is launched from a directory where that config is not picked up. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --text-color: #172947;
+        --background-color: #e8e1d1;
+        --secondary-background-color: #f6f0df;
+        --primary-color: #a84132;
+        --input-background-color: #fffef9;
+    }
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
+    [data-testid="stChatInput"] textarea {
+        color: #172947;
+    }
+    [data-testid="stTextInput"] input::placeholder,
+    [data-testid="stTextArea"] textarea::placeholder,
+    [data-testid="stChatInput"] textarea::placeholder {
+        color: #5f6b78;
+    }
+    [data-testid="stChatMessage"] {
+        color: #172947;
+    }
+}
 </style>
 """
 
