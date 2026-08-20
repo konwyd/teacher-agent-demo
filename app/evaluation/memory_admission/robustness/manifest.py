@@ -26,10 +26,13 @@ class FrozenFile(BaseModel):
 class PolicyV1Manifest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    schema_version: str = "1.0.0"
+    schema_version: str = "1.1.0"
     git_head: str
+    config_sha256: str
     policy_identity: dict[str, str]
     config: dict[str, Any]
+    policy_v1_path: str
+    policy_v1_sha256: str
     files: tuple[FrozenFile, ...]
     dataset_paths: tuple[str, ...]
     dataset_label_sha256: str
@@ -37,6 +40,16 @@ class PolicyV1Manifest(BaseModel):
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _json_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _git(repo_root: Path, *args: str) -> str:
@@ -86,6 +99,7 @@ def capture_manifest(
     repo_root: Path,
     *,
     relevant_paths: tuple[Path, ...],
+    policy_v1_path: Path,
     dataset_paths: tuple[Path, ...],
     policy_identity: dict[str, str],
     config: dict[str, Any],
@@ -98,8 +112,11 @@ def capture_manifest(
     absolute_datasets = tuple(root / path for path in relative_datasets)
     return PolicyV1Manifest(
         git_head=_git(root, "rev-parse", "HEAD"),
+        config_sha256=_json_sha256(config),
         policy_identity=policy_identity,
         config=json.loads(json.dumps(config, sort_keys=True)),
+        policy_v1_path=policy_v1_path.as_posix(),
+        policy_v1_sha256=_sha256(root / policy_v1_path),
         files=tuple(
             FrozenFile(
                 path=path.as_posix(),
@@ -122,17 +139,21 @@ def verify_manifest(
     root = repo_root.resolve()
     manifest = PolicyV1Manifest.model_validate_json(manifest_path.read_text())
     errors: list[str] = []
-    if _git(root, "rev-parse", "HEAD") != manifest.git_head:
-        errors.append("git_head")
-    if json.loads(json.dumps(current_config, sort_keys=True)) != manifest.config:
+    if _json_sha256(manifest.config) != manifest.config_sha256:
+        errors.append("manifest_config_hash")
+    if _json_sha256(current_config) != manifest.config_sha256:
         errors.append("config")
+    policy_v1_path = root / manifest.policy_v1_path
+    if (
+        not policy_v1_path.exists()
+        or _sha256(policy_v1_path) != manifest.policy_v1_sha256
+    ):
+        errors.append("policy_v1_sha256")
     for frozen in manifest.files:
         path = Path(frozen.path)
         absolute = root / path
         if not absolute.exists() or _sha256(absolute) != frozen.sha256:
             errors.append(f"sha256:{frozen.path}")
-        elif _dirty(root, path) != frozen.dirty:
-            errors.append(f"dirty:{frozen.path}")
     datasets = tuple(root / path for path in manifest.dataset_paths)
     if dataset_label_digest(datasets) != manifest.dataset_label_sha256:
         errors.append("dataset_labels")

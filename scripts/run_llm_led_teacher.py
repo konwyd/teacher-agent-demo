@@ -14,13 +14,45 @@ import time
 from pathlib import Path
 
 from dotenv import dotenv_values
-from typing import Callable
+from typing import Callable, Mapping
 from urllib.request import ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_model_script_path(
+    *,
+    repo_root: Path = ROOT,
+    environ: Mapping[str, str] | None = None,
+    git_common_dir: Path | None = None,
+) -> Path:
+    """Resolve the external model launcher from a checkout or linked worktree."""
+
+    active_environ = os.environ if environ is None else environ
+    configured = active_environ.get("TEACHER_MODEL_SCRIPT", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    common_dir = git_common_dir
+    if common_dir is None:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            common_dir = Path(result.stdout.strip())
+    if common_dir is not None:
+        main_checkout = common_dir.resolve().parent
+        return (main_checkout.parent / "run_deepseek_v4_8x4080.sh").resolve()
+    return (repo_root.parent / "run_deepseek_v4_8x4080.sh").resolve()
+
+
 DEFAULT_DB = ROOT / "data" / "china_textbook_k9_vectordb"
-DEFAULT_MODEL_SCRIPT = ROOT.parent / "run_deepseek_v4_8x4080.sh"
+DEFAULT_MODEL_SCRIPT = resolve_model_script_path()
 DEFAULT_KV_CACHE_DIR = ROOT / "data" / "runtime" / "kv-states"
 DEFAULT_MODEL_HOST = "127.0.0.1"
 DEFAULT_MODEL_PORT = 8080

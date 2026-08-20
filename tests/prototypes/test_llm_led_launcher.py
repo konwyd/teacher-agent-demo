@@ -196,12 +196,35 @@ def test_kv_environment_reuses_existing_model_address_and_parallel(tmp_path):
 
 
 def test_model_script_consumes_unified_kv_and_ram_cache_flags():
-    source = Path("../run_deepseek_v4_8x4080.sh").read_text()
+    from scripts.run_llm_led_teacher import DEFAULT_MODEL_SCRIPT
+
+    source = DEFAULT_MODEL_SCRIPT.read_text()
 
     assert "--kv-unified" in source
     assert "--cont-batching" in source
     assert "--cache-ram" in source
     assert "--cache-idle-slots" in source
+
+
+def test_model_script_resolution_supports_linked_worktree_and_explicit_env(tmp_path):
+    from scripts.run_llm_led_teacher import resolve_model_script_path
+
+    workspace = tmp_path / "workspace"
+    main_checkout = workspace / "teacher-agent-demo"
+    linked_checkout = main_checkout / ".worktrees" / "spike"
+    common_git_dir = main_checkout / ".git"
+    configured = tmp_path / "configured-model.sh"
+
+    assert resolve_model_script_path(
+        repo_root=linked_checkout,
+        environ={"TEACHER_MODEL_SCRIPT": str(configured)},
+        git_common_dir=common_git_dir,
+    ) == configured.resolve()
+    assert resolve_model_script_path(
+        repo_root=linked_checkout,
+        environ={},
+        git_common_dir=common_git_dir,
+    ) == (workspace / "run_deepseek_v4_8x4080.sh").resolve()
 
 
 def test_model_health_requires_health_expected_alias_and_real_inference():

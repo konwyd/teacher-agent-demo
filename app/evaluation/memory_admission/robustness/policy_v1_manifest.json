@@ -1,6 +1,7 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "git_head": "8b87de3e8ee42e495e85d5a241c84548545f75e7",
+  "config_sha256": "fbb0b7f496d837ad11595999add13d940f78bd442f74c59bad985393afe25964",
   "policy_identity": {
     "policy_name": "teacher-memory-admission",
     "policy_version": "v1"
@@ -74,6 +75,8 @@
     },
     "unknown_relation_novelty": 0.25
   },
+  "policy_v1_path": "app/memory/admission_policy.py",
+  "policy_v1_sha256": "770a1cbf09af08d2b7da34a51060556ffe5ee6362082b6bd1cac005df4fff124",
   "files": [
     {
       "path": "app/memory/admission_policy.py",

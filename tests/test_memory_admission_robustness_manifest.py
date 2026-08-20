@@ -55,6 +55,7 @@ def test_manifest_records_head_paths_hashes_and_relevant_dirty_state(
     manifest = capture_manifest(
         repo,
         relevant_paths=(Path("policy.py"),),
+        policy_v1_path=Path("policy.py"),
         dataset_paths=(Path("attacks.jsonl"),),
         policy_identity={"policy_name": "test", "policy_version": "v1"},
         config={"threshold": 0.75},
@@ -64,6 +65,8 @@ def test_manifest_records_head_paths_hashes_and_relevant_dirty_state(
     assert manifest.files[0].path == "policy.py"
     assert manifest.files[0].dirty is True
     assert len(manifest.files[0].sha256) == 64
+    assert len(manifest.config_sha256) == 64
+    assert manifest.policy_v1_sha256 == manifest.files[0].sha256
     assert manifest.dataset_label_sha256 == dataset_label_digest((dataset,))
 
 
@@ -72,6 +75,7 @@ def test_unrelated_dirty_file_does_not_fail_manifest(tmp_path: Path) -> None:
     manifest = capture_manifest(
         repo,
         relevant_paths=(Path("policy.py"),),
+        policy_v1_path=Path("policy.py"),
         dataset_paths=(Path("attacks.jsonl"),),
         policy_identity={"policy_name": "test", "policy_version": "v1"},
         config={"threshold": 0.75},
@@ -83,14 +87,36 @@ def test_unrelated_dirty_file_does_not_fail_manifest(tmp_path: Path) -> None:
     verify_manifest(repo, path, current_config={"threshold": 0.75})
 
 
-@pytest.mark.parametrize("mutation", ["relevant_file", "head", "config", "label"])
-def test_relevant_policy_head_config_or_dataset_label_drift_fails(
+def test_historical_head_and_dirty_metadata_do_not_reject_clean_checkpoint(
+    tmp_path: Path,
+) -> None:
+    repo, policy, dataset = _repo(tmp_path)
+    policy.write_text("POLICY = 'v1'  # frozen dirty\n")
+    manifest = capture_manifest(
+        repo,
+        relevant_paths=(Path("policy.py"),),
+        policy_v1_path=Path("policy.py"),
+        dataset_paths=(Path("attacks.jsonl"),),
+        policy_identity={"policy_name": "test", "policy_version": "v1"},
+        config={"threshold": 0.75},
+    )
+    path = repo / "manifest.json"
+    path.write_text(manifest.model_dump_json(indent=2))
+    _git(repo, "add", "policy.py", "manifest.json")
+    _git(repo, "commit", "-qm", "clean checkpoint")
+
+    verify_manifest(repo, path, current_config={"threshold": 0.75})
+
+
+@pytest.mark.parametrize("mutation", ["relevant_file", "config", "label", "policy_hash"])
+def test_relevant_policy_config_or_dataset_label_drift_fails(
     tmp_path: Path, mutation: str
 ) -> None:
     repo, policy, dataset = _repo(tmp_path)
     manifest = capture_manifest(
         repo,
         relevant_paths=(Path("policy.py"),),
+        policy_v1_path=Path("policy.py"),
         dataset_paths=(Path("attacks.jsonl"),),
         policy_identity={"policy_name": "test", "policy_version": "v1"},
         config={"threshold": 0.75},
@@ -100,16 +126,16 @@ def test_relevant_policy_head_config_or_dataset_label_drift_fails(
     config = {"threshold": 0.75}
     if mutation == "relevant_file":
         policy.write_text("POLICY = 'v2'\n")
-    elif mutation == "head":
-        (repo / "new.txt").write_text("new\n")
-        _git(repo, "add", "new.txt")
-        _git(repo, "commit", "-qm", "new head")
     elif mutation == "config":
         config = {"threshold": 0.76}
-    else:
+    elif mutation == "label":
         row = json.loads(dataset.read_text())
         row["expected_action"] = "admit"
         dataset.write_text(json.dumps(row) + "\n")
+    else:
+        payload = json.loads(path.read_text())
+        payload["policy_v1_sha256"] = "0" * 64
+        path.write_text(json.dumps(payload))
 
     with pytest.raises(FrozenManifestError):
         verify_manifest(repo, path, current_config=config)

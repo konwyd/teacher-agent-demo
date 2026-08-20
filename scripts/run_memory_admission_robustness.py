@@ -47,6 +47,7 @@ def freeze() -> int:
     manifest = capture_manifest(
         ROOT,
         relevant_paths=RELEVANT_POLICY_PATHS,
+        policy_v1_path=Path("app/memory/admission_policy.py"),
         dataset_paths=ROBUSTNESS_DATASETS,
         policy_identity={
             "policy_name": config.policy_name,
