@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0.0",
+  "git_head": "8b87de3e8ee42e495e85d5a241c84548545f75e7",
+  "policy_identity": {
+    "policy_name": "teacher-memory-admission",
+    "policy_version": "v1"
+  },
+  "config": {
+    "content_type_priors": {
+      "behavior_evidence": 0.65,
+      "difficulty": 0.7,
+      "knowledge_reference": 0.35,
+      "learning_episode": 0.4,
+      "learning_goal": 0.8,
+      "preference": 0.9,
+      "profile_fact": 0.85,
+      "task_state": 0.1,
+      "teaching_experience": 0.7,
+      "topic_progress": 0.55
+    },
+    "contradiction_pending_threshold": 0.35,
+    "evidence_admit_threshold": 0.75,
+    "maturity_contradiction_penalty": 0.2,
+    "maturity_conversation_weight": 0.1,
+    "maturity_source_diversity_weight": 0.05,
+    "maturity_support_weight": 0.18,
+    "maturity_verified_weight": 0.15,
+    "policy_name": "teacher-memory-admission",
+    "policy_version": "v1",
+    "refinement_novelty": 0.55,
+    "relation_novelty_priors": {
+      "contradicts": 0.4,
+      "duplicate": 0.0,
+      "new": 1.0,
+      "refines": 0.55,
+      "supersedes": 0.8,
+      "supports": 0.2
+    },
+    "single_verified_evidence_maturity": 0.35,
+    "source_reliability_priors": {
+      "curated_knowledge": 0.85,
+      "external_tool": 0.75,
+      "model_inference": 0.3,
+      "observed_behavior": 0.55,
+      "user_stated": 0.9,
+      "verified_result": 0.95
+    },
+    "stability_priors": {
+      "persistent": 0.9,
+      "session": 0.15,
+      "short_lived": 0.45,
+      "turn_only": 0.05,
+      "unknown": 0.25
+    },
+    "stable_admit_threshold": 0.75,
+    "temporal_validity_priors": {
+      "persistent": 0.95,
+      "session": 0.15,
+      "short_lived": 0.5,
+      "turn_only": 0.05,
+      "unknown": 0.3
+    },
+    "type_utility_priors": {
+      "behavior_evidence": 0.65,
+      "difficulty": 0.75,
+      "knowledge_reference": 0.4,
+      "learning_episode": 0.45,
+      "learning_goal": 0.85,
+      "preference": 0.9,
+      "profile_fact": 0.85,
+      "task_state": 0.15,
+      "teaching_experience": 0.75,
+      "topic_progress": 0.6
+    },
+    "unknown_relation_novelty": 0.25
+  },
+  "files": [
+    {
+      "path": "app/memory/admission_policy.py",
+      "sha256": "770a1cbf09af08d2b7da34a51060556ffe5ee6362082b6bd1cac005df4fff124",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_config.py",
+      "sha256": "de4ff9b891074e1c51508076014bb0e3b251e8ba67389aee83dcd610ae08c792",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_matcher.py",
+      "sha256": "4aad4c08446dd9b2e940290217c203a851cb37a2ab06f08393d0800474f41d4c",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_normalization.py",
+      "sha256": "54a44703e67502ba5e3d0cec81f417468c18cc7caec2ecfa4685856980f8bfa8",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_features.py",
+      "sha256": "598ad5f299677af04cc59bc6a42ad280b00dd60889813636640ce15ec82fb134",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_controller.py",
+      "sha256": "6de33456fd74508076a0a9726469b9866fa37b6446d6a0a61659265bc3bb944a",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/admission_ledger.py",
+      "sha256": "3289a8341e4368124ca675a6b152071766d086e56b533189d8259e37832f67d0",
+      "dirty": true
+    },
+    {
+      "path": "app/memory/contracts.py",
+      "sha256": "b40dfaa1c93ed8967c84534703df5446893b5e0819000a5cf34281d72e7a038a",
+      "dirty": true
+    }
+  ],
+  "dataset_paths": [
+    "app/evaluation/memory_admission/robustness/data/layer_a_core.jsonl",
+    "app/evaluation/memory_admission/robustness/data/layer_a_evidence.jsonl",
+    "app/evaluation/memory_admission/robustness/data/layer_b.jsonl"
+  ],
+  "dataset_label_sha256": "7c819226dd88418e59519809c01b431cbab60c0628a1759f32774c81354c8a8a"
+}

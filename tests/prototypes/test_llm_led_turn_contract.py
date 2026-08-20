@@ -1335,3 +1335,121 @@ def test_run_turn_concurrency_metadata_is_json_serializable(monkeypatch) -> None
 
     assert isinstance(turn.model_generation_metadata["concurrent_generation_peak"], int)
     episode.model_dump(mode="json")
+
+def test_shadow_admission_freezes_before_enqueue_without_extra_llm_call(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from app.memory.admission_ledger import ShadowEvidenceLedger
+    from app.memory.learner_memory import (
+        LearnerMemoryStore,
+        StudentMemoryIdentity,
+        StudentMemoryService,
+    )
+    import prototypes.llm_led_teacher.logic as logic_module
+
+    monkeypatch.setenv("TEACHER_MEMORY_ADMISSION_SHADOW_MODE", "1")
+    ledger = ShadowEvidenceLedger(tmp_path / "shadow.sqlite3")
+    service = StudentMemoryService(
+        LearnerMemoryStore(tmp_path / "learner.sqlite3")
+    )
+    identity = StudentMemoryIdentity("user-shadow-order", "conv-shadow-order")
+    order: list[str] = []
+    original_prepare = logic_module.prepare_shadow_admission
+    original_finalize = logic_module.finalize_shadow_admission
+    original_enqueue = service.enqueue_turn
+
+    def ordered_prepare(*args, **kwargs):
+        order.append("prepare")
+        current = service.load_profile(identity.user_id)
+        assert current.global_profile.teaching_preferences == []
+        return original_prepare(*args, **kwargs)
+
+    def ordered_enqueue(*args, **kwargs):
+        order.append("enqueue")
+        return original_enqueue(*args, **kwargs)
+
+    def ordered_finalize(*args, **kwargs):
+        order.append("finalize")
+        return original_finalize(*args, **kwargs)
+
+    monkeypatch.setattr(logic_module, "prepare_shadow_admission", ordered_prepare)
+    monkeypatch.setattr(logic_module, "finalize_shadow_admission", ordered_finalize)
+    monkeypatch.setattr(
+        logic_module,
+        "get_shadow_evidence_ledger",
+        lambda: ledger,
+    )
+    monkeypatch.setattr(service, "enqueue_turn", ordered_enqueue)
+    client = _ContractTurnClient(
+        drafts=["求根公式用于解一元二次方程，其中各符号对应方程系数。"],
+        audits=[BoundaryAudit(passed=True)],
+    )
+    try:
+        turn = run_turn(
+            PrototypeEpisode(problem_context="一元二次方程"),
+            "以后请讲慢点。求根公式是什么？",
+            client=client,
+            orchestrator=_FakeOrchestrator(_concept_formula_result()),
+            memory_identity=identity,
+            memory_service=service,
+        )
+        service.wait_for_idle()
+    finally:
+        service.shutdown()
+
+    assert order == ["prepare", "enqueue", "finalize"]
+    assert client.chat_calls == 1
+    assert client.requested_schemas == [BoundaryAudit]
+    assert turn.memory_writeback_status == "queued"
+    preference = next(
+        record
+        for record in turn.memory_admission_shadow_records
+        if record.candidate.memory_type.value == "preference"
+    )
+    assert preference.proposed_decision is not None
+    assert preference.proposed_decision.decision.value == "admit"
+    assert preference.relation.value == "new"
+
+def test_shadow_flags_off_do_not_construct_ledger_or_add_llm_calls(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from app.memory.learner_memory import (
+        LearnerMemoryStore,
+        StudentMemoryIdentity,
+        StudentMemoryService,
+    )
+    import prototypes.llm_led_teacher.logic as logic_module
+
+    monkeypatch.delenv("TEACHER_MEMORY_ADMISSION_SHADOW_MODE", raising=False)
+    monkeypatch.delenv("TEACHER_MEMORY_CONTROLLER_SHADOW_MODE", raising=False)
+    monkeypatch.setattr(
+        logic_module,
+        "get_shadow_evidence_ledger",
+        lambda: (_ for _ in ()).throw(AssertionError("ledger must stay off")),
+    )
+    service = StudentMemoryService(
+        LearnerMemoryStore(tmp_path / "learner.sqlite3")
+    )
+    client = _ContractTurnClient(
+        drafts=["求根公式用于解一元二次方程，其中各符号对应方程系数。"],
+        audits=[BoundaryAudit(passed=True)],
+    )
+    try:
+        turn = run_turn(
+            PrototypeEpisode(problem_context="一元二次方程"),
+            "求根公式是什么？",
+            client=client,
+            orchestrator=_FakeOrchestrator(_concept_formula_result()),
+            memory_identity=StudentMemoryIdentity("user-flags-off", "conv-flags-off"),
+            memory_service=service,
+        )
+        service.wait_for_idle()
+    finally:
+        service.shutdown()
+
+    assert turn.memory_admission_shadow_records == []
+    assert "memory_v2_observer_error_type" not in turn.model_generation_metadata
+    assert client.chat_calls == 1
+    assert client.requested_schemas == [BoundaryAudit]

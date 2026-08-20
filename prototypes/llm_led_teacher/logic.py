@@ -22,6 +22,13 @@ from app.agent.optional_verifier import LinearEquationVerifier, VerificationRequ
 from app.agent.state import VerificationResult, VerificationStatus
 from app.llm.deepseek_client import DeepSeekClient, llama_slot, summarize_usage_metadata
 from app.llm.kv_cache import KvCacheIdentity, KvCacheManager, KvCacheSettings
+from app.memory.contracts import MemoryAdmissionShadowRecord
+from app.memory.admission_shadow import get_shadow_evidence_ledger
+from app.memory.foundation import (
+    MemoryV2FeatureFlags,
+    finalize_shadow_admission,
+    prepare_shadow_admission,
+)
 from app.memory.learner_memory import (
     MemoryResolutionStatus,
     StudentMemoryIdentity,
@@ -168,6 +175,9 @@ class PrototypeTurnRecord(BaseModel):
     memory_resolution: StudentMemoryResolution | None = None
     memory_writeback_job_id: str = ""
     memory_writeback_status: str = "not_scheduled"
+    memory_admission_shadow_records: list[MemoryAdmissionShadowRecord] = Field(
+        default_factory=list
+    )
     retrieval_decision: RetrievalDecision = Field(
         default_factory=lambda: RetrievalDecision(
             mode=RetrievalMode.NONE,
@@ -1383,27 +1393,46 @@ def _run_turn_impl(
         and memory_identity is not None
         and orchestration_result is not None
     ):
+        memory_writeback_payload = {
+            "turn_id": record.turn_id,
+            "student_message": clean_message,
+            "problem_context": episode.problem_context,
+            "classification": orchestration_result.classification.model_dump(
+                mode="json"
+            ),
+            "verification": verification.model_dump(mode="json"),
+            "teaching_contract": orchestration_result.teaching_contract.model_dump(
+                mode="json"
+            ),
+            "memory_resolution_status": (
+                orchestration_result.memory_resolution.status.value
+                if orchestration_result.memory_resolution is not None
+                else MemoryResolutionStatus.NONE.value
+            ),
+        }
+        prepared_admission = None
+        admission_ledger = None
+        admission_flags = MemoryV2FeatureFlags.from_env()
+        if admission_flags.shadow_observation_enabled:
+            try:
+                admission_ledger = get_shadow_evidence_ledger()
+                prepared_admission = prepare_shadow_admission(
+                    memory_writeback_payload,
+                    identity=memory_identity,
+                    profile=memory_profile,
+                    memory_service=active_memory_service,
+                    ledger=admission_ledger,
+                    flags=admission_flags,
+                )
+            except Exception as exc:  # noqa: BLE001 - preparation must fail open
+                record.model_generation_metadata["memory_v2_observer_error_type"] = (
+                    f"prepare:{type(exc).__name__}"
+                )
         try:
             memory_job_id = active_memory_service.enqueue_turn(
                 memory_identity,
                 memory_profile,
-                {
-                    "turn_id": record.turn_id,
-                    "student_message": clean_message,
-                    "problem_context": episode.problem_context,
-                    "classification": orchestration_result.classification.model_dump(
-                        mode="json"
-                    ),
-                    "verification": verification.model_dump(mode="json"),
-                    "teaching_contract": orchestration_result.teaching_contract.model_dump(
-                        mode="json"
-                    ),
-                    "memory_resolution_status": (
-                        orchestration_result.memory_resolution.status.value
-                        if orchestration_result.memory_resolution is not None
-                        else MemoryResolutionStatus.NONE.value
-                    ),
-                },
+                memory_writeback_payload,
             )
         except Exception as exc:  # noqa: BLE001 - write-back must fail open
             record.memory_writeback_status = "enqueue_failed"
@@ -1415,6 +1444,17 @@ def _run_turn_impl(
             record.memory_writeback_status = (
                 "queued" if memory_job_id else "skipped"
             )
+        if prepared_admission is not None and admission_ledger is not None:
+            try:
+                record.memory_admission_shadow_records = finalize_shadow_admission(
+                    prepared_admission,
+                    baseline_job_id=record.memory_writeback_job_id,
+                    ledger=admission_ledger,
+                )
+            except Exception as exc:  # noqa: BLE001 - observation must fail open
+                record.model_generation_metadata["memory_v2_observer_error_type"] = (
+                    f"finalize:{type(exc).__name__}"
+                )
     episode.turns.append(record)
     _report_progress(progress_callback, "complete")
 

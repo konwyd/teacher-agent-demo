@@ -54,3 +54,26 @@
 ## 2026-08-14: 真实烟测必须拒绝泛化占位回复
 - 原因: 仅检查结构会让无实质教学内容的回复假绿
 - 约束: 同时检查分类、连续性、重复公共 Tool、披露权限、placeholder、残余 warning、终止状态和合同；日志不入库
+
+## 2026-08-20: Memory v2 Phase 2A shadow admission decisions
+
+- **A — PENDING 是证据积累状态。** 它不授权写入，也不阻塞 baseline。
+- **B — 准入按 memory type 使用多信号规则。** 不采用一个全局 importance score。
+- **C — 单次错误、单次正确和模型推断从严。** 它们不会直接形成持久学生信念。
+- **D — ShadowEvidenceLedger 独立持久化。** 真实 TopicMemory 只做 pre-write relation/match，不是 evidence。
+- **E — 决策严格使用 enqueue 前冻结快照。** 即使 finalize 在写后运行，也不重新读取 learner memory 或 ledger。
+- **F — baseline writer 继续拥有全部写权限。** shadow ADMIT/REJECT 都不能改变 enqueue/skip。
+- **G — 优先审查 ADMIT precision 与 unsafe rates。** aggregate accuracy 不能替代污染风险评估。
+- **H — 不引入 LLM judge。** normalizer、matcher、features、policy 和评测均确定性、版本化、可复现。
+
+## 2026-08-20: Memory v2 Phase 1.5 foundation decisions
+
+- **A — 只建立契约，不实现准入策略。** 原因：先稳定候选、来源、关系、生命周期和观测边界，避免策略试验改变当前 8502 行为。
+- **B — 8502 是唯一权威接线路径。** 原因：旧 8501/LangGraph 保留作 baseline；本阶段不统一两代 memory 系统。
+- **C — 候选不等于写入许可。** 原因：`MemoryCandidate` 只是带来源与时效的描述；只有未来版本化策略才能产生 `AdmissionDecision`。
+- **D — 来源类型不可冒充。** 原因：用户陈述、行为观察、验证结果、模型推断、外部工具和策展知识的可靠性不同；候选来源必须有同类 provenance 支撑。
+- **E — 生命周期区分 supersede/retract/delete。** 原因：替代需要保留谱系，撤回表示信念失效，删除服务于隐私/保留规则，三者不能混用。
+- **F — 置信度允许下降。** 原因：置信度依赖证据，冲突或更正可降低它；本阶段只定义能力，不修改现有 max-ratchet。
+- **G — 影子模式无权威性且 fail-open。** 原因：先记录 baseline enqueue/skip 与候选，`proposed_decision` 保持空；观察失败不能阻塞教学或写回。
+- **H — 保持三类语义存储分离。** 原因：student memory、quality-QA agent experience、教材/GraphRAG curated knowledge 有不同所有权和准入边界。
+- **I — 旧记录视为 legacy/unverified。** 原因：没有显式迁移验证就不能补写来源或生命周期；本阶段不清理、不迁移、不重算置信度。

@@ -1,0 +1,69 @@
+[
+  {
+    "case_id": "explicit_stable_preference",
+    "text": "以后尽量给我画图解释。",
+    "target_memory_class": "student",
+    "memory_type": "preference",
+    "source_kind": "user_stated",
+    "temporal_scope": "persistent"
+  },
+  {
+    "case_id": "temporary_task_state",
+    "text": "我们现在做第 12 题。",
+    "target_memory_class": "student",
+    "memory_type": "task_state",
+    "source_kind": "user_stated",
+    "temporal_scope": "session"
+  },
+  {
+    "case_id": "single_verified_error",
+    "text": "学生一次移项符号错误。",
+    "target_memory_class": "student",
+    "memory_type": "behavior_evidence",
+    "source_kind": "verified_result",
+    "temporal_scope": "short_lived"
+  },
+  {
+    "case_id": "model_inference",
+    "text": "学生可能不理解配方法。",
+    "target_memory_class": "student",
+    "memory_type": "difficulty",
+    "source_kind": "model_inference",
+    "temporal_scope": "unknown"
+  },
+  {
+    "case_id": "explicit_correction",
+    "text": "我之前说错了，其实我更喜欢文字解释。",
+    "target_memory_class": "student",
+    "memory_type": "preference",
+    "source_kind": "user_stated",
+    "temporal_scope": "persistent",
+    "possible_relation": "supersedes"
+  },
+  {
+    "case_id": "verified_repeated_evidence",
+    "text": "两次同类移项符号错误。",
+    "target_memory_class": "student",
+    "memory_type": "behavior_evidence",
+    "source_kind": "verified_result",
+    "temporal_scope": "short_lived",
+    "evidence_count": 2,
+    "possible_relation": "supports"
+  },
+  {
+    "case_id": "curated_graphrag_knowledge",
+    "text": "配方法是求二次函数顶点的一种方法。",
+    "target_memory_class": "curated_knowledge",
+    "memory_type": "knowledge_reference",
+    "source_kind": "curated_knowledge",
+    "temporal_scope": "persistent"
+  },
+  {
+    "case_id": "quality_qa_experience",
+    "text": "历史高质量教师回答。",
+    "target_memory_class": "agent_experience",
+    "memory_type": "teaching_experience",
+    "source_kind": "observed_behavior",
+    "temporal_scope": "persistent"
+  }
+]
