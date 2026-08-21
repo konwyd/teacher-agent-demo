@@ -25,7 +25,10 @@ from app.memory.contracts import (
 _PREFERENCE_FAMILIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("分步骤讲解", ("一步一步", "分步骤", "分步")),
     ("示例讲解", ("举例", "例子", "示例")),
-    ("图示讲解", ("画图", "画成图", "画一下", "图解", "可视化", "看图", "有图", "用图")),
+    (
+        "图示讲解",
+        ("画图", "画成图", "画一下", "图解", "可视化", "看图", "有图", "用图"),
+    ),
     ("慢节奏讲解", ("讲慢", "慢点", "慢些", "慢一些")),
     ("快节奏讲解", ("讲快", "快点", "快些")),
     ("简短讲解", ("短一点", "简短", "精简")),
@@ -121,9 +124,8 @@ def _preference_values(message: str) -> list[str]:
     if "现在" in message and any(cue in message for cue in ("以前", "之前")):
         active_message = message.split("现在", 1)[1]
 
-    if (
-        re.search(r"(?:难题|复杂题).*(?:详细|展开)", message)
-        and re.search(r"简单题.*(?:直接|要点|思路|简短)", message)
+    if re.search(r"(?:难题|复杂题).*(?:详细|展开)", message) and re.search(
+        r"简单题.*(?:直接|要点|思路|简短)", message
     ):
         return ["按难度调整"]
 
@@ -180,12 +182,10 @@ def _preference_qualifiers(
     ):
         qualifiers["subject"] = "几何"
 
-    if (
-        re.search(r"(?:难题|复杂题).*(?:详细|展开)", message)
-        and re.search(r"简单题.*(?:直接|要点|思路|简短)", message)
+    if re.search(r"(?:难题|复杂题).*(?:详细|展开)", message) and re.search(
+        r"简单题.*(?:直接|要点|思路|简短)", message
     ):
         qualifiers["condition_map"] = {"hard": "detailed", "simple": "concise"}
-
 
     if any(cue in message for cue in ("一般", "通常", "平时")) and re.search(
         r"(?:这|当前|本)(?:道)?题.{0,6}(?:不要|别|不用)",
@@ -329,8 +329,7 @@ def _difficulty(
         )
 
     if any(
-        cue in message
-        for cue in ("不会", "不懂", "不明白", "没懂", "很难", "困难")
+        cue in message for cue in ("不会", "不懂", "不明白", "没懂", "很难", "困难")
     ):
         return (
             {"subject": subject, "statement": "student_expressed_difficulty"},
@@ -366,11 +365,13 @@ def build_deterministic_memory_candidates(
     subject = _text(classification.get("subject"), 40)
     candidates: list[MemoryCandidate] = []
 
-    has_learning_episode = any(
-        _text(item.get("episode")) for item in observations
-    )
+    has_learning_episode = any(_text(item.get("episode")) for item in observations)
 
-    if message and not _is_hard_negative(message) and not _is_negated_imperative(message):
+    if (
+        message
+        and not _is_hard_negative(message)
+        and not _is_negated_imperative(message)
+    ):
         profile = _profile_payload(message)
         if profile:
             profile_scope = TemporalScope.PERSISTENT
@@ -450,11 +451,13 @@ def build_deterministic_memory_candidates(
                 )
 
     has_topic_observation = any(
-        _text(item.get("topic")) and _text(item.get("status"))
-        for item in observations
+        _text(item.get("topic")) and _text(item.get("status")) for item in observations
     )
     status = _text(verification.get("status"), 80)
-    if status in {"verified_correct", "verified_incorrect"} and not has_topic_observation:
+    if (
+        status in {"verified_correct", "verified_incorrect"}
+        and not has_topic_observation
+    ):
         candidates.append(
             _candidate(
                 conversation_id=conversation_id,
@@ -488,10 +491,16 @@ def build_deterministic_memory_candidates(
                     conversation_id=conversation_id,
                     turn_id=turn_id,
                     memory_type=MemoryType.TOPIC_PROGRESS,
-                    payload={"subject": subject, "topic": topic, "status": observed_status},
+                    payload={
+                        "subject": subject,
+                        "topic": topic,
+                        "status": observed_status,
+                    },
                     source_kind=source,
                     temporal_scope=TemporalScope.SHORT_LIVED,
-                    confidence=0.95 if source is MemorySourceKind.VERIFIED_RESULT else 0.8,
+                    confidence=0.95
+                    if source is MemorySourceKind.VERIFIED_RESULT
+                    else 0.8,
                     verifier_reference=_text(verification.get("verifier_name"), 160),
                 )
             )

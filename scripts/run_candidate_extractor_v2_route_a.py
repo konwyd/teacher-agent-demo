@@ -89,10 +89,9 @@ def run_benchmark(splits: Iterable[str] = ALLOWED_SPLITS) -> dict[str, Any]:
             len(cases) / elapsed if elapsed else None
         )
         report.operational.peak_ram_mb = _peak_rss_mb()
-        report.operational.deterministic_replay = (
-            json.dumps(report.case_results, ensure_ascii=False, sort_keys=True)
-            == json.dumps(replay.case_results, ensure_ascii=False, sort_keys=True)
-        )
+        report.operational.deterministic_replay = json.dumps(
+            report.case_results, ensure_ascii=False, sort_keys=True
+        ) == json.dumps(replay.case_results, ensure_ascii=False, sort_keys=True)
         reports[split] = report.model_dump(mode="json")
 
     return {

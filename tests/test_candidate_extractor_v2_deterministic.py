@@ -63,9 +63,7 @@ def _summaries(candidates) -> list[dict[str, Any]]:
             [
                 {
                     "memory_type": "preference",
-                    "payload": {
-                        "teaching_preferences": ["分步骤讲解", "示例讲解"]
-                    },
+                    "payload": {"teaching_preferences": ["分步骤讲解", "示例讲解"]},
                     "source_kind": "user_stated",
                     "temporal_scope": "persistent",
                 }
@@ -164,7 +162,9 @@ def test_converts_frozen_upstream_evidence_without_model_calls() -> None:
     ]
 
 
-def test_emits_independent_profile_preference_and_task_candidates_in_stable_order() -> None:
+def test_emits_independent_profile_preference_and_task_candidates_in_stable_order() -> (
+    None
+):
     actual = _summaries(
         _extract(
             "叫我星星，以后用图解释，继续当前题",

@@ -47,7 +47,7 @@ Status:
 ACTIVE DEVELOPMENT
 
 Current phase:
-Memory V2 — Phase 2A.6 preparation / CandidateExtractorV2 work
+Memory V2 — Phase 2A.6 / CandidateExtractorV2 comparative route execution
 
 ### Completed
 
@@ -65,6 +65,12 @@ Memory V2 — Phase 2A.6 preparation / CandidateExtractorV2 work
 - policy-level robustness analysis
 - subsystem ownership / shared-interface audit
 - multi-agent collaboration governance established through `OWNERSHIP.md`
+- CandidateExtractorV2 Route A deterministic extractor completed on isolated branch
+- Route A development: precision/recall/F1/exact-set/type/source/scope/payload/qualifier = 1.0
+- Route A unchanged Layer B: exact-set improved from 0.4375 baseline to 1.0
+- Route A qualifier safety: zero measured negation loss, temporal inflation,
+  conditional corruption, correction loss, and false persistent hard negatives
+- Route A is offline/deterministic with zero model calls and zero VRAM use
 
 ### Current findings
 
@@ -84,7 +90,9 @@ Memory V2 — Phase 2A.6 preparation / CandidateExtractorV2 work
 
 ### Current work
 
-CandidateExtractorV2 comparative spike preparation.
+Route A deterministic implementation and development/Layer B verification are
+complete on `spike/candidate-extractor-v2-deterministic`; coordinator comparison
+with Routes B/C and sealed-holdout evaluation remain pending.
 
 Planned experimental routes:
 
@@ -104,17 +112,11 @@ All routes should:
 
 ### Current blockers
 
-1. Governance harness checkpoint
+1. Coordinator comparative evaluation
 
-The worktree compatibility/bootstrap repair is complete. The frozen benchmark
-parent is `3b9a648a0f15d26fdb2a1987d63f65e68df58824`; A/B/C were rebuilt from it
-and passed the common baseline gates before Route A/B/C implementation began.
-
-The remaining infrastructure blocker is that the intended governance harness
-was not committed into that frozen spike base. The approved repair is a
-governance-only checkpoint descending directly from the frozen benchmark
-parent, followed by fast-forward synchronization and baseline revalidation of
-A/B/C.
+Route A has not inspected sealed-holdout labels or run Route A against holdout.
+Architecture selection requires controlled Route A/B/C comparison and the
+coordinator-owned sealed-holdout run.
 
 2. Causal evidence identity
 
@@ -127,18 +129,24 @@ conversation
 
 Same causal observation must not independently increase evidence maturity through duplicate runtime events.
 
-3. Candidate extraction quality
+3. Route A limitations
 
-Current extraction robustness is materially weaker than admission-policy robustness.
+Route A is lexical and deterministic, so unseen paraphrases and ambiguous
+discourse remain its primary generalization risk. Development normalization
+compatibility is 27/29 because the protected existing normalizer does not
+produce semantic keys for every valid candidate type; Route A did not change it.
 
 ### Next
 
-1. Create the governance-only checkpoint from the frozen benchmark parent.
-2. Fast-forward A/B/C to the governance checkpoint and rerun common baseline verification.
-3. Execute comparative extractor spikes.
-4. Compare quality, qualifier preservation, latency and operational complexity.
-5. Separately design causal-root / causal-observation identity contract.
-6. Keep Memory V2 shadow until explicit architecture promotion decision.
+1. Have the coordinator run Route A sealed holdout once under controlled conditions.
+2. Compare Route A/B/C quality, qualifier preservation, latency, RAM, and complexity.
+3. Separately design causal-root / causal-observation identity contract.
+4. Keep Memory V2 shadow until explicit architecture promotion decision.
+
+Branch / worktree: `spike/candidate-extractor-v2-deterministic` /
+`.worktrees/candidate-extractor-v2-deterministic`
+
+Last materially updated: 2026-08-21
 
 
 ## 3. Agent Runtime / Agent Loop
@@ -346,16 +354,17 @@ Owner:
 Haoxi
 
 Task:
-CandidateExtractorV2 / Memory V2 continuation
+CandidateExtractorV2 Route A deterministic spike
 
 Branch / worktree:
-[UPDATE WHEN ACTIVE WORKTREE IS CREATED]
+`spike/candidate-extractor-v2-deterministic` /
+`.worktrees/candidate-extractor-v2-deterministic`
 
 Status:
-BLOCKED / PREPARING
+COMPLETE / READY_FOR_COORDINATOR_EVALUATION
 
 Blocked by:
-governance harness absent from the frozen benchmark parent; Route A/B/C implementation has not started
+coordinator-owned sealed holdout and cross-route A/B/C comparison
 
 
 ### Agent Runtime
