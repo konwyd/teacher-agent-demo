@@ -1,0 +1,43 @@
+{
+  "benchmark_version": "candidate-extractor-v2-comparative-v1",
+  "historical_provenance": {
+    "created_at": "2026-08-21T03:00:03.467020+00:00",
+    "routes_implemented": false,
+    "source_base_sha": "d7ed183f83c162b9dcbc78c5e7c992e758bf1497"
+  },
+  "label_seal": {
+    "development_sha256": "5a653f04ce232179294b04ba0b114c7d72a664dc3b2ade05f6f50ee91e7ecc1e",
+    "holdout_sha256": "047dd0329ee4cdf3ea12edfd6a4a084680ce27f38d016091be29bf0bc645dcd2",
+    "sealed_before_first_formal_baseline": true
+  },
+  "runtime_verification": {
+    "baseline_adapter": {
+      "path": "app/evaluation/candidate_extractor/baseline.py",
+      "sha256": "63a4130bdc9e37d58173c9b2007124b52cad7f58ae9360de3ae377fefb6a5163"
+    },
+    "development_dataset": {
+      "path": "app/evaluation/candidate_extractor/data/development.jsonl",
+      "sha256": "5a653f04ce232179294b04ba0b114c7d72a664dc3b2ade05f6f50ee91e7ecc1e"
+    },
+    "evaluator": {
+      "path": "app/evaluation/candidate_extractor/evaluator.py",
+      "sha256": "0a3806d662c070a69904c3f9babb45c56277e1e8056ce5d07a01fd4177050123"
+    },
+    "layer_b_unchanged": {
+      "path": "app/evaluation/memory_admission/robustness/data/layer_b.jsonl",
+      "sha256": "fb27d83f371dbcfbeb518084185ae2c37cf249ff3d318696161c222b384438c5"
+    },
+    "memory_candidate_contract": {
+      "path": "app/memory/contracts.py",
+      "sha256": "b40dfaa1c93ed8967c84534703df5446893b5e0819000a5cf34281d72e7a038a"
+    },
+    "models": {
+      "path": "app/evaluation/candidate_extractor/models.py",
+      "sha256": "fe17bcfa85e7cac9725bda42831971a3b32d593a43dc0e7718e53c635459f36a"
+    },
+    "sealed_holdout_dataset": {
+      "path": "app/evaluation/candidate_extractor/data/holdout.jsonl",
+      "sha256": "047dd0329ee4cdf3ea12edfd6a4a084680ce27f38d016091be29bf0bc645dcd2"
+    }
+  }
+}

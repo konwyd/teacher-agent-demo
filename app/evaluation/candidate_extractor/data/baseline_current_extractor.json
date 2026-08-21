@@ -1,0 +1,2609 @@
+{
+  "benchmark_version": "candidate-extractor-v2-comparative-v1",
+  "extractor": "current_build_memory_candidates",
+  "reports": {
+    "development": {
+      "actual_candidate_count": 24,
+      "case_count": 32,
+      "case_results": [
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "三年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-01",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "三年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小雨"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-02",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小雨"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-03",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-04",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ],
+                "temporal_expression": "今天"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "TEMPORAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-05",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "condition": "几何题",
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "CONDITIONAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-06",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "negated": true,
+                "polarity": "negative",
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "NEGATION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-07",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "negated": false,
+                "polarity": "positive",
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "DOUBLE_NEGATION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-08",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "correction_of": "prior preference",
+                "explicit_correction": true,
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "CORRECTION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-09",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ],
+                "temporal_expression": "以后",
+                "uncertainty": "hedged"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "unknown"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "UNCERTAINTY"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-10",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_goal",
+              "payload": {
+                "goal": "学会分数",
+                "subject": "数学",
+                "temporal_expression": "期末前"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "GOAL",
+            "TEMPORAL"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-11",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "statement": "弄混分子分母",
+                "subject": "数学",
+                "topic": "分数"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "DIFFICULTY"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "checked",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "dev-12",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "checked",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "VERIFIED_RESULT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "上一题",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "case_id": "dev-13",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "上一题",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "turn_only"
+            }
+          ],
+          "labels": [
+            "TASK_STATE"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "verified",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "dev-14",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "topic_progress",
+              "payload": {
+                "status": "independent",
+                "subject": "数学",
+                "topic": "方程"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "TOPIC_PROGRESS"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-15",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_episode",
+              "payload": {
+                "episode": "diagram enabled understanding",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "LEARNING_EPISODE"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-16",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "evidence_pattern": "equation first",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "OBSERVED_BEHAVIOR"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-17",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "subject": "英语",
+                "topic": "past tense",
+                "uncertainty": "model_inference"
+              },
+              "source_kind": "model_inference",
+              "target_memory_class": "student",
+              "temporal_scope": "unknown"
+            }
+          ],
+          "labels": [
+            "MODEL_INFERENCE"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "安安"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            },
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-18",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "安安"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            },
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "MULTI_CANDIDATE"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-19",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "THIRD_PERSON"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-20",
+          "exact": false,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "META"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-21",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ],
+                "temporal_expression": "今天;明天恢复"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "labels": [
+            "TEMPORAL",
+            "BOUNDED"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-22",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "condition": "except current problem",
+                "scope": "general",
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "SCOPE",
+            "CONTRADICTION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-23",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "condition": "物理课",
+                "scope": "physics",
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "SCOPE",
+            "CONDITIONAL"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-24",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "topic_progress",
+              "payload": {
+                "correction_of": "difficulty",
+                "explicit_correction": true,
+                "status": "resolved",
+                "subject": "数学",
+                "topic": "分数"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "CORRECTION",
+            "TOPIC_PROGRESS"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-25",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "PRIVACY"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-26",
+          "exact": false,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "INSTRUCTIONAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-27",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ],
+                "temporal_expression": "暂时"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "TEMPORAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-28",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ],
+                "temporal_expression": "从现在起"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "TEMPORAL",
+            "PERSISTENT"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "dev-29",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小林",
+                "uncertainty": "uncertain"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "unknown"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "UNCERTAINTY"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-30",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "negated": false,
+                "polarity": "positive",
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "DOUBLE_NEGATION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "五年级",
+                "preferred_name": "mia"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-31",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "五年级",
+                "preferred_name": "mia"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "MULTI_FIELD"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "dev-32",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ],
+                "temporal_expression": "这次;以后不用"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "turn_only"
+            }
+          ],
+          "labels": [
+            "TEMPORAL",
+            "BOUNDED"
+          ]
+        }
+      ],
+      "conditional_corruption_rate": {
+        "numerator": 3,
+        "support": 3,
+        "value": 1.0
+      },
+      "correction_loss_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "detection_f1": {
+        "numerator": 0.830188679245283,
+        "support": 1,
+        "value": 0.830188679245283
+      },
+      "detection_precision": {
+        "numerator": 0.9166666666666666,
+        "support": 1,
+        "value": 0.9166666666666666
+      },
+      "detection_recall": {
+        "numerator": 0.7586206896551724,
+        "support": 1,
+        "value": 0.7586206896551724
+      },
+      "exact_candidate_set_accuracy": {
+        "numerator": 8,
+        "support": 32,
+        "value": 0.25
+      },
+      "expected_candidate_count": 29,
+      "false_persistent_hard_negative_rate": {
+        "numerator": 2,
+        "support": 4,
+        "value": 0.5
+      },
+      "memory_type_accuracy": {
+        "numerator": 21,
+        "support": 22,
+        "value": 0.9545454545454546
+      },
+      "negation_loss_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "normalization_compatibility": {
+        "numerator": 23,
+        "support": 24,
+        "value": 0.9583333333333334
+      },
+      "operational": {
+        "additional_model_calls": 0,
+        "dependency_footprint": [
+          "python-stdlib",
+          "pydantic",
+          "current-memory-foundation"
+        ],
+        "deterministic_replay": true,
+        "latency_p50_ms": 0.0335020013153553,
+        "latency_p95_ms": 0.0598980113863945,
+        "offline_capability": true,
+        "peak_ram_mb": null,
+        "peak_vram_mb": null,
+        "throughput_cases_per_second": null
+      },
+      "payload_accuracy": {
+        "numerator": 8,
+        "support": 22,
+        "value": 0.36363636363636365
+      },
+      "qualifier_preservation": {
+        "numerator": 0,
+        "support": 13,
+        "value": 0.0
+      },
+      "representation_gap_count": 0,
+      "source_kind_accuracy": {
+        "numerator": 21,
+        "support": 22,
+        "value": 0.9545454545454546
+      },
+      "split": "development",
+      "temporal_inflation_rate": {
+        "numerator": 6,
+        "support": 22,
+        "value": 0.2727272727272727
+      },
+      "temporal_scope_accuracy": {
+        "numerator": 16,
+        "support": 22,
+        "value": 0.7272727272727273
+      }
+    },
+    "holdout": {
+      "actual_candidate_count": 15,
+      "case_count": 20,
+      "case_results": [
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "三年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-01",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "三年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小雨"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-02",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小雨"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PROFILE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-03",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "DIRECT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-04",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ],
+                "temporal_expression": "今天"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "TEMPORAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-05",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "condition": "几何题",
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "CONDITIONAL"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-06",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "negated": true,
+                "polarity": "negative",
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "NEGATION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-07",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "negated": false,
+                "polarity": "positive",
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "DOUBLE_NEGATION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-08",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "correction_of": "prior preference",
+                "explicit_correction": true,
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "CORRECTION"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-09",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ],
+                "temporal_expression": "以后",
+                "uncertainty": "hedged"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "unknown"
+            }
+          ],
+          "labels": [
+            "PREFERENCE",
+            "UNCERTAINTY"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-10",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_goal",
+              "payload": {
+                "goal": "学会分数",
+                "subject": "数学",
+                "temporal_expression": "期末前"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "GOAL",
+            "TEMPORAL"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-11",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "statement": "弄混分子分母",
+                "subject": "数学",
+                "topic": "分数"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "DIFFICULTY"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "checked",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "hold-12",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "checked",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "VERIFIED_RESULT"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "上一题",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "case_id": "hold-13",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "上一题",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "turn_only"
+            }
+          ],
+          "labels": [
+            "TASK_STATE"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "verified",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "hold-14",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "topic_progress",
+              "payload": {
+                "status": "independent",
+                "subject": "数学",
+                "topic": "方程"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "TOPIC_PROGRESS"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-15",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_episode",
+              "payload": {
+                "episode": "diagram enabled understanding",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "LEARNING_EPISODE"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-16",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "evidence_pattern": "equation first",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "OBSERVED_BEHAVIOR"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-17",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "subject": "英语",
+                "topic": "past tense",
+                "uncertainty": "model_inference"
+              },
+              "source_kind": "model_inference",
+              "target_memory_class": "student",
+              "temporal_scope": "unknown"
+            }
+          ],
+          "labels": [
+            "MODEL_INFERENCE"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "安安"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            },
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-18",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "安安"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            },
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "MULTI_CANDIDATE"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "hold-19",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "THIRD_PERSON"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "hold-20",
+          "exact": false,
+          "expected": [],
+          "labels": [
+            "HARD_NEGATIVE",
+            "META"
+          ]
+        }
+      ],
+      "conditional_corruption_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "correction_loss_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "detection_f1": {
+        "numerator": 0.8235294117647058,
+        "support": 1,
+        "value": 0.8235294117647058
+      },
+      "detection_precision": {
+        "numerator": 0.9333333333333333,
+        "support": 1,
+        "value": 0.9333333333333333
+      },
+      "detection_recall": {
+        "numerator": 0.7368421052631579,
+        "support": 1,
+        "value": 0.7368421052631579
+      },
+      "exact_candidate_set_accuracy": {
+        "numerator": 6,
+        "support": 20,
+        "value": 0.3
+      },
+      "expected_candidate_count": 19,
+      "false_persistent_hard_negative_rate": {
+        "numerator": 1,
+        "support": 2,
+        "value": 0.5
+      },
+      "memory_type_accuracy": {
+        "numerator": 13,
+        "support": 14,
+        "value": 0.9285714285714286
+      },
+      "negation_loss_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "normalization_compatibility": {
+        "numerator": 15,
+        "support": 15,
+        "value": 1.0
+      },
+      "operational": {
+        "additional_model_calls": 0,
+        "dependency_footprint": [
+          "python-stdlib",
+          "pydantic",
+          "current-memory-foundation"
+        ],
+        "deterministic_replay": true,
+        "latency_p50_ms": 0.03358209505677223,
+        "latency_p95_ms": 0.059746671468019485,
+        "offline_capability": true,
+        "peak_ram_mb": null,
+        "peak_vram_mb": null,
+        "throughput_cases_per_second": null
+      },
+      "payload_accuracy": {
+        "numerator": 7,
+        "support": 14,
+        "value": 0.5
+      },
+      "qualifier_preservation": {
+        "numerator": 0,
+        "support": 6,
+        "value": 0.0
+      },
+      "representation_gap_count": 0,
+      "source_kind_accuracy": {
+        "numerator": 13,
+        "support": 14,
+        "value": 0.9285714285714286
+      },
+      "split": "holdout",
+      "temporal_inflation_rate": {
+        "numerator": 3,
+        "support": 14,
+        "value": 0.21428571428571427
+      },
+      "temporal_scope_accuracy": {
+        "numerator": 11,
+        "support": 14,
+        "value": 0.7857142857142857
+      }
+    },
+    "layer_b": {
+      "actual_candidate_count": 13,
+      "case_count": 32,
+      "case_results": [
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-001",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-002",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-003",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "subject": "几何",
+                "teaching_preferences": [
+                  "图示讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "visual_paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-004",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "图示讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "visual_paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-005",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "图示讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "visual_paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-006",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "subject": "几何",
+                "teaching_preferences": [
+                  "图示讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "visual_paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-007",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-008",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "示例讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-009",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "简短讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-010",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "表格讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "paraphrase",
+            "capability_independent"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-011",
+          "exact": false,
+          "expected": [],
+          "labels": [
+            "negation"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-012",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "explicit_correction": true,
+                "teaching_preferences": [
+                  "快节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "negation",
+            "correction"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-013",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "subject": "几何",
+                "teaching_preferences": [
+                  "分步骤讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "conditional_preference"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-014",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "condition_map": {
+                  "hard": "detailed",
+                  "simple": "concise"
+                },
+                "teaching_preferences": [
+                  "按难度调整"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "conditional_preference"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-015",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "按学习阶段调整"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "conditional_preference"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-016",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "turn_only"
+            }
+          ],
+          "labels": [
+            "temporal"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-017",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "慢节奏讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "temporal"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-018",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_goal",
+              "payload": {
+                "goal": "重点补代数",
+                "subject": "数学",
+                "until": "semester"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "temporal"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-019",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "learning_goal",
+              "payload": {
+                "goal": "重点学代数",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "temporal"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-020",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-021",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "继续当前题",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "case_id": "layer-b-rob-b-022",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "task_state",
+              "payload": {
+                "requested_target": "继续当前题",
+                "subject": "数学"
+              },
+              "source_kind": "observed_behavior",
+              "target_memory_class": "student",
+              "temporal_scope": "session"
+            }
+          ],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-023",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-024",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "六年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-025",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "grade": "六年级"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "profile"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小林"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "case_id": "layer-b-rob-b-026",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "profile_fact",
+              "payload": {
+                "preferred_name": "小林"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "persistent"
+            }
+          ],
+          "labels": [
+            "profile"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "移项符号错误",
+                "verification_status": "verified_incorrect"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "layer-b-rob-b-027",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "移项符号错误",
+                "verification_status": "verified_incorrect"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "verified_fixture"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "答案正确",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "layer-b-rob-b-028",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "behavior_evidence",
+              "payload": {
+                "subject": "数学",
+                "summary": "答案正确",
+                "verification_status": "verified_correct"
+              },
+              "source_kind": "verified_result",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "verified_fixture"
+          ]
+        },
+        {
+          "actual": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "statement": "student_expressed_difficulty",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "case_id": "layer-b-rob-b-029",
+          "exact": true,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "statement": "student_expressed_difficulty",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "difficulty"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-030",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "difficulty",
+              "payload": {
+                "statement": "student_expressed_difficulty",
+                "subject": "数学"
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "short_lived"
+            }
+          ],
+          "labels": [
+            "difficulty",
+            "paraphrase"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-031",
+          "exact": true,
+          "expected": [],
+          "labels": [
+            "noisy"
+          ]
+        },
+        {
+          "actual": [],
+          "case_id": "layer-b-rob-b-032",
+          "exact": false,
+          "expected": [
+            {
+              "memory_type": "preference",
+              "payload": {
+                "teaching_preferences": [
+                  "图示讲解"
+                ]
+              },
+              "source_kind": "user_stated",
+              "target_memory_class": "student",
+              "temporal_scope": "turn_only"
+            }
+          ],
+          "labels": [
+            "temporal",
+            "capability_independent"
+          ]
+        }
+      ],
+      "conditional_corruption_rate": {
+        "numerator": 0,
+        "support": 0,
+        "value": null
+      },
+      "correction_loss_rate": {
+        "numerator": 1,
+        "support": 1,
+        "value": 1.0
+      },
+      "detection_f1": {
+        "numerator": 0.6153846153846155,
+        "support": 1,
+        "value": 0.6153846153846155
+      },
+      "detection_precision": {
+        "numerator": 0.9230769230769231,
+        "support": 1,
+        "value": 0.9230769230769231
+      },
+      "detection_recall": {
+        "numerator": 0.46153846153846156,
+        "support": 1,
+        "value": 0.46153846153846156
+      },
+      "exact_candidate_set_accuracy": {
+        "numerator": 14,
+        "support": 32,
+        "value": 0.4375
+      },
+      "expected_candidate_count": 26,
+      "false_persistent_hard_negative_rate": {
+        "numerator": 0,
+        "support": 0,
+        "value": null
+      },
+      "memory_type_accuracy": {
+        "numerator": 12,
+        "support": 12,
+        "value": 1.0
+      },
+      "negation_loss_rate": {
+        "numerator": 0,
+        "support": 0,
+        "value": null
+      },
+      "normalization_compatibility": {
+        "numerator": 13,
+        "support": 13,
+        "value": 1.0
+      },
+      "operational": {
+        "additional_model_calls": 0,
+        "dependency_footprint": [
+          "python-stdlib",
+          "pydantic",
+          "current-memory-foundation"
+        ],
+        "deterministic_replay": true,
+        "latency_p50_ms": 0.009424984455108643,
+        "latency_p95_ms": 0.03674998879432678,
+        "offline_capability": true,
+        "peak_ram_mb": null,
+        "peak_vram_mb": null,
+        "throughput_cases_per_second": null
+      },
+      "payload_accuracy": {
+        "numerator": 10,
+        "support": 12,
+        "value": 0.8333333333333334
+      },
+      "qualifier_preservation": {
+        "numerator": 0,
+        "support": 1,
+        "value": 0.0
+      },
+      "representation_gap_count": 0,
+      "source_kind_accuracy": {
+        "numerator": 12,
+        "support": 12,
+        "value": 1.0
+      },
+      "split": "layer_b",
+      "temporal_inflation_rate": {
+        "numerator": 1,
+        "support": 12,
+        "value": 0.08333333333333333
+      },
+      "temporal_scope_accuracy": {
+        "numerator": 11,
+        "support": 12,
+        "value": 0.9166666666666666
+      }
+    }
+  }
+}
