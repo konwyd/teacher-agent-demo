@@ -12,7 +12,7 @@ from app.memory.contracts import TemporalScope
 CONJUNCTION_SPLIT_RE = re.compile(r"(?:[，,；;。]\s*(?:并且|而且|然后)?|并且|而且|然后)+")
 THIRD_PERSON_PATTERNS = ("书中的人物", "课文中的人物", "故事中的人物")
 THIRD_PERSON_CONTEXT_RE = re.compile(
-    r"(?:^|[，。；;、\s])(?:他们|她们|它们|他|她|它)"
+    r"(?<![\w\u4e00-\u9fff])(?:他们|她们|它们|他|她|它)"
 )
 META_QUOTED_RE = re.compile(r"[‘'\"“].+?[’'\"”].*(?:这个词|含义|是什么意思|定义)")
 PRIVACY_PROHIBITION_RE = re.compile(r"(?:不要|别|请勿).{0,8}(?:保存|记住|记录|存储)")
