@@ -25,9 +25,9 @@ from app.memory.contracts import (
 _PREFERENCE_FAMILIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("分步骤讲解", ("一步一步", "分步骤", "分步")),
     ("示例讲解", ("举例", "例子", "示例")),
-    ("图示讲解", ("画图", "画成图", "图解", "可视化", "看图", "有图", "用图")),
+    ("图示讲解", ("画图", "画成图", "画一下", "图解", "可视化", "看图", "有图", "用图")),
     ("慢节奏讲解", ("讲慢", "慢点", "慢些", "慢一些")),
-    ("快节奏讲解", ("讲快", "快点", "快些", "快一些")),
+    ("快节奏讲解", ("讲快", "快点", "快些")),
     ("简短讲解", ("短一点", "简短", "精简")),
     ("表格讲解", ("表格", "列表整理")),
 )
@@ -105,7 +105,9 @@ def _is_hard_negative(message: str) -> bool:
 
 def _profile_payload(message: str) -> dict[str, str]:
     grade = re.search(r"(?:我是|我上)?([一二三四五六七八九1-9])年级", message)
-    name = re.search(r"(?:我叫|叫我)([A-Za-z0-9_\-\u4e00-\u9fff]{1,12})", message)
+    name = re.search(
+        r"(?:我(?:(?:可能|也许))?叫|叫我)([A-Za-z0-9_\-\u4e00-\u9fff]{1,12})", message
+    )
     result: dict[str, str] = {}
     if grade:
         result["grade"] = f"{grade.group(1)}年级"
@@ -115,11 +117,226 @@ def _profile_payload(message: str) -> dict[str, str]:
 
 
 def _preference_values(message: str) -> list[str]:
+    active_message = message
+    if "现在" in message and any(cue in message for cue in ("以前", "之前")):
+        active_message = message.split("现在", 1)[1]
+
+    if (
+        re.search(r"(?:难题|复杂题).*(?:详细|展开)", message)
+        and re.search(r"简单题.*(?:直接|要点|思路|简短)", message)
+    ):
+        return ["按难度调整"]
+
+    if (
+        "复习" in message
+        and any(cue in message for cue in ("第一次", "初次"))
+        and "详细" in message
+    ):
+        return ["按学习阶段调整"]
+
     return [
         label
         for label, cues in _PREFERENCE_FAMILIES
-        if any(cue in message for cue in cues)
+        if any(cue in active_message for cue in cues)
     ]
+
+
+def _is_negated_imperative(message: str) -> bool:
+    return bool(re.match(r"^(?:请)?(?:不要|别)(?!.*(?:不是不|并不是不要))", message))
+
+
+def _preference_qualifiers(
+    message: str,
+) -> tuple[dict[str, Any], TemporalScope]:
+    qualifiers: dict[str, Any] = {}
+    temporal_scope = TemporalScope.PERSISTENT
+
+    if any(cue in message for cue in ("不是不喜欢", "并不是不要", "并非不喜欢")):
+        qualifiers.update({"negated": False, "polarity": "positive"})
+    elif any(cue in message for cue in ("不喜欢", "不想要", "讨厌")):
+        qualifiers.update({"negated": True, "polarity": "negative"})
+
+    conditional = re.search(r"如果(?:是)?([^，,。]{1,16}?)(?:请|就)", message)
+    if conditional:
+        qualifiers["condition"] = conditional.group(1).strip()
+
+    scoped = re.search(r"只在([^，,。]{1,12}?)(?:讲|用|画|举|分)", message)
+    if scoped:
+        condition = scoped.group(1).strip()
+        qualifiers["condition"] = condition
+        qualifiers["scope"] = {
+            "物理课": "physics",
+            "化学课": "chemistry",
+            "数学课": "mathematics",
+        }.get(condition, condition.removesuffix("课").removesuffix("题"))
+
+    only_subject = re.search(r"只有(几何|代数|物理|化学)(?:题|课)", message)
+    if only_subject:
+        qualifiers["subject"] = only_subject.group(1)
+    if (
+        "几何" in message
+        and "condition" not in qualifiers
+        and "subject" not in qualifiers
+    ):
+        qualifiers["subject"] = "几何"
+
+    if (
+        re.search(r"(?:难题|复杂题).*(?:详细|展开)", message)
+        and re.search(r"简单题.*(?:直接|要点|思路|简短)", message)
+    ):
+        qualifiers["condition_map"] = {"hard": "detailed", "simple": "concise"}
+
+
+    if any(cue in message for cue in ("一般", "通常", "平时")) and re.search(
+        r"(?:这|当前|本)(?:道)?题.{0,6}(?:不要|别|不用)",
+        message,
+    ):
+        qualifiers.update({"scope": "general", "condition": "except current problem"})
+
+    if any(cue in message for cue in ("也许", "或许", "可能", "大概")):
+        qualifiers["uncertainty"] = "hedged"
+        temporal_scope = TemporalScope.UNKNOWN
+
+    if any(cue in message for cue in ("更正", "纠正", "说错了", "其实")):
+        qualifiers.update(
+            {"explicit_correction": True, "correction_of": "prior preference"}
+        )
+
+    if "现在" in message and any(cue in message for cue in ("以前", "之前")):
+        qualifiers["explicit_correction"] = True
+
+    if "这次" in message and "以后不用" in message:
+        qualifiers["temporal_expression"] = "这次；以后不用"
+        temporal_scope = TemporalScope.TURN_ONLY
+    elif "这一次" in message:
+        temporal_scope = TemporalScope.TURN_ONLY
+    elif "今天先" in message and "明天恢复" in message:
+        qualifiers["temporal_expression"] = "今天；明天恢复"
+        temporal_scope = TemporalScope.SESSION
+    elif "今天先" in message:
+        temporal_scope = TemporalScope.TURN_ONLY
+    elif "今天" in message:
+        qualifiers["temporal_expression"] = "今天"
+        temporal_scope = TemporalScope.SESSION
+    elif "暂时" in message:
+        qualifiers["temporal_expression"] = "暂时"
+        temporal_scope = TemporalScope.SHORT_LIVED
+    elif "从现在起" in message:
+        qualifiers["temporal_expression"] = "从现在起"
+        temporal_scope = TemporalScope.PERSISTENT
+    elif "以后" in message and temporal_scope is TemporalScope.UNKNOWN:
+        qualifiers["temporal_expression"] = "以后"
+
+    return qualifiers, temporal_scope
+
+
+def _topic_from_message(message: str) -> str:
+    topic_families = (
+        ("分数", ("分数", "分子", "分母")),
+        ("小数", ("小数",)),
+        ("方程", ("方程",)),
+        ("比例", ("比例",)),
+        ("几何", ("几何",)),
+        ("代数", ("代数",)),
+    )
+    return next(
+        (
+            topic
+            for topic, cues in topic_families
+            if any(cue in message for cue in cues)
+        ),
+        "",
+    )
+
+
+def _learning_goal(
+    message: str,
+    subject: str,
+) -> tuple[dict[str, Any], TemporalScope] | None:
+    bounded = re.match(
+        r"(?P<when>(?:期末|考试|开学|放假|暑假|寒假|中考|月考)前)"
+        r"(?P<goal>(?:学会|掌握|重点(?:学|补))[^，,。]+)",
+        message,
+    )
+    if bounded:
+        return (
+            {
+                "subject": subject,
+                "goal": bounded.group("goal").strip(),
+                "temporal_expression": bounded.group("when"),
+            },
+            TemporalScope.SHORT_LIVED,
+        )
+
+    semester = re.search(
+        r"这学期(?:我)?想(?P<goal>(?:重点)?(?:学|补)[^，,。]+)",
+        message,
+    )
+    if semester:
+        return (
+            {
+                "subject": subject,
+                "goal": semester.group("goal").strip(),
+                "until": "semester",
+            },
+            TemporalScope.SHORT_LIVED,
+        )
+
+    durable = re.search(
+        r"以后(?:我)?都?想(?P<goal>(?:重点)?(?:学|补)[^，,。]+)",
+        message,
+    )
+    if durable:
+        return (
+            {"subject": subject, "goal": durable.group("goal").strip()},
+            TemporalScope.PERSISTENT,
+        )
+    return None
+
+
+def _resolved_progress(message: str, subject: str) -> dict[str, Any] | None:
+    match = re.search(
+        r"以前(?:怕|不会|不懂)(?P<topic>[^，,。]+)[，,].*"
+        r"现在(?:会|懂|掌握)了",
+        message,
+    )
+    if not match:
+        return None
+    topic = _topic_from_message(match.group("topic")) or match.group("topic").strip()
+    return {
+        "subject": subject,
+        "topic": topic,
+        "status": "resolved",
+        "explicit_correction": True,
+        "correction_of": "difficulty",
+    }
+
+
+def _difficulty(
+    message: str,
+    subject: str,
+) -> tuple[dict[str, Any], TemporalScope] | None:
+    confusion = re.search(r"(?:我)?总(?P<statement>(?:弄混|搞混)[^，,。]+)", message)
+    if confusion:
+        statement = confusion.group("statement").strip()
+        return (
+            {
+                "subject": subject,
+                "topic": _topic_from_message(statement),
+                "statement": statement,
+            },
+            TemporalScope.PERSISTENT,
+        )
+
+    if any(
+        cue in message
+        for cue in ("不会", "不懂", "不明白", "没懂", "很难", "困难")
+    ):
+        return (
+            {"subject": subject, "statement": "student_expressed_difficulty"},
+            TemporalScope.SHORT_LIVED,
+        )
+    return None
 
 
 def _explicit_task_target(message: str, requested_target: str) -> bool:
@@ -149,9 +366,17 @@ def build_deterministic_memory_candidates(
     subject = _text(classification.get("subject"), 40)
     candidates: list[MemoryCandidate] = []
 
-    if message and not _is_hard_negative(message):
+    has_learning_episode = any(
+        _text(item.get("episode")) for item in observations
+    )
+
+    if message and not _is_hard_negative(message) and not _is_negated_imperative(message):
         profile = _profile_payload(message)
         if profile:
+            profile_scope = TemporalScope.PERSISTENT
+            if any(cue in message for cue in ("可能", "也许", "或许")):
+                profile["uncertainty"] = "uncertain"
+                profile_scope = TemporalScope.UNKNOWN
             candidates.append(
                 _candidate(
                     conversation_id=conversation_id,
@@ -159,24 +384,70 @@ def build_deterministic_memory_candidates(
                     memory_type=MemoryType.PROFILE_FACT,
                     payload=profile,
                     source_kind=MemorySourceKind.USER_STATED,
-                    temporal_scope=TemporalScope.PERSISTENT,
+                    temporal_scope=profile_scope,
                     confidence=1.0,
                 )
             )
 
         preferences = _preference_values(message)
-        if preferences:
+        if preferences and not has_learning_episode:
+            qualifiers, temporal_scope = _preference_qualifiers(message)
             candidates.append(
                 _candidate(
                     conversation_id=conversation_id,
                     turn_id=turn_id,
                     memory_type=MemoryType.PREFERENCE,
-                    payload={"teaching_preferences": preferences},
+                    payload={"teaching_preferences": preferences, **qualifiers},
                     source_kind=MemorySourceKind.USER_STATED,
-                    temporal_scope=TemporalScope.PERSISTENT,
+                    temporal_scope=temporal_scope,
                     confidence=1.0,
                 )
             )
+
+    if message and not _is_hard_negative(message):
+        goal = _learning_goal(message, subject)
+        if goal:
+            goal_payload, goal_scope = goal
+            candidates.append(
+                _candidate(
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    memory_type=MemoryType.LEARNING_GOAL,
+                    payload=goal_payload,
+                    source_kind=MemorySourceKind.USER_STATED,
+                    temporal_scope=goal_scope,
+                    confidence=1.0,
+                )
+            )
+
+        progress_payload = _resolved_progress(message, subject)
+        if progress_payload:
+            candidates.append(
+                _candidate(
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    memory_type=MemoryType.TOPIC_PROGRESS,
+                    payload=progress_payload,
+                    source_kind=MemorySourceKind.USER_STATED,
+                    temporal_scope=TemporalScope.SHORT_LIVED,
+                    confidence=0.9,
+                )
+            )
+        else:
+            difficulty = _difficulty(message, subject)
+            if difficulty:
+                difficulty_payload, difficulty_scope = difficulty
+                candidates.append(
+                    _candidate(
+                        conversation_id=conversation_id,
+                        turn_id=turn_id,
+                        memory_type=MemoryType.DIFFICULTY,
+                        payload=difficulty_payload,
+                        source_kind=MemorySourceKind.USER_STATED,
+                        temporal_scope=difficulty_scope,
+                        confidence=0.85,
+                    )
+                )
 
     has_topic_observation = any(
         _text(item.get("topic")) and _text(item.get("status"))
