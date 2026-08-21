@@ -10,7 +10,10 @@ from app.memory.contracts import TemporalScope
 
 
 CONJUNCTION_SPLIT_RE = re.compile(r"(?:[，,；;。]\s*(?:并且|而且|然后)?|并且|而且|然后)+")
-THIRD_PERSON_PATTERNS = ("书中的人物", "课文中的人物", "故事中的人物", "他", "她", "它")
+THIRD_PERSON_PATTERNS = ("书中的人物", "课文中的人物", "故事中的人物")
+THIRD_PERSON_CONTEXT_RE = re.compile(
+    r"(?:^|[，。；;、\s])(?:他|她|它)(?:们)?(?:说|叫|是|在|不|很|的|已经|也|要|想)"
+)
 META_QUOTED_RE = re.compile(r"[‘'\"“].+?[’'\"”].*(?:这个词|含义|是什么意思|定义)")
 PRIVACY_PROHIBITION_RE = re.compile(r"(?:不要|别|请勿).{0,8}(?:保存|记住|记录|存储)")
 INSTRUCTIONAL_EXAMPLE_PATTERNS = ("举例说明", "例题中的", "假设学生")
@@ -58,7 +61,16 @@ def _normalize_text(text: str) -> str:
 def segment_clauses(text: str) -> tuple[str, ...]:
     """Split only bounded conjunctions, retaining non-empty normalized clauses."""
     normalized = _normalize_text(text)
+    if _is_bound_qualifier_clause(normalized):
+        return (normalized,)
     return tuple(part.strip() for part in CONJUNCTION_SPLIT_RE.split(normalized) if part.strip())
+
+
+def _is_bound_qualifier_clause(text: str) -> bool:
+    return bool(
+        re.match(r"(?:改一下|更正|纠正)[，,]\s*(?:我其实|其实)", text)
+        or re.match(r"(?:本次|这次|本轮|这一轮)[^，,]*[，,]\s*之后恢复默认$", text)
+    )
 
 
 def _hard_negative_reason(text: str) -> str:
@@ -66,7 +78,7 @@ def _hard_negative_reason(text: str) -> str:
         return "privacy_prohibition"
     if META_QUOTED_RE.search(text):
         return "meta_quoted"
-    if any(marker in text for marker in THIRD_PERSON_PATTERNS):
+    if any(marker in text for marker in THIRD_PERSON_PATTERNS) or THIRD_PERSON_CONTEXT_RE.search(text):
         return "third_person"
     if any(marker in text for marker in INSTRUCTIONAL_EXAMPLE_PATTERNS):
         return "instructional_example"
@@ -111,8 +123,6 @@ def _temporal_analysis(text: str, uncertainty: str) -> tuple[str, TemporalScope 
             break
     if "以后" in text and "以后都" not in text:
         expressions.append("以后")
-    if uncertainty:
-        temporal_hint = None
     return "；".join(expressions), temporal_hint
 
 

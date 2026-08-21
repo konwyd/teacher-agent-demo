@@ -31,7 +31,21 @@ def test_correction_uncertainty_and_clause_segmentation_are_preserved():
     assert segment_clauses("叫我阿泽，并且讲得慢些") == ("叫我阿泽", "讲得慢些")
 
 
+def test_explicit_turn_bound_wins_over_hedging():
+    analysis = analyze_clause("可能本次给个例子")
+    assert analysis.uncertainty == "hedged"
+    assert analysis.temporal_hint is TemporalScope.TURN_ONLY
+    assert resolve_temporal_scope(analysis, TemporalScope.PERSISTENT) is TemporalScope.TURN_ONLY
+
+
+def test_clause_segmentation_binds_corrections_and_temporal_boundaries():
+    assert segment_clauses("改一下，我其实已经掌握比例了") == ("改一下,我其实已经掌握比例了",)
+    assert segment_clauses("本次给个例子，之后恢复默认") == ("本次给个例子,之后恢复默认",)
+    assert segment_clauses("叫我阿泽，并且讲得慢些") == ("叫我阿泽", "讲得慢些")
+
+
 def test_hard_negative_guards_are_explicit():
     assert analyze_clause("书中的人物叫阿泽").hard_negative_reason == "third_person"
+    assert analyze_clause("我在其他科目也想讲得慢一些").hard_negative_reason == ""
     assert analyze_clause("‘分步骤’这个词是什么含义").hard_negative_reason == "meta_quoted"
     assert analyze_clause("不要保存我的姓名").hard_negative_reason == "privacy_prohibition"
