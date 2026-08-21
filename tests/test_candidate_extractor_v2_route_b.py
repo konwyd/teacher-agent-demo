@@ -46,6 +46,7 @@ def test_clause_segmentation_binds_corrections_and_temporal_boundaries():
 
 def test_hard_negative_guards_are_explicit():
     assert analyze_clause("书中的人物叫阿泽").hard_negative_reason == "third_person"
+    assert analyze_clause("他喜欢分步骤说明").hard_negative_reason == "third_person"
     assert analyze_clause("我在其他科目也想讲得慢一些").hard_negative_reason == ""
     assert analyze_clause("‘分步骤’这个词是什么含义").hard_negative_reason == "meta_quoted"
     assert analyze_clause("不要保存我的姓名").hard_negative_reason == "privacy_prohibition"
