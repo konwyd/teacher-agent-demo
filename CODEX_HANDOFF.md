@@ -1,4 +1,14 @@
 # CODEX_HANDOFF.md — 项目交接文档
+ARCHIVED DOCUMENT
+
+This document describes an earlier project state and is not authoritative.
+Do not use it as current runtime or architecture guidance.
+
+Current sources of truth:
+- AGENTS.md
+- OWNERSHIP.md
+- PROGRESS.md
+- DECISIONS.md
 
 > 交接自 Claude（开发助手），2026-07。接手前请完整读完本文件 + AGENTS.md。
 
