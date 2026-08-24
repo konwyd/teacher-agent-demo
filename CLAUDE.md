@@ -1,5 +1,14 @@
 # CLAUDE.md
+ARCHIVED DOCUMENT
 
+This document describes an earlier project state and is not authoritative.
+Do not use it as current runtime or architecture guidance.
+
+Current sources of truth:
+- AGENTS.md
+- OWNERSHIP.md
+- PROGRESS.md
+- DECISIONS.md
 ## Project
 
 This repository is a research demo for a Chinese K9/K12 Teacher Agent.

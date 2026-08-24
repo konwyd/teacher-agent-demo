@@ -386,6 +386,9 @@ retry budget = min(max(initial × 2, 1024), 4096)
 - TeachingContract；
 - verifier 结果；
 - RAG 来源、命中和引用；
+- 结构化学生记忆解析与异步写回状态；
+- 实际 retrieval decision、Agent 工具时间线和已加载 Skill；
+- 语义边界审计、修正复审与安全兜底状态；
 - Agent trace；
 - public thinking events/sections；
 - boundary audit 和 repair 信息；
@@ -741,11 +744,18 @@ Web tool 必须满足：
 
 快速路径当前只自动执行本地检索，不自动升级 Web；Web 主要存在于模型 Action Loop 路径。
 
-### 8.3 当前 `retrieval_decision` 字段的事实
+### 8.3 当前如何决定是否使用 RAG
 
-仓库存在 `RetrievalDecision` 和 `apply_retrieval_guards()`，但当前 orchestrator 并没有真正把这个 policy 函数接入规划。`AgentOrchestrationResult.retrieval_decision` 多数情况下使用默认 `none`，而真实检索行为应以 `agent_trace / observations / rag_context` 为准。
+当前有两条真实路径：
 
-因此 UI 或分析代码如果只看 `retrieval_decision`，可能与实际 `search_local_knowledge` trace 不一致。这是当前代码债务，不应在架构说明里把它描述成已经完全落地的独立检索路由器。
+1. 确定性 Fast Plan：学科和学段明确时，新 K9 问题或概念请求执行一次本地教材/题库检索；已确定上下文中的普通续答不重复检索。分类器判定 `use_quality_qa=true` 时，还会独立查询一次优质问答库。
+2. 模型 Action Loop：Fast Router 无法高置信判断时，Action Provider 根据 classification、当前题、学生消息、已有 observations 和剩余预算选择 `search_local_knowledge` 或直接 finish。Provider 失败时，新题、缺少 active problem 或概念请求会执行一次确定性本地检索兜底。
+
+Web 不由 Fast Plan 自动升级；模型动作必须先成功调用本地检索，再提供具体 `evidence_gap`，且每轮最多联网一次。
+
+`retrieval_decision` 现在由实际计划和工具轨迹生成：Fast Plan 直接记录 `local / none` 及公开理由，模型循环根据真实出现的 local、quality-QA、web 工具事件汇总为 `none / local / local_then_web`。UI 同时展示 decision、工具结果、命中数和 RAG context，避免只看单一状态字段。
+
+仓库中的 `apply_retrieval_guards()` 仍是独立 policy 辅助函数，当前动作循环主要依赖 Tool Registry 的学科、学段、调用次数和 Web 前置门禁；不要把它描述成一个额外的前台 LLM 路由调用。
 
 ## 9. 安全与可靠性边界
 

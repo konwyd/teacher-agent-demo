@@ -1,5 +1,14 @@
 # 项目进度
+ARCHIVED DOCUMENT
 
+This document describes an earlier project state and is not authoritative.
+Do not use it as current runtime or architecture guidance.
+
+Current sources of truth:
+- AGENTS.md
+- OWNERSHIP.md
+- PROGRESS.md
+- DECISIONS.md
 ## 第二轮完成快照（2026-08-14，优先于下方第一轮状态）
 
 - 功能提交：隔离分支 `5b5288f`，主分支等价合入提交 `b342313`

@@ -1,0 +1,745 @@
+{
+  "authoritative_admission_implemented": false,
+  "dataset_label_sha256": "7c819226dd88418e59519809c01b431cbab60c0628a1759f32774c81354c8a8a",
+  "existing_evaluation_results": "38/38 passed (offline mock LLM)",
+  "existing_full_test_results": "816 passed in 71.95s",
+  "failure_counts_by_layer": {
+    "LAYER_A": {
+      "CAUSAL_DEDUP_GAP": 5
+    },
+    "LAYER_B": {
+      "CANDIDATE_EXTRACTION_FAILURE": 15,
+      "NORMALIZATION_FAILURE": 3
+    },
+    "LAYER_C": {}
+  },
+  "failure_taxonomy": {
+    "CANDIDATE_EXTRACTION_FAILURE": [
+      "rob-b-002",
+      "rob-b-003",
+      "rob-b-004",
+      "rob-b-005",
+      "rob-b-006",
+      "rob-b-008",
+      "rob-b-009",
+      "rob-b-010",
+      "rob-b-011",
+      "rob-b-014",
+      "rob-b-015",
+      "rob-b-018",
+      "rob-b-019",
+      "rob-b-030",
+      "rob-b-032"
+    ],
+    "CAUSAL_DEDUP_GAP": [
+      "rob-a-047",
+      "rob-a-048",
+      "rob-a-049",
+      "rob-a-050",
+      "rob-a-051"
+    ],
+    "EVIDENCE_LEDGER_FAILURE": [],
+    "FEATURE_FAILURE": [],
+    "LIVE_AGENT_LOOP_FAILURE": [],
+    "LIVE_MODEL_FAILURE": [],
+    "NORMALIZATION_FAILURE": [
+      "rob-b-012",
+      "rob-b-013",
+      "rob-b-016"
+    ],
+    "POLICY_FAILURE": [],
+    "RELATION_MATCH_FAILURE": []
+  },
+  "frozen_files": [
+    {
+      "dirty": true,
+      "path": "app/memory/admission_policy.py",
+      "sha256": "770a1cbf09af08d2b7da34a51060556ffe5ee6362082b6bd1cac005df4fff124"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_config.py",
+      "sha256": "de4ff9b891074e1c51508076014bb0e3b251e8ba67389aee83dcd610ae08c792"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_matcher.py",
+      "sha256": "4aad4c08446dd9b2e940290217c203a851cb37a2ab06f08393d0800474f41d4c"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_normalization.py",
+      "sha256": "54a44703e67502ba5e3d0cec81f417468c18cc7caec2ecfa4685856980f8bfa8"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_features.py",
+      "sha256": "598ad5f299677af04cc59bc6a42ad280b00dd60889813636640ce15ec82fb134"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_controller.py",
+      "sha256": "6de33456fd74508076a0a9726469b9866fa37b6446d6a0a61659265bc3bb944a"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/admission_ledger.py",
+      "sha256": "3289a8341e4368124ca675a6b152071766d086e56b533189d8259e37832f67d0"
+    },
+    {
+      "dirty": true,
+      "path": "app/memory/contracts.py",
+      "sha256": "b40dfaa1c93ed8967c84534703df5446893b5e0819000a5cf34281d72e7a038a"
+    }
+  ],
+  "frozen_git_head": "8b87de3e8ee42e495e85d5a241c84548545f75e7",
+  "layer_a_cases": 62,
+  "layer_b_cases": 32,
+  "layer_b_extraction_accuracy": {
+    "numerator": 14,
+    "support": 32,
+    "value": 0.4375
+  },
+  "live_smoke": {
+    "duplicate_call_count": 0,
+    "extraction_failure_count": 0,
+    "findings": "LIVE_SMOKE_CONFOUNDED_BY_AGENT_LOOP = UNKNOWN; deferred before model invocation",
+    "max_trajectories": 5,
+    "model_call_count": 0,
+    "reason": "local quantized 32B live inference excluded by bounded-cost rule; Layers A/B and long trajectories are complete",
+    "status": "DEFERRED",
+    "tool_call_count": 0,
+    "wall_latency_seconds": null
+  },
+  "long_trajectories": [
+    20,
+    50,
+    100
+  ],
+  "long_trajectory_results": [
+    {
+      "contradiction_count": 6,
+      "contradiction_recovery_behavior": "admit_observed_after_contradiction",
+      "decision_counts": {
+        "admit": 8,
+        "pending": 6,
+        "reject": 5,
+        "supersede": 1
+      },
+      "decisions": [
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "pending",
+        "reject",
+        "admit",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit"
+      ],
+      "final_ledger_size": 5,
+      "independent_evidence_maturity": [
+        0.35,
+        0.81,
+        1.0,
+        1.0
+      ],
+      "max_pending_ledger_size": 3,
+      "missed_promotions": 0,
+      "pending_survival_distribution": {
+        "1-5": 2,
+        "6-20": 2
+      },
+      "premature_admits": 0,
+      "promotion_latency_independent_events": [
+        2,
+        3,
+        4
+      ],
+      "promotion_points": [
+        10,
+        15,
+        20
+      ],
+      "sqlite_path": "/tmp/memory-admission-robustness-34mgm7za/long/trajectory-20.sqlite3",
+      "stale_pending_items": 2,
+      "turn_count": 20
+    },
+    {
+      "contradiction_count": 17,
+      "contradiction_recovery_behavior": "admit_observed_after_contradiction",
+      "decision_counts": {
+        "admit": 23,
+        "pending": 12,
+        "reject": 12,
+        "supersede": 3
+      },
+      "decisions": [
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "pending",
+        "reject",
+        "admit",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "supersede",
+        "admit"
+      ],
+      "final_ledger_size": 5,
+      "independent_evidence_maturity": [
+        0.35,
+        0.81,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "max_pending_ledger_size": 3,
+      "missed_promotions": 0,
+      "pending_survival_distribution": {
+        "1-5": 2,
+        "21+": 2
+      },
+      "premature_admits": 0,
+      "promotion_latency_independent_events": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "promotion_points": [
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50
+      ],
+      "sqlite_path": "/tmp/memory-admission-robustness-34mgm7za/long/trajectory-50.sqlite3",
+      "stale_pending_items": 2,
+      "turn_count": 50
+    },
+    {
+      "contradiction_count": 34,
+      "contradiction_recovery_behavior": "admit_observed_after_contradiction",
+      "decision_counts": {
+        "admit": 48,
+        "pending": 22,
+        "reject": 25,
+        "supersede": 5
+      },
+      "decisions": [
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "pending",
+        "reject",
+        "admit",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "supersede",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "reject",
+        "admit",
+        "reject",
+        "pending",
+        "admit",
+        "pending",
+        "admit"
+      ],
+      "final_ledger_size": 5,
+      "independent_evidence_maturity": [
+        0.35,
+        0.81,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "max_pending_ledger_size": 3,
+      "missed_promotions": 0,
+      "pending_survival_distribution": {
+        "1-5": 2,
+        "21+": 2
+      },
+      "premature_admits": 0,
+      "promotion_latency_independent_events": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "promotion_points": [
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50,
+        55,
+        60,
+        65,
+        70,
+        75,
+        80,
+        85,
+        90,
+        95,
+        100
+      ],
+      "sqlite_path": "/tmp/memory-admission-robustness-34mgm7za/long/trajectory-100.sqlite3",
+      "stale_pending_items": 2,
+      "turn_count": 100
+    }
+  ],
+  "memcon_implemented": false,
+  "metrics": {
+    "admit_precision": {
+      "numerator": 27,
+      "support": 32,
+      "value": 0.84375
+    },
+    "admit_recall": {
+      "numerator": 27,
+      "support": 27,
+      "value": 1.0
+    },
+    "causal_duplicate_inflation_rate": {
+      "numerator": 5,
+      "support": 5,
+      "value": 1.0
+    },
+    "conditional_preference_accuracy": {
+      "numerator": 6,
+      "support": 6,
+      "value": 1.0
+    },
+    "correction_accuracy": {
+      "numerator": 6,
+      "support": 6,
+      "value": 1.0
+    },
+    "duplicate_evidence_inflation_rate": {
+      "numerator": 0,
+      "support": 2,
+      "value": 0.0
+    },
+    "incorrect_supersede_rate": {
+      "numerator": 0,
+      "support": 62,
+      "value": 0.0
+    },
+    "missed_promotion_rate": {
+      "numerator": 0,
+      "support": 27,
+      "value": 0.0
+    },
+    "model_inference_admit_rate": {
+      "numerator": 0,
+      "support": 1,
+      "value": 0.0
+    },
+    "paraphrase_consistency": {
+      "numerator": 3,
+      "support": 3,
+      "value": 1.0
+    },
+    "premature_admit_rate": {
+      "numerator": 5,
+      "support": 35,
+      "value": 0.14285714285714285
+    },
+    "relation_accuracy": {
+      "numerator": 62,
+      "support": 62,
+      "value": 1.0
+    },
+    "robustness_accuracy": {
+      "numerator": 57,
+      "support": 62,
+      "value": 0.9193548387096774
+    },
+    "robustness_macro_f1": {
+      "numerator": 57,
+      "support": 62,
+      "value": 0.9467622772707518
+    },
+    "stale_belief_rate": {
+      "numerator": 0,
+      "support": 5,
+      "value": 0.0
+    },
+    "temporal_discrimination_accuracy": {
+      "numerator": 9,
+      "support": 9,
+      "value": 1.0
+    },
+    "temporary_state_admit_rate": {
+      "numerator": 0,
+      "support": 9,
+      "value": 0.0
+    }
+  },
+  "named_probe_results": {
+    "A": {
+      "append_count": 3,
+      "contradiction_count": 0,
+      "decisions": [
+        "pending",
+        "admit",
+        "admit"
+      ],
+      "distinct_causal_turns": 3,
+      "event_references": [
+        "verified:1",
+        "verified:2",
+        "verified:3"
+      ],
+      "evidence_maturity": [
+        0.35,
+        0.91,
+        1.0
+      ],
+      "gap_code": "",
+      "name": "A",
+      "relations": [
+        "new",
+        "supports",
+        "supports"
+      ],
+      "semantic_keys": [
+        "student:behavior_evidence:数学:sign_error",
+        "student:behavior_evidence:数学:sign_error",
+        "student:behavior_evidence:数学:sign_error"
+      ],
+      "support_count": 3
+    },
+    "B": {
+      "append_count": 4,
+      "contradiction_count": 3,
+      "decisions": [
+        "pending",
+        "pending",
+        "pending",
+        "pending"
+      ],
+      "distinct_causal_turns": 4,
+      "event_references": [
+        "verified:1",
+        "verified:2",
+        "verified:3",
+        "verified:4"
+      ],
+      "evidence_maturity": [
+        0.35,
+        0.91,
+        0.71,
+        0.51
+      ],
+      "gap_code": "",
+      "name": "B",
+      "relations": [
+        "new",
+        "contradicts",
+        "contradicts",
+        "contradicts"
+      ],
+      "semantic_keys": [
+        "student:topic_progress:数学:fractions",
+        "student:topic_progress:数学:fractions",
+        "student:topic_progress:数学:fractions",
+        "student:topic_progress:数学:fractions"
+      ],
+      "support_count": 1
+    },
+    "C": {
+      "append_count": 3,
+      "contradiction_count": 2,
+      "decisions": [
+        "pending",
+        "pending",
+        "pending"
+      ],
+      "distinct_causal_turns": 3,
+      "event_references": [
+        "verified-error",
+        "student-correction",
+        "verified-correct"
+      ],
+      "evidence_maturity": [
+        0.35,
+        0.81,
+        0.71
+      ],
+      "gap_code": "",
+      "name": "C",
+      "relations": [
+        "new",
+        "contradicts",
+        "contradicts"
+      ],
+      "semantic_keys": [
+        "student:topic_progress:数学:fractions",
+        "student:topic_progress:数学:fractions",
+        "student:topic_progress:数学:fractions"
+      ],
+      "support_count": 1
+    },
+    "D": {
+      "append_count": 3,
+      "contradiction_count": 0,
+      "decisions": [
+        "pending",
+        "pending",
+        "pending"
+      ],
+      "distinct_causal_turns": 3,
+      "event_references": [
+        "verified:sign_error",
+        "verified:arithmetic_error",
+        "verified:copying_error"
+      ],
+      "evidence_maturity": [
+        0.35,
+        0.35,
+        0.35
+      ],
+      "gap_code": "",
+      "name": "D",
+      "relations": [
+        "new",
+        "new",
+        "new"
+      ],
+      "semantic_keys": [
+        "student:behavior_evidence:数学:sign_error",
+        "student:behavior_evidence:数学:arithmetic_error",
+        "student:behavior_evidence:数学:copying_error"
+      ],
+      "support_count": 3
+    },
+    "E": {
+      "append_count": 3,
+      "contradiction_count": 0,
+      "decisions": [
+        "pending",
+        "admit",
+        "admit"
+      ],
+      "distinct_causal_turns": 1,
+      "event_references": [
+        "tool-call",
+        "retry",
+        "outbox-retry"
+      ],
+      "evidence_maturity": [
+        0.35,
+        0.81,
+        0.99
+      ],
+      "gap_code": "ROBUSTNESS_GAP_CAUSAL_DEDUP",
+      "name": "E",
+      "relations": [
+        "new",
+        "supports",
+        "supports"
+      ],
+      "semantic_keys": [
+        "student:behavior_evidence:数学:sign_error",
+        "student:behavior_evidence:数学:sign_error",
+        "student:behavior_evidence:数学:sign_error"
+      ],
+      "support_count": 3
+    }
+  },
+  "online_reward_implemented": false,
+  "phase_2a_5_complete": true,
+  "phase_2b_blockers": [
+    "ROBUSTNESS_GAP_CAUSAL_DEDUP: contracts lack a causal-root identity",
+    "Human review of every false ADMIT and missed promotion",
+    "Production shadow divergence and privacy/retention review",
+    "Stale-belief and correction lifecycle semantics"
+  ],
+  "policy_v1_frozen": true,
+  "policy_v1_modified": false,
+  "ready_for_phase_2b": "REVIEW_REQUIRED"
+}
