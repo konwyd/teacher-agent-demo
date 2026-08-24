@@ -69,6 +69,24 @@ def test_fast_route_keeps_quality_qa_independent_from_textbook_route() -> None:
     assert routine.classification.use_quality_qa is False
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "初中数学里为什么移项要变号？",
+        "初中数学里怎么理解等式性质？",
+        "初中数学里一次函数和正比例函数有什么区别？",
+        "初中数学里这道题的思路是什么？",
+    ],
+)
+def test_routine_explanation_requests_do_not_enable_quality_qa(
+    message: str,
+) -> None:
+    route = choose_fast_route(message, "", "", "")
+
+    assert route is not None
+    assert route.classification.use_quality_qa is False
+
+
 def test_registry_rejects_quality_search_when_route_is_off() -> None:
     calls = 0
 

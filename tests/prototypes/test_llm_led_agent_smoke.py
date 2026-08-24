@@ -76,6 +76,9 @@ def test_turn_record_keeps_public_trace_and_usage_only() -> None:
             )
         ],
         agent_termination_reason="deterministic_fast_path",
+        router_type="deterministic_fast_path",
+        agent_iterations=0,
+        semantic_audit_performed=False,
         teaching_contract=contract,
         student_verification=SimpleNamespace(status=SimpleNamespace(value="unable_to_verify")),
         boundary_audit=SimpleNamespace(passed=True, violations=[]),
@@ -103,6 +106,9 @@ def test_turn_record_keeps_public_trace_and_usage_only() -> None:
     assert record["tool_calls"][0]["tool_name"] == "load_skill"
     assert record["safe_output_ready_seconds"] == 1.25
     assert record["llm_call_count"] == 2
+    assert record["router_type"] == "deterministic_fast_path"
+    assert record["agent_iterations"] == 0
+    assert record["semantic_audit_performed"] is False
     assert record["boundary_violations"] == []
     assert "reasoning_content" not in record
 

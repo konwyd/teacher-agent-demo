@@ -117,6 +117,24 @@ def _no_rag(monkeypatch):
     )
 
 
+def test_old_turn_payload_defaults_to_empty_reasoning_trace() -> None:
+    turn = PrototypeTurnRecord.model_validate(
+        {
+            "turn_id": 1,
+            "student_message": "什么是勾股定理？",
+            "teacher_output": {"response": "直角三角形两直角边平方和等于斜边平方。"},
+            "student_verification": {
+                "status": "not_applicable",
+                "summary": "当前消息不是待校验步骤",
+                "verifier_name": "none",
+            },
+            "evidence_level": "llm_only",
+        }
+    )
+
+    assert turn.reasoning_trace == []
+
+
 def test_correct_single_move_observer_keeps_single_move(monkeypatch):
     _no_rag(monkeypatch)
     client = _ScriptedClient(
@@ -672,6 +690,24 @@ def test_agent_contract_audits_repairs_and_normalizes_formula():
     assert client.teacher_payloads[0]["teaching_contract"]["response_mode"] == "concept_explanation"
     assert client.repair_payloads[0]["turn_context"]["teaching_contract"] == client.teacher_payloads[0]["teaching_contract"]
     assert client.repair_payloads[0]["must_fix"] == ["删除本题代入和答案"]
+    assert [stage.stage_id.value for stage in turn.reasoning_trace] == [
+        "request_analysis",
+        "teaching_strategy",
+        "knowledge_decision",
+        "answer_generation",
+        "quality_validation",
+        "answer_repair",
+        "final_recheck",
+    ]
+    source_fields = {
+        evidence.source_field
+        for stage in turn.reasoning_trace
+        for evidence in stage.content
+    }
+    assert "TeachingContract.response_mode" in source_fields
+    assert "RetrievalDecision.mode" in source_fields
+    assert "BoundaryAudit.passed" in source_fields
+    assert "SECRET" not in repr(turn.reasoning_trace)
 
 
 def test_agent_turn_never_requests_observer_and_aggregates_all_llm_usage():
@@ -745,6 +781,17 @@ def test_multiple_question_marks_are_normalized_without_dropping_content():
     assert client.requested_schemas == [BoundaryAudit]
     assert turn.post_repair_boundary_audit is None
     assert turn.model_generation_metadata["llm_call_count"] == 3
+    assert "answer_repair" not in {
+        stage.stage_id.value for stage in turn.reasoning_trace
+    }
+    assert "final_recheck" not in {
+        stage.stage_id.value for stage in turn.reasoning_trace
+    }
+    assert any(
+        evidence.source_field == "BoundaryAudit.passed"
+        for stage in turn.reasoning_trace
+        for evidence in stage.content
+    )
 
 
 def test_failed_second_audit_uses_redacted_fixed_fallback():

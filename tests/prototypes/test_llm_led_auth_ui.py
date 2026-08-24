@@ -23,13 +23,125 @@ from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
     PublicThinkingUpdate,
     PublicThinkingKind,
+    PublicThinkingSection,
     PublicThinkingStatus,
+    ReasoningTraceEvidence,
+    ReasoningTraceSource,
+    ReasoningTraceStage,
+    ReasoningTraceStageId,
+)
+from prototypes.llm_led_teacher.desk_theme import (
+    DESK_THEME_CSS,
+    render_reasoning_trace,
 )
 from prototypes.llm_led_teacher.thinking_state import thinking_key
 from app.llm.deepseek_client import DeepSeekError
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _reasoning_stage(
+    *,
+    sequence: int = 1,
+    value: str = "数学",
+    summary: str = "已识别为初中数学概念解释任务。",
+) -> ReasoningTraceStage:
+    return ReasoningTraceStage(
+        sequence=sequence,
+        stage_id=ReasoningTraceStageId.REQUEST_ANALYSIS,
+        stage="问题分析",
+        icon="🔍",
+        summary=summary,
+        content=[
+            ReasoningTraceEvidence(
+                label="学科",
+                value=value,
+                source=ReasoningTraceSource.REQUEST_CLASSIFICATION,
+                source_field="RequestClassification.subject",
+            )
+        ],
+        status=PublicThinkingStatus.COMPLETED,
+    )
+
+
+def test_reasoning_trace_renderer_is_continuous_public_summary_and_escaped() -> None:
+    rendered = []
+
+    class FakeContainer:
+        def markdown(self, value, **kwargs):
+            rendered.append((value, kwargs))
+
+    html = render_reasoning_trace(
+        [
+            _reasoning_stage(
+                value="<script>alert(1)</script>",
+                summary="<b>不能作为 HTML</b>",
+            )
+        ],
+        live=True,
+        container=FakeContainer(),
+    )
+
+    assert "<details" not in html
+    assert "<summary" not in html
+    assert '<div class="desk-reasoning-flow"' in html
+    assert '<div class="desk-reasoning-line"' in html
+    assert "🧠 AI教学决策过程" in html
+    assert "RequestClassification.subject" not in html
+    assert "RuntimeStage.name" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" not in html
+    assert "&lt;b&gt;不能作为 HTML&lt;/b&gt;" in html
+    assert "<script>alert(1)</script>" not in html
+    assert rendered == [(html, {"unsafe_allow_html": True})]
+
+
+def test_reasoning_trace_css_has_continuous_flow_states_and_reduced_motion() -> None:
+    assert "@keyframes desk-reasoning-enter" in DESK_THEME_CSS
+    assert ".desk-reasoning-line[data-status=\"in_progress\"]" in DESK_THEME_CSS
+    assert ".desk-reasoning-line[data-status=\"completed\"]" in DESK_THEME_CSS
+    assert ".desk-reasoning-line > summary" not in DESK_THEME_CSS
+    assert "@media (prefers-reduced-motion: reduce)" in DESK_THEME_CSS
+
+
+def test_legacy_section_fallback_does_not_render_free_form_reason() -> None:
+    from prototypes.llm_led_teacher.desk_theme import render_thinking_sections
+
+    rendered = []
+
+    class FakeContainer:
+        def markdown(self, value, **kwargs):
+            rendered.append(value)
+
+    class LegacyTurn:
+        sections = [
+            PublicThinkingSection(
+                kind=PublicThinkingKind.RETRIEVAL,
+                title="资料",
+                summary="已确定本轮资料使用方式。",
+                details=["未使用 RAG", "SECRET FREE FORM REASON"],
+                status=PublicThinkingStatus.COMPLETED,
+            )
+        ]
+
+    render_thinking_sections(LegacyTurn(), container=FakeContainer())
+
+    assert "🧠 AI教学决策过程" in rendered[0]
+    assert "知识判断" not in rendered[0]
+    assert "<details" not in rendered[0]
+    assert "已确定本轮资料使用方式。" in rendered[0]
+    assert "未使用 RAG" in rendered[0]
+    assert "SECRET FREE FORM REASON" not in rendered[0]
+
+
+class LegacyPrototypeTurnRecord(BaseModel):
+    """Turn object created before structured memory and audit fields existed."""
+
+    turn_id: int
+    student_message: str
+    teacher_output: dict[str, str]
+    student_verification: dict[str, str]
+    evidence_level: str
 
 
 class LegacyPrototypeEpisode(BaseModel):
@@ -257,7 +369,7 @@ def test_hot_reload_migrates_legacy_episode_without_losing_pending_message(
     assert saved.episode["pending_student_message"] == "旧会话热更新后发送的消息"
 
 
-def test_new_public_thinking_completes_collapsed_without_forced_rerun(
+def test_new_public_thinking_remains_visible_without_status_or_expander(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -282,10 +394,14 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
         summary="思考过程已完成。",
         elapsed_seconds=6.8,
     )
+    reasoning_stage = _reasoning_stage()
 
     def successful_turn(episode, message, **kwargs):
         kwargs["thinking_update_callback"](
-            PublicThinkingUpdate(event=public_event)
+            PublicThinkingUpdate(
+                event=public_event,
+                reasoning_trace=[reasoning_stage],
+            )
         )
         turn = PrototypeTurnRecord(
             turn_id=len(episode.turns) + 1,
@@ -298,6 +414,7 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
             ),
             evidence_level="unverified",
             public_thinking_events=[public_event],
+            reasoning_trace=[reasoning_stage],
             backend_total_seconds=6.8,
         )
         episode.turns.append(turn)
@@ -315,16 +432,21 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
 
     app.chat_input[0].set_value("请解释这道题").run()
 
-    completed_statuses = [
+    assert not [
         status
         for status in app.status
-        if status.label == "🧠 已思考（用时 7 秒）"
+        if status.label == "🧠 AI教学决策完成（用时 7 秒）"
     ]
-    assert len(completed_statuses) == 1
-    assert completed_statuses[0].proto.expanded is False
+    assert not [
+        expander
+        for expander in app.expander
+        if expander.label == "🧠 AI教学决策完成（用时 7 秒）"
+    ]
     assert any(
-        markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
-        for markdown in completed_statuses[0].markdown
+        "AI教学决策过程" in markdown.value
+        and "已识别为初中数学概念解释任务。" in markdown.value
+        and "RequestClassification.subject" not in markdown.value
+        for markdown in app.markdown
     )
     assert any(
         markdown.value == "这是审计后的回答。"
@@ -333,45 +455,16 @@ def test_new_public_thinking_completes_collapsed_without_forced_rerun(
 
     app.run()
 
-    thinking_expanders = [
-        expander
-        for expander in app.expander
-        if expander.label == "🧠 已思考（用时 7 秒）"
-    ]
-    assert len(thinking_expanders) == 1
-    assert thinking_expanders[0].proto.expanded is False
-
-    conversation_id = app.session_state.prototype_conversation_id
-    expanded_key = f"{thinking_key(conversation_id, 1)}:expanded"
-    app.session_state[expanded_key] = True
-    app.run()
-
-    thinking_expanders = [
-        expander
-        for expander in app.expander
-        if expander.label == "🧠 已思考（用时 7 秒）"
-    ]
-    assert len(thinking_expanders) == 1
-    assert thinking_expanders[0].proto.expanded is True
     assert any(
-        markdown.value == "✓ 思考过程已完成。 · 6.800 秒"
-        for markdown in thinking_expanders[0].markdown
+        "AI教学决策过程" in markdown.value
+        and "已识别为初中数学概念解释任务。" in markdown.value
+        and "RequestClassification.subject" not in markdown.value
+        for markdown in app.markdown
     )
     assert any(
         markdown.value == "这是审计后的回答。"
         for markdown in app.markdown
     )
-
-    app.run()
-
-    thinking_expanders = [
-        expander
-        for expander in app.expander
-        if expander.label == "🧠 已思考（用时 7 秒）"
-    ]
-    assert len(thinking_expanders) == 1
-    assert thinking_expanders[0].proto.expanded is True
-
 
 def test_new_chat_remains_an_unpersisted_draft_across_reruns(
     tmp_path,
@@ -671,3 +764,58 @@ def test_sidebar_renders_grouped_direct_history_and_collapsed_debug_details(
 
     assert app.session_state.prototype_conversation_id == records[0].conversation_id
     assert any(markdown.value == "杨辉三角是什么" for markdown in app.markdown)
+
+
+def test_hot_reload_upgrades_legacy_turn_before_rendering_details(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    account_db = tmp_path / "users.sqlite3"
+    conversation_db = tmp_path / "conversations.sqlite3"
+    monkeypatch.setenv("TEACHER_ACCOUNT_DB", str(account_db))
+    monkeypatch.setenv("TEACHER_CONVERSATION_DB", str(conversation_db))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        rag_hook,
+        "warmup_rag",
+        lambda: {"ok": True, "device": "test", "elapsed_seconds": 0.0},
+    )
+    get_local_account_store.cache_clear()
+    get_local_conversation_store.cache_clear()
+    LocalAccountStore(account_db).register("legacy_turn_student", "history-password")
+
+    app = AppTest.from_file(
+        str(ROOT / "prototypes" / "llm_led_teacher" / "streamlit_app.py"),
+        default_timeout=10,
+    )
+    app.run()
+    app.text_input[0].set_value("legacy_turn_student")
+    app.text_input[1].set_value("history-password")
+    app.button[0].click().run()
+
+    legacy_turn = LegacyPrototypeTurnRecord(
+        turn_id=1,
+        student_message="旧版本回合",
+        teacher_output={"response": "旧版本回答"},
+        student_verification={
+            "status": "unable_to_verify",
+            "summary": "旧回合没有新版验证字段。",
+            "verifier_name": "none",
+        },
+        evidence_level="unverified",
+    )
+    app.session_state.prototype_episode = LegacyPrototypeEpisode(
+        problem_context="旧版本回合",
+        turns=[legacy_turn],
+    )
+    app.session_state.prototype_session_schema_version = 14
+    app.session_state.prototype_conversation_id = None
+    app.run()
+
+    assert not app.exception
+    upgraded_turn = app.session_state.prototype_episode.turns[0]
+    assert upgraded_turn.memory_resolution is None
+    assert upgraded_turn.memory_writeback_status == "not_scheduled"
+    assert any(
+        expander.label == "🔎 决策、工具与验证" for expander in app.expander
+    )

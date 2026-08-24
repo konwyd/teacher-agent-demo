@@ -109,9 +109,8 @@ def test_live_thinking_panel_appends_content_without_rebuilding_header():
     panel.complete(6.8)
 
     assert status.updates == [{
-        "label": "🧠 已思考（用时 7 秒）",
+        "label": "🧠 AI教学决策完成（用时 7 秒）",
         "state": "complete",
-        "expanded": False,
     }]
 
 
@@ -123,6 +122,10 @@ def test_live_thinking_panel_replaces_one_structured_snapshot_in_place():
         PublicThinkingSection,
         PublicThinkingStatus,
         PublicThinkingUpdate,
+        ReasoningTraceEvidence,
+        ReasoningTraceSource,
+        ReasoningTraceStage,
+        ReasoningTraceStageId,
     )
 
     rendered = []
@@ -151,14 +154,35 @@ def test_live_thinking_panel_replaces_one_structured_snapshot_in_place():
                 status=PublicThinkingStatus.COMPLETED,
             )
         ],
+        reasoning_trace=[
+            ReasoningTraceStage(
+                sequence=1,
+                stage_id=ReasoningTraceStageId.REQUEST_ANALYSIS,
+                stage="问题分析",
+                icon="🔍",
+                summary="已确认题目与作答目标。",
+                content=[
+                    ReasoningTraceEvidence(
+                        label="学科",
+                        value="数学",
+                        source=ReasoningTraceSource.REQUEST_CLASSIFICATION,
+                        source_field="RequestClassification.subject",
+                    )
+                ],
+                status=PublicThinkingStatus.COMPLETED,
+            )
+        ],
     )
 
     panel.append(update)
 
     assert rendered == [update]
+    assert rendered[0].reasoning_trace[0].content[0].source_field == (
+        "RequestClassification.subject"
+    )
 
 
-def test_live_thinking_panel_completion_updates_expansion_only_once():
+def test_live_thinking_panel_completion_updates_status_only_once():
     from prototypes.llm_led_teacher.live_progress import LiveThinkingPanel
 
     class FakeStatus:
@@ -179,18 +203,19 @@ def test_live_thinking_panel_completion_updates_expansion_only_once():
 
     assert status.updates == [
         {
-            "label": "🧠 已思考（用时 7 秒）",
+            "label": "🧠 AI教学决策完成（用时 7 秒）",
             "state": "complete",
-            "expanded": False,
         }
     ]
 
 
-def test_live_timer_runs_in_browser_and_thinking_collapses_before_answer_stream():
+def test_live_timer_runs_in_flat_surface_before_answer_stream():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
     theme = Path("prototypes/llm_led_teacher/desk_theme.py").read_text()
 
-    assert "desk-live-thinking-marker" in source
+    assert "desk-live-thinking-marker" not in source
+    assert "desk-reasoning-runtime" in source
+    assert '.desk-reasoning-runtime[data-state="running"]::after' in theme
     assert "desk-thinking-clock" in theme
     assert "steps(900, end)" in theme
     answer_stream = source.index(
@@ -221,7 +246,7 @@ def test_live_thinking_panel_failure_never_renders_exception_details():
 
     assert status.lines == []
     assert status.updates == [
-        {"label": "🧠 思考中断", "state": "error", "expanded": True}
+        {"label": "🧠 AI教学决策中断", "state": "error"}
     ]
 
 
@@ -270,11 +295,12 @@ def test_streamlit_shows_context_occupancy_and_kv_cache_hits():
     assert "enable_agent_loop=True" in source
 
 
-def test_streamlit_uses_keyed_thinking_state_without_generation_rerun():
+def test_streamlit_uses_keyed_flat_thinking_surface_without_generation_rerun():
     source = Path("prototypes/llm_led_teacher/streamlit_app.py").read_text()
 
-    assert "thinking_key(current_conversation_id, turn.turn_id)" in source
-    assert "on_change=_remember_thinking_expansion" in source
+    assert 'key=f"reasoning_trace_{current_conversation_id}_{turn.turn_id}"' in source
+    assert "on_change=_remember_thinking_expansion" not in source
+    assert "st.status(" not in source
     assert "begin_thinking(" in source
     assert "complete_thinking(" in source
     assert "fail_thinking(" in source

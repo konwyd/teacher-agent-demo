@@ -1,11 +1,243 @@
+import pytest
+
 from app.agent.state import VerificationResult, VerificationStatus
-from prototypes.llm_led_teacher.orchestration_models import AgentTraceEvent
+from prototypes.llm_led_teacher.orchestration_models import (
+    AgentTraceEvent,
+    TeachingContract,
+    TeachingResponseMode,
+)
 from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingKind,
     PublicThinkingRecorder,
     PublicThinkingStatus,
+    PublicThinkingUpdate,
+    ReasoningTraceEvidence,
+    ReasoningTraceSource,
+    ReasoningTraceStage,
+    ReasoningTraceStageId,
     format_public_thinking_event,
 )
+
+
+def test_reasoning_trace_evidence_names_the_real_decision_field() -> None:
+    stage = ReasoningTraceStage(
+        sequence=1,
+        stage_id=ReasoningTraceStageId.REQUEST_ANALYSIS,
+        stage="问题分析",
+        icon="🔍",
+        summary="已识别本轮任务。",
+        content=[
+            ReasoningTraceEvidence(
+                label="学科",
+                value="数学",
+                source=ReasoningTraceSource.REQUEST_CLASSIFICATION,
+                source_field="RequestClassification.subject",
+            )
+        ],
+        status=PublicThinkingStatus.COMPLETED,
+    )
+
+    assert stage.model_dump(mode="json")["content"][0] == {
+        "label": "学科",
+        "value": "数学",
+        "source": "RequestClassification",
+        "source_field": "RequestClassification.subject",
+    }
+
+
+def test_reasoning_trace_evidence_rejects_a_mismatched_source_field() -> None:
+    with pytest.raises(ValueError, match="source_field must belong to source"):
+        ReasoningTraceEvidence(
+            label="学科",
+            value="数学",
+            source=ReasoningTraceSource.REQUEST_CLASSIFICATION,
+            source_field="TeachingContract.response_mode",
+        )
+
+
+def test_public_thinking_update_defaults_to_no_reasoning_trace() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.stage("observing")
+
+    update = PublicThinkingUpdate(event=recorder.events[0])
+    assert update.reasoning_trace == []
+
+
+def test_recorder_builds_dynamic_decision_stages_with_field_provenance() -> None:
+    updates = []
+    recorder = PublicThinkingRecorder(update_callback=updates.append)
+
+    recorder.stage("observing")
+    first_snapshot = updates[0].reasoning_trace
+    recorder.classification(
+        subject="数学",
+        stage="初中",
+        is_new_problem=True,
+        intent="解释知识点",
+    )
+    recorder.retrieval_decision(mode="none", reason="SECRET FREE FORM REASON")
+    recorder.teaching_plan(
+        TeachingContract(
+            response_mode=TeachingResponseMode.CONCEPT_EXPLANATION,
+            requested_target="勾股定理",
+            allowed_content=["概念解释"],
+            forbidden_content=["当前题代入"],
+            may_apply_to_active_problem=False,
+            may_reveal_final_answer=False,
+            reason="SECRET CONTRACT REASON",
+        )
+    )
+    recorder.composition("先解释概念，再用例子巩固")
+    recorder.audit(
+        repair_performed=False,
+        remaining_warning_count=0,
+        semantic_audit_performed=False,
+        deterministic_boundary_checked=True,
+    )
+
+    assert [item.stage_id.value for item in recorder.reasoning_trace] == [
+        "request_analysis",
+        "knowledge_decision",
+        "teaching_strategy",
+        "answer_generation",
+        "quality_validation",
+    ]
+    assert first_snapshot[0].status is PublicThinkingStatus.IN_PROGRESS
+    assert recorder.reasoning_trace[0].status is PublicThinkingStatus.COMPLETED
+    assert first_snapshot[0] is not recorder.reasoning_trace[0]
+    source_fields = {
+        evidence.source_field
+        for item in recorder.reasoning_trace
+        for evidence in item.content
+    }
+    assert "RequestClassification.subject" in source_fields
+    assert "RetrievalDecision.mode" in source_fields
+    assert "TeachingContract.response_mode" in source_fields
+    assert "RuntimeStage.deterministic_boundary_checked" in source_fields
+    assert recorder.reasoning_trace[-1].summary == "已完成确定性边界复核。"
+    assert "SECRET" not in repr(recorder.reasoning_trace)
+
+
+def test_recorder_upserts_one_stage_without_changing_first_sequence() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.stage("observing")
+    recorder.classification(
+        subject="物理",
+        stage="初中",
+        is_new_problem=False,
+        intent="解释知识点",
+    )
+
+    assert len(recorder.reasoning_trace) == 1
+    assert recorder.reasoning_trace[0].sequence == 1
+    assert recorder.reasoning_trace[0].stage_id is ReasoningTraceStageId.REQUEST_ANALYSIS
+    assert recorder.reasoning_trace[0].status is PublicThinkingStatus.COMPLETED
+
+
+def test_optional_decision_stages_only_appear_after_real_events() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.verification(
+        VerificationResult(
+            status=VerificationStatus.NOT_APPLICABLE,
+            summary="not applicable",
+            verifier_name="none",
+        )
+    )
+    assert recorder.reasoning_trace == []
+
+    recorder.agent(
+        AgentTraceEvent(
+            step=0,
+            event_type="memory_resolution",
+            summary="SECRET MEMORY SUMMARY",
+            ok=True,
+            details={
+                "status": "unique",
+                "candidate_count": 1,
+                "selected_memory_id": "PRIVATE-ID",
+            },
+        )
+    )
+    recorder.agent(
+        AgentTraceEvent(
+            step=1,
+            event_type="decision",
+            summary="SECRET TOOL REASON",
+            tool_name="search_local_knowledge",
+        )
+    )
+    recorder.verification(
+        VerificationResult(
+            status=VerificationStatus.VERIFIED_CORRECT,
+            summary="private checker explanation",
+            verifier_name="linear_equation",
+        )
+    )
+    recorder.stage("repairing")
+    recorder.audit(
+        repair_performed=True,
+        remaining_warning_count=0,
+        semantic_audit_performed=True,
+        boundary_passed=True,
+        post_repair_audit_performed=True,
+    )
+
+    assert [item.stage_id.value for item in recorder.reasoning_trace] == [
+        "learning_context",
+        "tool_execution",
+        "step_verification",
+        "answer_repair",
+        "quality_validation",
+        "final_recheck",
+    ]
+    dumped = repr(recorder.reasoning_trace)
+    assert "StudentMemoryResolution.status" in dumped
+    assert "AgentTraceEvent.tool_name" in dumped
+    assert "VerificationResult.status" in dumped
+    assert "PRIVATE-ID" not in dumped
+    assert "SECRET" not in dumped
+    assert "private checker explanation" not in dumped
+
+
+def test_retrieval_hits_are_attributed_to_rag_context_not_agent_trace() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.retrieval_decision(mode="local", reason="private route rationale")
+    recorder.retrieval(
+        source="local",
+        hit_count=3,
+        online_triggered=False,
+        online_status="not_triggered",
+    )
+
+    evidence = recorder.reasoning_trace[0].content
+    assert [item.source_field for item in evidence] == [
+        "RetrievalDecision.mode",
+        "RagContext.hits",
+    ]
+    assert evidence[1].source is ReasoningTraceSource.RAG_CONTEXT
+
+
+def test_hard_recheck_after_repair_creates_a_runtime_sourced_final_stage() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.audit(
+        repair_performed=True,
+        remaining_warning_count=0,
+        semantic_audit_performed=False,
+        deterministic_boundary_checked=True,
+        post_repair_boundary_checked=True,
+    )
+
+    final_stage = recorder.reasoning_trace[-1]
+    assert final_stage.stage_id is ReasoningTraceStageId.FINAL_RECHECK
+    assert final_stage.content[0].source is ReasoningTraceSource.RUNTIME_STAGE
+    assert final_stage.content[0].source_field == (
+        "RuntimeStage.post_repair_boundary_checked"
+    )
 
 
 def test_recorder_assigns_strict_sequence_and_emits_callback() -> None:
@@ -116,6 +348,26 @@ def test_tool_failure_never_renders_raw_error_or_unknown_payload() -> None:
     assert recorder.events[0].status is PublicThinkingStatus.WARNING
     assert recorder.events[0].summary == "联网参考暂时不可用，将使用已有证据继续。"
     assert "SECRET" not in repr(recorder.events)
+
+
+def test_quality_qa_tool_result_appears_as_real_tool_execution() -> None:
+    recorder = PublicThinkingRecorder()
+
+    recorder.agent(
+        AgentTraceEvent(
+            step=1,
+            event_type="tool_result",
+            summary="ignored model summary",
+            tool_name="search_quality_qa",
+            ok=True,
+            details={"hit_count": 2},
+        )
+    )
+
+    stage = recorder.reasoning_trace[0]
+    assert stage.stage_id is ReasoningTraceStageId.TOOL_EXECUTION
+    assert stage.content[0].label == "优质问答检索"
+    assert stage.content[0].value == "已完成，命中 2 条"
 
 
 def test_unknown_agent_event_is_not_made_public() -> None:

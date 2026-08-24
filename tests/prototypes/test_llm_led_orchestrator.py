@@ -4,6 +4,7 @@ import pytest
 
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentDecision,
+    AgentTraceEvent,
     RequestClassification,
     TeachingContract,
     TeachingResponseMode,
@@ -22,6 +23,16 @@ class _Classifier:
 
     def classify(self, *args, **kwargs) -> RequestClassification:
         return self.classification
+
+
+class _CountingClassifier(_Classifier):
+    def __init__(self, classification: RequestClassification) -> None:
+        super().__init__(classification)
+        self.calls = 0
+
+    def classify(self, *args, **kwargs) -> RequestClassification:
+        self.calls += 1
+        return super().classify(*args, **kwargs)
 
 
 class _Decisions:
@@ -92,6 +103,139 @@ def _finish(contract: TeachingContract | None = None) -> AgentDecision:
         plan="guided",
         contract=contract or _guided_contract(),
     )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "欧拉线是什么？",
+        "请用三种方法详细证明欧拉线的性质。",
+    ],
+)
+def test_fast_miss_ordinary_k9_uses_classifier_direct_plan(message: str) -> None:
+    classifier = _CountingClassifier(_k9("数学", new=True))
+    actions = _ScriptedActions([])
+    registry = _Registry()
+    loop = MultisubjectAgentLoop(
+        classifier=classifier,
+        action_provider=actions,
+        registry=registry,
+        enable_fast_routing=True,
+    )
+
+    result = loop.run("", message, "", "")
+
+    assert classifier.calls == 1
+    assert actions.calls == 0
+    assert [name for name, _ in registry.calls] == ["load_skill"]
+    assert result.termination_reason == "model_classifier_direct_path"
+    assert result.routing_guidance["router"] == "model_classifier_direct_path"
+    assert result.retrieval_decision.mode.value == "none"
+    assert result.agent_iterations == 0
+
+
+def test_explicit_web_request_uses_bounded_dynamic_agent_after_pretools() -> None:
+    classifier = _CountingClassifier(_k9("数学", new=True))
+    actions = _ScriptedActions(
+        [
+            AgentDecision(
+                kind="call_tool",
+                reason="本地资料后仍需官网最新证据",
+                tool_name="search_web",
+                arguments={
+                    "query": "最新初中数学课程标准",
+                    "evidence_gap": "需要核对官网最新版本",
+                },
+            )
+        ]
+    )
+    registry = _Registry()
+    loop = MultisubjectAgentLoop(
+        classifier=classifier,
+        action_provider=actions,
+        registry=registry,
+        enable_fast_routing=True,
+    )
+
+    result = loop.run("", "请联网查一下最新的初中数学课程标准", "", "")
+
+    assert classifier.calls == 0
+    assert actions.calls == 1
+    assert actions.calls <= 2
+    assert [name for name, _ in registry.calls] == [
+        "load_skill",
+        "search_local_knowledge",
+        "search_web",
+    ]
+    assert result.termination_reason == "dynamic_web_completed"
+    assert result.routing_guidance["router"] == "dynamic_agent_path"
+    assert result.retrieval_decision.mode.value == "local_then_web"
+    assert actions.payloads[0]["deterministic_pretools_complete"] is True
+    assert result.agent_iterations == 1
+
+
+def test_dynamic_schema_retry_counts_real_calls_within_two_call_budget() -> None:
+    actions = _ScriptedActions(
+        [
+            ValueError("invalid action schema"),
+            AgentDecision(
+                kind="call_tool",
+                reason="修正格式后查询官网",
+                tool_name="search_web",
+                arguments={
+                    "query": "最新初中数学课程标准",
+                    "evidence_gap": "需要官网当前版本",
+                },
+            ),
+        ]
+    )
+    registry = _Registry()
+    result = MultisubjectAgentLoop(
+        classifier=_CountingClassifier(_k9("数学", new=True)),
+        action_provider=actions,
+        registry=registry,
+        enable_fast_routing=True,
+    ).run("", "请联网查一下最新的初中数学课程标准", "", "")
+
+    assert actions.calls == 2
+    assert result.agent_iterations == 2
+    assert result.termination_reason == "dynamic_web_completed"
+    assert [name for name, _ in registry.calls][-1] == "search_web"
+
+
+def test_failed_retrieval_attempts_do_not_claim_a_retrieval_mode() -> None:
+    trace = [
+        AgentTraceEvent(
+            step=1,
+            event_type="decision",
+            summary="先查本地",
+            tool_name="search_local_knowledge",
+        ),
+        AgentTraceEvent(
+            step=1,
+            event_type="tool_result",
+            summary="本地检索失败",
+            tool_name="search_local_knowledge",
+            ok=False,
+        ),
+        AgentTraceEvent(
+            step=2,
+            event_type="decision",
+            summary="尝试联网",
+            tool_name="search_web",
+        ),
+        AgentTraceEvent(
+            step=2,
+            event_type="tool_result",
+            summary="联网被 local-first 规则阻止",
+            tool_name="search_web",
+            ok=False,
+        ),
+    ]
+
+    decision = MultisubjectAgentLoop._summarize_retrieval_decision(trace)
+
+    assert decision.mode.value == "none"
 
 
 def test_loop_reports_real_phase_before_each_agent_component_runs() -> None:
@@ -400,6 +544,8 @@ def test_provider_failure_after_adequate_local_evidence_does_not_search_again() 
     assert [name for name, _ in registry.calls] == ["search_local_knowledge"]
     assert len(result.observations) == 1
     assert result.rag_context.text == "证据"
+    assert result.retrieval_decision.mode.value == "local"
+    assert result.retrieval_decision.reason == "先查询本地教材"
     assert result.termination_reason == "provider_error"
 
 
