@@ -1,6 +1,12 @@
+import subprocess
+import sys
 import unicodedata
 
 import pytest
+
+from app.evaluation.candidate_extractor.models import BenchmarkCase, ExpectedCandidate
+from app.memory.candidate_extractor_v2_route_b.benchmark import run_route_b_benchmark
+from scripts.run_candidate_extractor_route_b import build_parser
 
 from app.memory.candidate_extractor_v2_route_b import (
     BgeM3Embedder,
@@ -238,9 +244,15 @@ class StubFamilyRanker:
         }
         self.similarity = similarity
         self.calls: list[tuple[str, ...]] = []
+        self.encode_call_count = 0
+        self.encoded_text_count = 0
 
     def rank(self, texts):
-        self.calls.append(tuple(texts))
+        texts = tuple(texts)
+        self.calls.append(texts)
+        if texts:
+            self.encode_call_count += 1
+            self.encoded_text_count += len(texts)
         return tuple(
             (
                 FamilyMatch(
@@ -1058,3 +1070,125 @@ def test_conflicting_model_inference_discriminators_fail_safe_and_are_counted(
 
     assert actual == []
     assert extractor.diagnostics.malformed_upstream_items == 2
+
+
+def test_route_b_package_import_does_not_eagerly_load_evaluation_runtime():
+    script = (
+        "import sys; "
+        "import app.memory.candidate_extractor_v2_route_b; "
+        "assert 'app.evaluation.candidate_extractor.baseline' not in sys.modules"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def _synthetic_profile_case(utterance: str) -> BenchmarkCase:
+    return BenchmarkCase(
+        case_id="synthetic-profile",
+        split="development",
+        utterance=utterance,
+        labels=("PROFILE",),
+        rationale="route-local adapter test",
+        expected_candidates=(
+            ExpectedCandidate(
+                memory_type="profile_fact",
+                payload={"preferred_name": "阿泽"},
+                source_kind="user_stated",
+                temporal_scope="persistent",
+            ),
+        ),
+    )
+
+
+def test_route_runner_exposes_only_development_and_layer_b():
+    parser = build_parser()
+    split_action = next(action for action in parser._actions if action.dest == "splits")
+
+    assert set(split_action.choices) == {"development", "layer_b"}
+
+
+def test_route_benchmark_rejects_an_unsupported_split(route_b_factory):
+    extractor = route_b_factory({})
+
+    with pytest.raises(ValueError, match="development and layer_b only"):
+        run_route_b_benchmark(extractor, splits=("unsupported",))
+
+
+def test_route_benchmark_rejects_case_with_mismatched_declared_split(
+    route_b_factory,
+):
+    extractor = route_b_factory({})
+    case = _synthetic_profile_case("称呼我阿泽").model_copy(
+        update={"split": "unsupported"}
+    )
+
+    with pytest.raises(ValueError, match="case split must match selected split"):
+        run_route_b_benchmark(
+            extractor,
+            splits=("development",),
+            cases_by_split={"development": [case]},
+        )
+
+
+def test_benchmark_adapter_preserves_frozen_metrics_and_reports_slices(
+    route_b_factory,
+):
+    utterance = "称呼我阿泽"
+    extractor = route_b_factory({utterance: SemanticFamily.PROFILE})
+
+    report = run_route_b_benchmark(
+        extractor,
+        splits=("development",),
+        cases_by_split={"development": [_synthetic_profile_case(utterance)]},
+        provisional=True,
+    )
+
+    split = report["reports"]["development"]
+    assert split["exact_candidate_set_accuracy"]["value"] == 1.0
+    assert split["operational"]["additional_model_calls"] == 0
+    assert split["operational"]["deterministic_replay"] is True
+    assert report["operational"]["remote_llm_calls"] == 0
+    assert report["operational"]["provisional"] is True
+    assert report["operational"]["deterministic_replay"] is True
+    assert report["slice_metrics"]["development"]["multi_candidate_exact_match"] == {
+        "value": None,
+        "support": 0,
+        "numerator": 0,
+    }
+    operational = report["operational"]
+    assert operational["cold_load_case_id"] == "synthetic-profile"
+    assert operational["primary_encode_calls"] == 1
+    assert operational["replay_encode_calls"] == 1
+    assert operational["encode_calls"] == 2
+    assert operational["primary_encoded_text_count"] == 1
+    assert operational["replay_encoded_text_count"] == 1
+    assert operational["encoded_text_count"] == 2
+
+
+def test_cold_load_is_first_embedding_consuming_case(route_b_factory):
+    hard_negative = BenchmarkCase(
+        case_id="synthetic-hard-negative",
+        split="development",
+        utterance="书中的人物叫阿泽",
+        labels=("HARD_NEGATIVE",),
+        rationale="no embedding work before model load",
+        expected_candidates=(),
+    )
+    profile = _synthetic_profile_case("称呼我阿泽")
+    extractor = route_b_factory({"称呼我阿泽": SemanticFamily.PROFILE})
+
+    report = run_route_b_benchmark(
+        extractor,
+        splits=("development",),
+        cases_by_split={"development": [hard_negative, profile]},
+    )
+
+    assert report["operational"]["cold_load_case_id"] == "synthetic-profile"
+    assert report["operational"]["primary_encode_calls"] == 1
