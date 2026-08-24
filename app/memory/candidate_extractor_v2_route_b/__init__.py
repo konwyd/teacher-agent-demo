@@ -9,12 +9,15 @@ from .embedding import (
     SemanticFamily,
     SemanticFamilyRanker,
 )
+from .extractor import CandidateExtractorRouteB, RouteBConfig
 
 __all__ = [
     "DEFAULT_MODEL_PATH",
     "BgeM3Embedder",
+    "CandidateExtractorRouteB",
     "EmbeddingBackend",
     "FamilyMatch",
+    "RouteBConfig",
     "RouteBEmbeddingError",
     "SemanticFamily",
     "SemanticFamilyRanker",

@@ -9,7 +9,12 @@ import unicodedata
 from app.memory.contracts import TemporalScope
 
 
-CONJUNCTION_SPLIT_RE = re.compile(r"(?:[，,；;。]\s*(?:并且|而且|然后)?|并且|而且|然后)+")
+CONJUNCTION_SPLIT_RE = re.compile(
+    r"(?:[，,；;。]\s*(?:并且|而且|然后)?|并且|而且|然后)+"
+)
+PROFILE_GRADE_RE = r"[一二三四五六七八九1-9]年级"
+PROFILE_NAME_RE = r"(?:请)?(?:称呼我|叫我|我叫)"
+PROFILE_COMMA_SENTINEL = "\u0000"
 THIRD_PERSON_PATTERNS = ("书中的人物", "课文中的人物", "故事中的人物")
 THIRD_PERSON_CONTEXT_RE = re.compile(
     r"(?<![\w\u4e00-\u9fff])(?:他们|她们|它们|他|她|它)"
@@ -34,7 +39,7 @@ CONDITION_PATTERNS = (
 TEMPORAL_RULES = (
     (TemporalScope.TURN_ONLY, ("本次", "这次", "本轮", "这一轮", "之后恢复默认")),
     (TemporalScope.SESSION, ("这节课", "本节课", "今天这次", "当前会话")),
-    (TemporalScope.SHORT_LIVED, ("暂时", "这几天", "一段时间", "最近")),
+    (TemporalScope.SHORT_LIVED, ("暂时", "这一会儿", "这几天", "一段时间", "最近")),
     (TemporalScope.PERSISTENT, ("从现在起", "以后都", "今后", "长期", "一直")),
 )
 
@@ -63,7 +68,25 @@ def segment_clauses(text: str) -> tuple[str, ...]:
     normalized = _normalize_text(text)
     if _is_bound_qualifier_clause(normalized):
         return (normalized,)
-    return tuple(part.strip() for part in CONJUNCTION_SPLIT_RE.split(normalized) if part.strip())
+    protected = _protect_profile_comma(normalized)
+    return tuple(
+        part.replace(PROFILE_COMMA_SENTINEL, ",").strip()
+        for part in CONJUNCTION_SPLIT_RE.split(protected)
+        if part.strip()
+    )
+
+
+def _protect_profile_comma(text: str) -> str:
+    pairs = ((PROFILE_GRADE_RE, PROFILE_NAME_RE), (PROFILE_NAME_RE, PROFILE_GRADE_RE))
+    protected = text
+    for left_marker, right_marker in pairs:
+        pattern = re.compile(
+            rf"(?P<left>[^,;。]*{left_marker}[^,;。]*),(?P<right>[^,;。]*{right_marker}[^,;。]*)"
+        )
+        protected = pattern.sub(
+            rf"\g<left>{PROFILE_COMMA_SENTINEL}\g<right>", protected
+        )
+    return protected
 
 
 def _is_bound_qualifier_clause(text: str) -> bool:
@@ -78,7 +101,9 @@ def _hard_negative_reason(text: str) -> str:
         return "privacy_prohibition"
     if META_QUOTED_RE.search(text):
         return "meta_quoted"
-    if any(marker in text for marker in THIRD_PERSON_PATTERNS) or THIRD_PERSON_CONTEXT_RE.search(text):
+    if any(
+        marker in text for marker in THIRD_PERSON_PATTERNS
+    ) or THIRD_PERSON_CONTEXT_RE.search(text):
         return "third_person"
     if any(marker in text for marker in INSTRUCTIONAL_EXAMPLE_PATTERNS):
         return "instructional_example"
@@ -89,7 +114,9 @@ def _negation_parity(text: str) -> tuple[bool | None, str]:
     count = 0
     index = 0
     while index < len(text):
-        marker = next((item for item in NEGATION_MARKERS if text.startswith(item, index)), "")
+        marker = next(
+            (item for item in NEGATION_MARKERS if text.startswith(item, index)), ""
+        )
         if marker:
             count += 1
             index += len(marker)
@@ -108,7 +135,9 @@ def _condition_and_scope(text: str) -> tuple[str, str]:
         if match:
             condition = match.group("condition").strip()
             break
-    scope = next((scope for marker, scope in SCOPE_MARKERS if marker in (condition or text)), "")
+    scope = next(
+        (scope for marker, scope in SCOPE_MARKERS if marker in (condition or text)), ""
+    )
     return condition, scope
 
 
@@ -131,11 +160,15 @@ def analyze_clause(text: str) -> QualifierAnalysis:
     normalized = _normalize_text(text)
     hard_negative_reason = _hard_negative_reason(normalized)
     if hard_negative_reason:
-        return QualifierAnalysis(text=normalized, hard_negative_reason=hard_negative_reason)
+        return QualifierAnalysis(
+            text=normalized, hard_negative_reason=hard_negative_reason
+        )
 
     negated, polarity = _negation_parity(normalized)
     condition, scope = _condition_and_scope(normalized)
-    uncertainty = "hedged" if any(marker in normalized for marker in HEDGE_MARKERS) else ""
+    uncertainty = (
+        "hedged" if any(marker in normalized for marker in HEDGE_MARKERS) else ""
+    )
     temporal_expression, temporal_hint = _temporal_analysis(normalized, uncertainty)
     explicit_correction = any(marker in normalized for marker in CORRECTION_MARKERS)
     return QualifierAnalysis(
