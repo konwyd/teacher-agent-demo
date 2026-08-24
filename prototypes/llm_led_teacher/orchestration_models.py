@@ -184,5 +184,6 @@ class AgentOrchestrationResult(BaseModel):
     loaded_skill_guidance: dict[str, str] = Field(default_factory=dict)
     termination_reason: str = ""
     routing_guidance: dict[str, Any] = Field(default_factory=dict)
+    agent_iterations: int = Field(default=0, ge=0)
     direct_response: str = ""
     memory_resolution: StudentMemoryResolution | None = None

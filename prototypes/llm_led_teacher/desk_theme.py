@@ -5,6 +5,8 @@ from __future__ import annotations
 import streamlit as st
 from html import escape
 
+from prototypes.llm_led_teacher.public_thinking import ReasoningTraceStage
+
 
 DESK_THEME_CSS = """
 <style>
@@ -1001,6 +1003,85 @@ footer {
     left: 0;
     position: absolute;
 }
+.desk-reasoning-flow {
+    margin: .58rem 0 0;
+    padding: 0 0 0 1.05rem;
+    position: relative;
+}
+.desk-reasoning-flow::before {
+    background: linear-gradient(180deg, rgba(61,118,100,.35), rgba(61,118,100,.08));
+    bottom: .55rem;
+    content: "";
+    left: .24rem;
+    position: absolute;
+    top: .35rem;
+    width: 1px;
+}
+.desk-reasoning-line {
+    animation: desk-reasoning-enter 260ms ease-out both;
+    color: var(--desk-ink-soft);
+    line-height: 1.72;
+    padding: 0 0 .72rem .18rem;
+    position: relative;
+}
+.desk-reasoning-line:last-child {
+    padding-bottom: .16rem;
+}
+.desk-reasoning-line::before {
+    background: var(--desk-paper);
+    border: 1px solid rgba(61,118,100,.48);
+    border-radius: 50%;
+    content: "";
+    height: .42rem;
+    left: -1.02rem;
+    position: absolute;
+    top: .48rem;
+    width: .42rem;
+}
+.desk-reasoning-line[data-status="in_progress"] {
+    color: var(--desk-ink);
+}
+.desk-reasoning-line[data-status="in_progress"]::before {
+    animation: desk-reasoning-pulse 1.3s ease-in-out infinite;
+    background: var(--desk-vermilion);
+    border-color: var(--desk-vermilion);
+}
+.desk-reasoning-line[data-status="completed"]::before {
+    background: var(--desk-jade);
+    border-color: var(--desk-jade);
+}
+.desk-reasoning-line[data-status="warning"]::before {
+    background: var(--desk-vermilion);
+    border-color: var(--desk-vermilion);
+}
+.desk-reasoning-summary {
+    margin: 0;
+}
+.desk-reasoning-line[data-status="in_progress"] .desk-reasoning-summary::after {
+    animation: desk-reasoning-cursor 1s steps(1, end) infinite;
+    border-right: 1px solid currentColor;
+    content: "";
+    margin-left: .18rem;
+}
+@keyframes desk-reasoning-enter {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes desk-reasoning-pulse {
+    0%, 100% { opacity: .4; transform: scale(.85); }
+    50% { opacity: 1; transform: scale(1); }
+}
+@keyframes desk-reasoning-cursor {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .desk-reasoning-line,
+    .desk-reasoning-line[data-status="in_progress"]::before,
+    .desk-reasoning-line[data-status="in_progress"] .desk-reasoning-summary::after {
+        animation: none;
+    }
+}
 [data-testid="stExpander"]:has(.desk-thinking-rail) {
     background: rgba(246,240,223,.58);
     border: 0;
@@ -1021,11 +1102,13 @@ footer {
     from { --desk-thinking-seconds: 0; }
     to { --desk-thinking-seconds: 900; }
 }
-.desk-live-thinking-marker {
-    display: none;
+.desk-reasoning-runtime {
+    color: var(--desk-ink);
+    font-size: .74rem;
+    font-weight: 720;
+    margin: 0 0 .3rem;
 }
-[data-testid="stExpander"]:has(.desk-live-thinking-marker) summary p::after,
-[data-testid="stExpander"]:has(.desk-live-thinking-marker) button p::after {
+.desk-reasoning-runtime[data-state="running"]::after {
     animation: desk-thinking-clock 900s steps(900, end) forwards;
     color: var(--desk-ink-soft);
     content: "（已用时 " counter(deskThinkingSeconds) " 秒）";
@@ -1034,6 +1117,12 @@ footer {
     font-variant-numeric: tabular-nums;
     margin-left: .35rem;
     min-width: 7.4em;
+}
+.desk-reasoning-runtime[data-state="complete"] {
+    color: var(--desk-jade);
+}
+.desk-reasoning-runtime[data-state="error"] {
+    color: var(--desk-vermilion);
 }
 
 [data-testid="stBottomBlockContainer"] {
@@ -1260,27 +1349,61 @@ def render_thinking_sections(
     *,
     container: object | None = None,
 ) -> None:
-    """Render the public four-slot teaching summary in the paper margin."""
+    """Render old four-slot records through a read-only compatibility view."""
 
     sections = getattr(turn, "sections", []) or []
     if not sections:
         return
-    cards = []
+    lines = []
     for section in sections:
         status = escape(str(getattr(section, "status", "completed")).split(".")[-1])
-        details = "".join(
-            f'<p class="desk-thinking-card-detail">· {escape(str(detail))}</p>'
-            for detail in getattr(section, "details", [])
-        )
-        cards.append(
-            f'<article class="desk-thinking-card" data-status="{status}">'
-            f'<div class="desk-thinking-card-title">{escape(str(section.title))}</div>'
-            f'<div class="desk-thinking-card-summary">{escape(str(section.summary))}</div>{details}</article>'
+        detail_items = list(getattr(section, "details", []))[:1]
+        detail = f" {escape(str(detail_items[0]))}" if detail_items else ""
+        lines.append(
+            f'<div class="desk-reasoning-line" data-status="{status}">'
+            f'<p class="desk-reasoning-summary">{escape(str(section.summary))}{detail}</p>'
+            '</div>'
         )
     target = container or st
     target.markdown(
-        '<aside class="desk-thinking-rail"><div class="desk-thinking-rail-title">备课批注</div>'
-        + "".join(cards)
+        '<aside class="desk-thinking-rail desk-reasoning-trace">'
+        '<div class="desk-thinking-rail-title">🧠 AI教学决策过程</div>'
+        '<div class="desk-reasoning-flow" role="list">'
+        + "".join(lines)
+        + "</div>"
         + "</aside>",
         unsafe_allow_html=True,
     )
+
+
+def render_reasoning_trace(
+    reasoning_trace: list[ReasoningTraceStage],
+    *,
+    live: bool = False,
+    container: object | None = None,
+) -> str:
+    """Render a safe decision trace; all runtime-derived strings are escaped."""
+
+    if not reasoning_trace:
+        return ""
+    lines: list[str] = []
+    for trace_stage in reasoning_trace:
+        status = escape(trace_stage.status.value)
+        lines.append(
+            f'<div class="desk-reasoning-line" role="listitem" '
+            f'data-status="{status}" aria-label="{escape(trace_stage.stage)}">'
+            f'<p class="desk-reasoning-summary">{escape(trace_stage.summary)}</p>'
+            '</div>'
+        )
+    live_class = " is-live" if live else ""
+    html = (
+        f'<aside class="desk-thinking-rail desk-reasoning-trace{live_class}">'
+        '<div class="desk-thinking-rail-title">🧠 AI教学决策过程</div>'
+        '<div class="desk-reasoning-flow" role="list">'
+        + "".join(lines)
+        + '</div>'
+        + '</aside>'
+    )
+    target = container or st
+    target.markdown(html, unsafe_allow_html=True)
+    return html

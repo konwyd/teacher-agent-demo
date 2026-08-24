@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from prototypes.llm_led_teacher.desk_theme import (
     DESK_THEME_CSS,
     render_brand_header,
+    render_reasoning_trace as desk_render_reasoning_trace,
     render_thinking_sections as desk_render_thinking_sections,
 )
 from app.auth.local_accounts import AccountError, AuthenticationError, get_local_account_store
@@ -53,12 +54,30 @@ from prototypes.llm_led_teacher.thinking_state import (
     begin_thinking,
     complete_thinking,
     fail_thinking,
-    set_user_expanded,
     thinking_key,
 )
 
 
-_SESSION_SCHEMA_VERSION = 13
+_SESSION_SCHEMA_VERSION = 14
+
+
+class _FlatThinkingSurface:
+    """Adapt two Streamlit placeholders to the non-collapsible progress API."""
+
+    def __init__(self, header: object, body: object) -> None:
+        self._header = header
+        self._body = body
+
+    def write(self, value: str) -> object:
+        return self._body.markdown(value)
+
+    def update(self, **kwargs: object) -> object:
+        label = escape(str(kwargs.get("label", "")))
+        state = escape(str(kwargs.get("state", "running")))
+        return self._header.markdown(
+            f'<div class="desk-reasoning-runtime" data-state="{state}">{label}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 st.set_page_config(page_title="Teacher Agent", page_icon="🧠", layout="wide")
@@ -191,6 +210,21 @@ def _episode_payload(current_episode: PrototypeEpisode) -> dict[str, object]:
     payload = current_episode.model_dump(mode="json")
     payload["pending_student_message"] = _get_pending_student_message(current_episode)
     return payload
+
+def _upgrade_episode_model(current_episode: object) -> PrototypeEpisode:
+    """Revalidate pre-hot-reload Pydantic objects against the current schema."""
+
+    payload = current_episode.model_dump(mode="python")
+    payload["pending_student_message"] = _get_pending_student_message(
+        current_episode
+    )
+    return PrototypeEpisode.model_validate(payload)
+
+
+def _upgrade_turn_model(current_turn: object) -> PrototypeTurnRecord:
+    """Fill fields added after a live Streamlit session created the turn."""
+
+    return PrototypeTurnRecord.model_validate(current_turn.model_dump(mode="python"))
 
 
 def _activate_conversation(record: ConversationRecord) -> None:
@@ -432,7 +466,8 @@ if (
 elif "prototype_episode" not in st.session_state:
     _restore_current_or_draft(authenticated_user["user_id"])
 
-episode: PrototypeEpisode = st.session_state.prototype_episode
+episode = _upgrade_episode_model(st.session_state.prototype_episode)
+st.session_state.prototype_episode = episode
 
 with st.sidebar:
     st.markdown(
@@ -512,7 +547,7 @@ if restore_error:
     st.warning(restore_error)
 
 render_brand_header()
-st.caption("备课批注 · 题意 / 写法 / 资料 / 成稿")
+st.caption("Agent Reasoning Trace · 任务理解 / 知识规划 / 工具选择 / 教学策略 / 输出验证")
 if not is_configured():
     st.warning(
         "当前进程没有配置 DEEPSEEK_API_KEY。请在启动 Streamlit 的同一 PowerShell "
@@ -709,7 +744,145 @@ def render_turn_token_usage(turn: PrototypeTurnRecord) -> None:
 
 
 def render_turn_details(turn: PrototypeTurnRecord) -> None:
-    with st.expander("验证详情"):
+    turn = _upgrade_turn_model(turn)
+
+    with st.expander("🔎 决策、工具与验证"):
+        classification = turn.classification
+        router = turn.router_type or next(
+            (
+                str(event.details.get("router", ""))
+                for event in turn.agent_trace
+                if event.event_type == "classification"
+            ),
+            "",
+        )
+        router_label = {
+            "deterministic_fast_path": "确定性快速路由",
+            "model_classifier_direct_path": "模型分类后直达生成",
+            "dynamic_agent_path": "动态 Agent 工具路由",
+            "memory_clarification_reply": "记忆澄清续接",
+            "model_classifier": "模型分类路由（旧）",
+        }.get(router, router or "旧回合未记录")
+        retrieval_label = {
+            "none": "未调用",
+            "local": "本地资料",
+            "local_then_web": "本地 + 联网",
+        }.get(turn.retrieval_decision.mode.value, turn.retrieval_decision.mode.value)
+        verification_label = {
+            "verified_correct": "步骤正确",
+            "verified_incorrect": "步骤有误",
+            "unable_to_verify": "暂不可验证",
+            "not_applicable": "不适用",
+        }.get(
+            turn.student_verification.status.value,
+            turn.student_verification.status.value,
+        )
+        if turn.post_repair_boundary_audit is not None:
+            boundary_label = (
+                "修正后通过"
+                if turn.post_repair_boundary_audit.passed
+                else "已安全降级"
+            )
+        elif turn.boundary_audit is not None:
+            boundary_label = (
+                "通过" if turn.boundary_audit.passed else "触发修正"
+            )
+        elif turn.claim_audits:
+            boundary_label = "确定性方程检查"
+        elif (
+            turn.router_type
+            in {"deterministic_fast_path", "model_classifier_direct_path"}
+            and turn.teaching_contract is not None
+            and turn.teaching_contract.response_mode.value
+            == "concept_explanation"
+        ):
+            boundary_label = "确定性边界检查"
+        else:
+            boundary_label = "按需未触发"
+
+        st.markdown("### 本轮运行概览")
+        st.caption(
+            "只展示可复核的公开决策、工具结果和审计状态，不展示模型私有思维链。"
+        )
+        metric_route, metric_rag, metric_verify, metric_boundary = st.columns(4)
+        metric_route.metric("请求路由", router_label)
+        metric_rag.metric("资料检索", retrieval_label)
+        metric_verify.metric("步骤验证", verification_label)
+        metric_boundary.metric("回答边界", boundary_label)
+
+        route_column, contract_column = st.columns(2, gap="medium")
+        with route_column:
+            with st.container(border=True):
+                st.markdown("#### 🧭 请求识别")
+                if classification is None:
+                    st.caption("旧回合没有保存结构化分类结果。")
+                else:
+                    st.write(
+                        f"**{classification.scope.value} · "
+                        f"{classification.subject.value if classification.subject else '无学科'} · "
+                        f"{classification.stage.value}**"
+                    )
+                    st.caption(
+                        f"{'新问题' if classification.is_new_problem else '继续当前问题'}；"
+                        f"回答模式 {classification.answer_mode.value}。{classification.reason}"
+                    )
+                st.write("**有效节奏**", turn.turn_guidance.pacing.value)
+                st.caption(turn.turn_guidance.reason or "未记录节奏理由")
+        with contract_column:
+            with st.container(border=True):
+                st.markdown("#### 📐 教学契约")
+                contract = turn.teaching_contract
+                if contract is None:
+                    st.caption("旧回合没有保存结构化教学契约。")
+                else:
+                    st.write("**响应方式**", contract.response_mode.value)
+                    st.write("**本轮目标**", contract.requested_target)
+                    permission_text = (
+                        f"应用当前题：{'允许' if contract.may_apply_to_active_problem else '禁止'}；"
+                        f"最终答案：{'允许' if contract.may_reveal_final_answer else '禁止'}"
+                    )
+                    st.caption(permission_text)
+
+        if turn.agent_trace:
+            st.markdown("#### 🔗 Agent 执行链")
+            trace_labels = {
+                "classification": "请求分类",
+                "memory_resolution": "记忆解析",
+                "fast_route": "快速计划",
+                "deterministic_plan": "确定性计划",
+                "decision": "动作决策",
+                "tool_result": "工具结果",
+                "fallback_tool": "降级工具",
+                "action_retry": "格式修复",
+                "teaching_contract": "教学契约",
+                "fallback": "安全收口",
+            }
+            st.dataframe(
+                [
+                    {
+                        "步骤": event.step,
+                        "阶段": trace_labels.get(event.event_type, event.event_type),
+                        "工具": event.tool_name or "—",
+                        "结果": (
+                            "成功" if event.ok is True else "失败" if event.ok is False else "—"
+                        ),
+                        "耗时": (
+                            f"{event.elapsed_seconds:.3f}s"
+                            if event.elapsed_seconds > 0
+                            else "—"
+                        ),
+                        "公开摘要": event.summary,
+                    }
+                    for event in turn.agent_trace
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+            if turn.loaded_skills:
+                st.caption("已加载教学技能：" + "、".join(turn.loaded_skills))
+            if turn.agent_termination_reason:
+                st.caption(f"执行结束：{turn.agent_termination_reason}")
+
         if turn.stage_timings_seconds:
             st.markdown("### ⏱ 处理耗时")
             timing_rows = [
@@ -730,8 +903,22 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 f"{total_seconds:.3f} 秒",
                 help="包括后端处理和审计后的逐字符展示。",
             )
+            calls_metric, iterations_metric, audit_metric, repair_metric = st.columns(4)
+            calls_metric.metric(
+                "LLM 调用",
+                str(int(turn.model_generation_metadata.get("llm_call_count", 0) or 0)),
+            )
+            iterations_metric.metric("Agent 迭代", str(turn.agent_iterations))
+            audit_metric.metric(
+                "语义审计",
+                "已执行" if turn.semantic_audit_performed else "按需跳过",
+            )
+            repair_metric.metric(
+                "回答修正",
+                "已执行" if turn.repair_performed else "未触发",
+            )
 
-        st.markdown("### 🧠 决策与审计摘要")
+        st.markdown("### 📎 证据与运行记录")
         st.caption(
             "这里展示可复核的决策依据和审计结果；不展示模型私有的逐字思维链。"
         )
@@ -744,59 +931,89 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 f"- 相似历史问答 **{hit_count}** 条\n"
                 f"- 检索结果缓存 **{'命中' if quality_qa_meta.get('quality_qa_retrieval_cache_hit') else '未命中'}**"
             )
-        if turn.memory_resolution is not None:
-            memory_resolution = turn.memory_resolution
-            st.write(
-                "**学生记忆解析**",
-                {
-                    "档案 ID": memory_resolution.student_profile_id,
-                    "状态": memory_resolution.status.value,
-                    "学科": memory_resolution.subject,
-                    "领域": memory_resolution.domain,
-                    "查询主题": memory_resolution.query_topic,
-                    "选中主题": (
-                        memory_resolution.selected.topic
-                        if memory_resolution.selected is not None
-                        else ""
-                    ),
-                    "候选": [
-                        {
-                            "主题": candidate.memory.topic,
-                            "得分": candidate.match_score,
-                            "来源": candidate.source,
-                        }
-                        for candidate in memory_resolution.candidates
-                    ],
-                    "原因": memory_resolution.reason,
-                },
-            )
-        if turn.memory_writeback_status != "not_scheduled":
-            st.write(
-                "**记忆写回**",
-                {
-                    "状态": turn.memory_writeback_status,
-                    "任务 ID": turn.memory_writeback_job_id,
-                },
-            )
-        st.write("**观察器原始输出**", turn.observer_raw_guidance.model_dump(mode="json"))
-        st.write("**规范化后的有效 guidance**", turn.turn_guidance.model_dump(mode="json"))
-        if turn.observer_error:
-            st.warning(f"观察器已降级，但主回答未被阻断：{turn.observer_error}")
-        st.write("**证据等级**", turn.evidence_level)
-        if turn.evidence_level == "unverified":
-            st.info("当前没有可用的确定性验证证据；教师回答仍正常展示。")
-        st.write("**学生步骤验证**", turn.student_verification.status.value)
-        st.write("**verifier**", turn.student_verification.verifier_name or "none")
-        st.write("**验证摘要**", turn.student_verification.summary)
-        st.write("**自动提取的方程**", turn.extracted_equations or [])
-        st.write(
-            "**生成摘要**",
-            {
-                "初稿字符数": turn.draft_character_count,
-                "最终字符数": turn.final_character_count,
-                "是否触发修正": turn.repair_performed,
-            },
+        st.markdown("### 🧠 学生记忆")
+        memory_resolution = getattr(turn, "memory_resolution", None)
+        if memory_resolution is None:
+            st.caption("旧回合未记录结构化记忆解析；本轮不会据此推断历史主题。")
+        else:
+            with st.container(border=True):
+                memory_status, memory_domain, memory_candidates = st.columns(3)
+                memory_status.metric("解析状态", memory_resolution.status.value)
+                memory_domain.metric(
+                    "学科 / 领域",
+                    f"{memory_resolution.subject or '—'} / {memory_resolution.domain or '—'}",
+                )
+                memory_candidates.metric(
+                    "候选主题", str(len(memory_resolution.candidates))
+                )
+                selected_topic = (
+                    memory_resolution.selected.topic
+                    if memory_resolution.selected is not None
+                    else "未选择"
+                )
+                st.write("**最终主题**", selected_topic)
+                if memory_resolution.query_topic:
+                    st.caption(f"查询主题：{memory_resolution.query_topic}")
+                st.caption(memory_resolution.reason)
+                if memory_resolution.candidates:
+                    st.dataframe(
+                        [
+                            {
+                                "主题": candidate.memory.topic,
+                                "匹配度": f"{candidate.match_score:.0%}",
+                                "来源": candidate.source,
+                            }
+                            for candidate in memory_resolution.candidates
+                        ],
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+        memory_writeback_status = getattr(
+            turn, "memory_writeback_status", "not_scheduled"
         )
+        memory_writeback_job_id = getattr(turn, "memory_writeback_job_id", "")
+        if memory_writeback_status != "not_scheduled":
+            writeback_text = f"记忆写回：{memory_writeback_status}"
+            if memory_writeback_job_id:
+                writeback_text += f" · {memory_writeback_job_id}"
+            st.caption(writeback_text)
+        st.markdown("### ✅ 验证与生成")
+        verification_status = turn.student_verification.status.value
+        with st.container(border=True):
+            if verification_status == "verified_correct":
+                st.success("学生当前步骤通过确定性验证。")
+            elif verification_status == "verified_incorrect":
+                st.error("学生当前步骤未通过确定性验证，教师应据此纠正。")
+            elif turn.evidence_level == "unverified":
+                st.info("当前题型没有适用的确定性 verifier；这不等于回答错误。")
+            else:
+                st.info("本轮不需要运行学生步骤 verifier。")
+            evidence_metric, verifier_metric, equation_metric = st.columns(3)
+            evidence_metric.metric("证据等级", turn.evidence_level)
+            verifier_metric.metric(
+                "验证器", turn.student_verification.verifier_name or "none"
+            )
+            equation_metric.metric("提取方程", str(len(turn.extracted_equations)))
+            st.caption(turn.student_verification.summary)
+            if turn.extracted_equations:
+                st.code("\n".join(turn.extracted_equations), language="text")
+
+        with st.expander("⚙️ Observer 与 guidance 规范化记录"):
+            st.json(
+                {
+                    "observer_raw": turn.observer_raw_guidance.model_dump(mode="json"),
+                    "effective_guidance": turn.turn_guidance.model_dump(mode="json"),
+                }
+            )
+            if turn.observer_error:
+                st.warning(
+                    f"Observer 已降级，但主回答未被阻断：{turn.observer_error}"
+                )
+
+        draft_metric, final_metric, repair_metric = st.columns(3)
+        draft_metric.metric("初稿字符", str(turn.draft_character_count))
+        final_metric.metric("最终字符", str(turn.final_character_count))
+        repair_metric.metric("安全修正", "已执行" if turn.repair_performed else "未触发")
         st.markdown("#### 模型处理摘要")
         st.caption(
             "原始逐字思维链不会展示；下面展示可复核的处理步骤、运行状态与 token 统计。"
@@ -805,7 +1022,8 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
         processing_steps = [
             f"识别请求并确定节奏：{turn.turn_guidance.pacing.value}",
             f"检索参考：{turn.rag_source or 'none'}，命中 {len(turn.rag_hits)} 条",
-            f"审计回答：提取 {len(turn.extracted_equations)} 个方程，"
+            f"审计回答：语义审计{'已执行' if turn.semantic_audit_performed else '按需跳过'}，"
+            f"提取 {len(turn.extracted_equations)} 个方程，"
             f"{'执行过修正' if turn.repair_performed else '无需修正'}",
         ]
         for step in processing_steps:
@@ -830,6 +1048,21 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
         # RAG 信息：用指标 + 命中卡片呈现，保留相似度和可读的 Markdown/LaTeX。
         st.divider()
         st.markdown("### 📚 RAG 检索")
+        with st.container(border=True):
+            decision_mode = turn.retrieval_decision.mode.value
+            st.write(
+                "**检索计划**",
+                {
+                    "none": "不调用 RAG",
+                    "local": "本地教材 / 题库 / 优质问答",
+                    "local_then_web": "先本地，再按证据缺口联网",
+                }.get(decision_mode, decision_mode),
+            )
+            st.caption(turn.retrieval_decision.reason)
+            st.caption(f"路由置信度：{turn.retrieval_decision.confidence:.0%}")
+            if classification is not None and classification.quality_qa_reason:
+                st.caption(f"优质问答路由：{classification.quality_qa_reason}")
+
         if turn.rag_online_triggered:
             online_status = turn.rag_online_status
             if online_status == "used":
@@ -874,20 +1107,71 @@ def render_turn_details(turn: PrototypeTurnRecord) -> None:
                 st.caption("来源：" + "；".join(turn.rag_refs))
         else:
             st.info(f"暂未检索到可用参考（状态：{turn.rag_source or 'none'}）")
+        st.divider()
+        st.markdown("### 🛡️ 回答边界与修正")
+        st.caption(
+            "语义审计只检查教学契约和答案披露边界；方程检查才是确定性数学证据。"
+        )
+        if turn.post_repair_boundary_audit is not None:
+            if turn.post_repair_boundary_audit.passed:
+                st.success("初稿触发安全修正，修正后的回答已通过边界复审。")
+            elif turn.post_repair_boundary_audit.audit_error:
+                st.warning(
+                    "边界复审不可用，已采用保守回答："
+                    f"{turn.post_repair_boundary_audit.audit_error}"
+                )
+            else:
+                st.warning("修正后仍未通过语义边界复审，已使用安全兜底回答。")
+        elif turn.boundary_audit is not None:
+            if turn.boundary_audit.passed:
+                st.success("回答通过教学契约语义边界审计。")
+            elif turn.boundary_audit.audit_error:
+                st.warning(
+                    f"语义边界审计不可用：{turn.boundary_audit.audit_error}"
+                )
+            else:
+                st.warning("初稿触发教学边界修正。")
+        else:
+            st.info("本轮按策略无需语义边界审计。")
+
+        audit_records = [
+            audit
+            for audit in (turn.boundary_audit, turn.post_repair_boundary_audit)
+            if audit is not None
+        ]
+        violations = list(
+            dict.fromkeys(
+                violation.value
+                for audit in audit_records
+                for violation in audit.violations
+            )
+        )
+        if violations:
+            st.caption("检测到的边界类型：" + "、".join(violations))
         if turn.claim_audits:
-            st.write(
-                "**方程检查**",
+            st.markdown("#### 确定性方程检查")
+            st.dataframe(
                 [
                     {
-                        "claim": audit.claim,
-                        "status": audit.verification.status.value,
-                        "summary": audit.verification.summary,
+                        "方程": audit.claim,
+                        "状态": audit.verification.status.value,
+                        "依据": audit.verification.summary,
                     }
                     for audit in turn.claim_audits
                 ],
+                hide_index=True,
+                use_container_width=True,
             )
-        st.write("**触发的修正**", turn.repair_reasons or [])
-        st.write("**修正后仍有警告**", turn.remaining_warnings or [])
+        if turn.formula_normalized:
+            st.caption("公式显示格式已执行规范化。")
+        if turn.repair_performed:
+            st.caption("本轮已执行安全修正。")
+        if turn.boundary_fallback_reason:
+            st.warning(f"安全兜底原因：{turn.boundary_fallback_reason}")
+        if turn.remaining_warnings:
+            st.warning("修正后仍有警告：" + "；".join(turn.remaining_warnings))
+        elif turn.repair_performed:
+            st.success("修正完成，未留下公开警告。")
 
 
 def render_public_thinking(
@@ -897,45 +1181,30 @@ def render_public_thinking(
 ) -> None:
     """Render saved public events without exposing internal trace payloads."""
 
-    if not turn.public_thinking_events and not turn.sections:
-        return
-    state_key = thinking_key(current_conversation_id, turn.turn_id)
-    panel_state = st.session_state.get(state_key)
-    if not isinstance(panel_state, ThinkingPanelState):
-        panel_state = complete_thinking(None)
-        st.session_state[state_key] = panel_state
-    expanded_key = f"{state_key}:expanded"
-    if expanded_key in st.session_state:
-        panel_state = set_user_expanded(
-            panel_state,
-            bool(st.session_state[expanded_key]),
-        )
-        st.session_state[state_key] = panel_state
-    seconds = max(round(turn.backend_total_seconds), 0)
-    with st.expander(
-        f"🧠 已思考（用时 {seconds} 秒）",
-        expanded=panel_state.expanded,
-        key=expanded_key,
-        on_change=_remember_thinking_expansion,
-        args=(state_key, expanded_key),
+    if (
+        not turn.public_thinking_events
+        and not turn.sections
+        and not turn.reasoning_trace
     ):
-        if turn.sections:
-            render_thinking_sections(turn, expanded=panel_state.expanded)
+        return
+    seconds = max(round(turn.backend_total_seconds), 0)
+    with st.container(
+        key=f"reasoning_trace_{current_conversation_id}_{turn.turn_id}",
+        border=True,
+    ):
+        st.markdown(
+            '<div class="desk-reasoning-runtime" data-state="complete">'
+            f"🧠 AI教学决策完成（用时 {seconds} 秒）"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        if turn.reasoning_trace:
+            desk_render_reasoning_trace(turn.reasoning_trace, live=False)
+        elif turn.sections:
+            render_thinking_sections(turn)
         else:
             for event in turn.public_thinking_events:
                 st.markdown(format_public_thinking_event(event))
-
-
-def _remember_thinking_expansion(state_key: str, expanded_key: str) -> None:
-    """Persist a historical panel choice without changing its phase."""
-
-    panel_state = st.session_state.get(state_key)
-    if not isinstance(panel_state, ThinkingPanelState):
-        panel_state = complete_thinking(None)
-    st.session_state[state_key] = set_user_expanded(
-        panel_state,
-        bool(st.session_state[expanded_key]),
-    )
 
 
 def render_thinking_sections(
@@ -1045,16 +1314,29 @@ if message:
             previous_thinking_state
         )
         with live_rail:
-            progress_status = st.status("🧠 思考中…", expanded=True)
-            timer_marker = progress_status.empty()
-            timer_marker.markdown(
-                '<span class="desk-live-thinking-marker" aria-hidden="true"></span>',
-                unsafe_allow_html=True,
+            with st.container(
+                key=f"reasoning_trace_live_{thinking_state_key}",
+                border=True,
+            ):
+                thinking_header = st.empty()
+                thinking_content = st.empty()
+            progress_surface = _FlatThinkingSurface(
+                thinking_header,
+                thinking_content,
             )
-            thinking_content = progress_status.empty()
+            progress_surface.update(
+                label="🧠 AI教学决策中…",
+                state="running",
+            )
 
             def render_live_update(update: PublicThinkingUpdate) -> None:
-                if update.sections:
+                if update.reasoning_trace:
+                    desk_render_reasoning_trace(
+                        update.reasoning_trace,
+                        live=True,
+                        container=thinking_content,
+                    )
+                elif update.sections:
                     desk_render_thinking_sections(
                         update,
                         expanded=True,
@@ -1066,7 +1348,7 @@ if message:
                     )
 
             live_thinking = LiveThinkingPanel(
-                progress_status,
+                progress_surface,
                 render_update=render_live_update,
             )
 
@@ -1092,7 +1374,6 @@ if message:
                 live_thinking.append,
             )
         except (DeepSeekError, ValueError) as exc:
-            timer_marker.empty()
             st.session_state[thinking_state_key] = fail_thinking(
                 st.session_state[thinking_state_key]
             )
@@ -1111,7 +1392,6 @@ if message:
                 history_save_error = str(exc)
             if history_save_error:
                 st.warning(f"历史记录保存失败：{history_save_error}")
-            timer_marker.empty()
             st.session_state[thinking_state_key] = complete_thinking(
                 st.session_state[thinking_state_key]
             )

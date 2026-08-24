@@ -14,7 +14,11 @@ from app.memory.learner_memory import (
 )
 from prototypes.llm_led_teacher import qa_cache
 from prototypes.llm_led_teacher.fast_plan import run_fast_plan
-from prototypes.llm_led_teacher.fast_routing import FastRoute, choose_fast_route
+from prototypes.llm_led_teacher.fast_routing import (
+    FastRoute,
+    choose_fast_route,
+    needs_dynamic_tool_loop,
+)
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentActionKind,
     AgentDecision,
@@ -32,6 +36,7 @@ from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.retrieval_policy import RetrievalDecision, RetrievalMode
 from prototypes.llm_led_teacher.skill_policy import (
     DEFAULT_SKILL_CATALOG,
     available_skill_descriptors,
@@ -137,7 +142,9 @@ finish 必须提交 contract。response_mode 只能是以下五种：
 - brief_redirect：题外请求的简短范围引导。
 “完整解释所问概念”不等于“完整求解当前题”。只有学生原消息明确要求完整解答或给出答案时，
 contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“怎么解”不构成授权，
-学生说“不要答案”时绝不可披露。finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。"""
+学生说“不要答案”时绝不可披露。finish 时 plan 用 guided、complete 或 brief_redirect 表示回答节奏。
+若 payload.deterministic_pretools_complete=true，skill、本地检索和教学契约已经由 Python
+确定完成；此时只能根据现有证据选择 search_web 或 finish，不得重复选择 load_skill 或本地检索。"""
 
     def __init__(self, client: DeepSeekClient) -> None:
         self.client = client
@@ -154,6 +161,7 @@ contract 才可使用 full_solution 且 may_reveal_final_answer=true；普通“
 
 class MultisubjectAgentLoop:
     _ACTION_FORMAT_REPAIR = "上次 JSON 不符合 schema，只输出合法 action。"
+    _DYNAMIC_ACTION_CALL_BUDGET = 2
 
     def __init__(
         self,
@@ -163,7 +171,7 @@ class MultisubjectAgentLoop:
         action_provider: ActionProvider | None = None,
         registry: OrchestrationToolRegistry | None = None,
         skill_catalog: dict[str, str] | None = None,
-        max_iterations: int = 4,
+        max_iterations: int = 2,
         enable_fast_routing: bool | None = None,
         memory_resolver: (
             Callable[[RequestClassification], StudentMemoryResolution] | None
@@ -242,8 +250,15 @@ class MultisubjectAgentLoop:
             classification_router = (
                 "deterministic_fast_path"
                 if fast_route is not None
-                else "model_classifier"
+                else "model_classifier_direct_path"
             )
+        dynamic_tool_loop = bool(
+            self.classification_override is None
+            and self.enable_fast_routing
+            and needs_dynamic_tool_loop(student_message, classification)
+        )
+        if dynamic_tool_loop:
+            classification_router = "dynamic_agent_path"
         trace: list[AgentTraceEvent] = []
         subject_label = classification.subject.value if classification.subject else "非 K9"
         self._trace(
@@ -345,7 +360,10 @@ class MultisubjectAgentLoop:
                         rag_context=RagContext(source="memory_clarification"),
                         trace=trace,
                         termination_reason="memory_clarification",
-                        routing_guidance={"answer_mode": AnswerMode.GUIDED.value},
+                        routing_guidance={
+                            "answer_mode": AnswerMode.GUIDED.value,
+                            "router": "memory_clarification_reply",
+                        },
                         direct_response=memory_resolution.clarification_question,
                     )
         if classification.scope is RequestScope.SOCIAL:
@@ -397,21 +415,67 @@ class MultisubjectAgentLoop:
         routing_guidance = {"answer_mode": classification.answer_mode.value}
         teaching_contract: TeachingContract | None = None
         loaded_skill_guidance: dict[str, str] = {}
+        agent_iterations = 0
 
-        if fast_route is not None:
+        can_use_direct_plan = bool(
+            not dynamic_tool_loop
+            and (
+                fast_route is not None
+                or (
+                    self.enable_fast_routing
+                    and classification.scope is RequestScope.K9
+                )
+            )
+        )
+        if can_use_direct_plan:
+            deterministic_route = fast_route or FastRoute(
+                classification=classification,
+                reason="模型分类器已确定课程边界，后续使用确定性执行计划",
+            )
             fast_result = run_fast_plan(
-                fast_route,
+                deterministic_route,
                 runtime,
                 self.registry,
                 student_message,
                 trace,
                 progress_callback,
+                router_type=classification_router,
             )
             return fast_result.model_copy(
                 update={"memory_resolution": memory_resolution}
             )
 
-        if qa_cache.lookup_enabled() and classification.use_quality_qa:
+        deterministic_pretools_complete = False
+        if dynamic_tool_loop:
+            dynamic_route = fast_route or FastRoute(
+                classification=classification,
+                reason="请求明确需要动态外部工具，先执行确定性教学工具",
+            )
+            pretool_result = run_fast_plan(
+                dynamic_route,
+                runtime,
+                self.registry,
+                student_message,
+                trace,
+                progress_callback,
+                router_type="dynamic_agent_path",
+                force_local_search=True,
+            )
+            observations = list(pretool_result.observations)
+            loaded_skills = list(pretool_result.loaded_skills)
+            loaded_skill_guidance = dict(
+                pretool_result.loaded_skill_guidance
+            )
+            rag_context = pretool_result.rag_context
+            teaching_contract = pretool_result.teaching_contract
+            routing_guidance = dict(pretool_result.routing_guidance)
+            deterministic_pretools_complete = True
+
+        if (
+            not deterministic_pretools_complete
+            and qa_cache.lookup_enabled()
+            and classification.use_quality_qa
+        ):
             assert classification.subject is not None
             quality_result = self.registry.execute(
                 "search_quality_qa",
@@ -456,12 +520,23 @@ class MultisubjectAgentLoop:
             )
 
         for step in range(1, self.max_iterations + 1):
+            if (
+                deterministic_pretools_complete
+                and agent_iterations >= self._DYNAMIC_ACTION_CALL_BUDGET
+            ):
+                termination_reason = "iteration_budget_exhausted"
+                break
             payload = {
                 "classification": classification.model_dump(mode="json"),
                 "problem_context": effective_problem_context[-1600:],
                 "student_message": student_message[-1200:],
-                "available_skills": available_skill_descriptors(runtime.skill_catalog),
+                "available_skills": (
+                    []
+                    if deterministic_pretools_complete
+                    else available_skill_descriptors(runtime.skill_catalog)
+                ),
                 "observations": [item.model_dump(mode="json") for item in observations],
+                "deterministic_pretools_complete": deterministic_pretools_complete,
                 "budgets": {
                     "remaining_steps": self.max_iterations - step + 1,
                     "local_calls": len(runtime.local_search_signatures),
@@ -475,6 +550,7 @@ class MultisubjectAgentLoop:
                 if action_attempt:
                     action_payload["action_format_repair"] = self._ACTION_FORMAT_REPAIR
                 try:
+                    agent_iterations += 1
                     decision = AgentDecision.model_validate(
                         self.action_provider.decide(action_payload)
                     )
@@ -560,7 +636,11 @@ class MultisubjectAgentLoop:
                 progress_callback,
             )
             if decision.kind is AgentActionKind.FINISH:
-                termination_reason = "model_finished"
+                termination_reason = (
+                    "dynamic_agent_finished"
+                    if deterministic_pretools_complete
+                    else "model_finished"
+                )
                 teaching_contract = normalize_teaching_contract(
                     decision.contract,
                     student_message,
@@ -568,6 +648,24 @@ class MultisubjectAgentLoop:
                 )
                 if decision.plan in {mode.value for mode in AnswerMode}:
                     routing_guidance["answer_mode"] = decision.plan
+                break
+
+            if (
+                deterministic_pretools_complete
+                and decision.tool_name != "search_web"
+            ):
+                termination_reason = "invalid_dynamic_action"
+                self._trace(
+                    trace,
+                    AgentTraceEvent(
+                        step=step,
+                        event_type="fallback",
+                        summary="确定性前置工具已完成，动态阶段只允许联网或结束",
+                        tool_name=decision.tool_name,
+                        ok=False,
+                    ),
+                    progress_callback,
+                )
                 break
 
             tool_arguments = dict(decision.arguments)
@@ -662,6 +760,9 @@ class MultisubjectAgentLoop:
             )
             if stop_after_tool:
                 break
+            if deterministic_pretools_complete and result.name == "search_web":
+                termination_reason = "dynamic_web_completed"
+                break
 
         if teaching_contract is None:
             teaching_contract = build_safe_teaching_contract(
@@ -674,18 +775,67 @@ class MultisubjectAgentLoop:
             teaching_contract,
             progress_callback,
         )
+        if deterministic_pretools_complete:
+            routing_guidance["router"] = "dynamic_agent_path"
+            routing_guidance["agent_termination_reason"] = termination_reason
         return AgentOrchestrationResult(
             classification=classification,
             teaching_contract=teaching_contract,
             memory_resolution=memory_resolution,
             rag_context=rag_context,
+            retrieval_decision=self._summarize_retrieval_decision(trace),
             observations=observations,
             trace=trace,
             loaded_skills=loaded_skills,
             loaded_skill_guidance=loaded_skill_guidance,
             termination_reason=termination_reason,
             routing_guidance=routing_guidance,
+            agent_iterations=agent_iterations,
         )
+
+    @staticmethod
+    def _summarize_retrieval_decision(
+        trace: list[AgentTraceEvent],
+    ) -> RetrievalDecision:
+        search_tools = {
+            event.tool_name
+            for event in trace
+            if event.event_type == "tool_result"
+            and event.ok is True
+            and event.tool_name
+            in {"search_local_knowledge", "search_quality_qa", "search_web"}
+        }
+        if "search_web" in search_tools:
+            mode = RetrievalMode.LOCAL_THEN_WEB
+        elif search_tools:
+            mode = RetrievalMode.LOCAL
+        else:
+            return RetrievalDecision(
+                mode=RetrievalMode.NONE,
+                reason="Agent 根据当前题目和已有证据选择直接作答",
+                confidence=0.9,
+            )
+
+        reason = next(
+            (
+                event.summary
+                for event in reversed(trace)
+                if event.event_type == "decision"
+                and event.tool_name in search_tools
+            ),
+            "",
+        )
+        if not reason and "search_quality_qa" in search_tools:
+            reason = "分类器判定当前问题可参考历史优质问答"
+        if not reason:
+            reason = "Agent 判定当前请求需要补充课程资料证据"
+        return RetrievalDecision(
+            mode=mode,
+            reason=reason,
+            confidence=0.9,
+            needs_current_information=(mode is RetrievalMode.LOCAL_THEN_WEB),
+        )
+
 
     @staticmethod
     def _needs_fallback_local_search(

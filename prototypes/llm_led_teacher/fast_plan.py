@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable
 
 from prototypes.llm_led_teacher import qa_cache
-from prototypes.llm_led_teacher.fast_routing import FastRoute
+from prototypes.llm_led_teacher.fast_routing import FastRoute, needs_local_evidence
 from prototypes.llm_led_teacher.orchestration_models import (
     AgentOrchestrationResult,
     AgentTraceEvent,
@@ -18,11 +18,9 @@ from prototypes.llm_led_teacher.orchestration_tools import (
     OrchestrationToolRegistry,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext
+from prototypes.llm_led_teacher.retrieval_policy import RetrievalDecision, RetrievalMode
 from prototypes.llm_led_teacher.skill_policy import select_skill_for_contract
-from prototypes.llm_led_teacher.teaching_policy import (
-    build_safe_teaching_contract,
-    is_concept_request,
-)
+from prototypes.llm_led_teacher.teaching_policy import build_safe_teaching_contract
 
 
 TraceCallback = Callable[[str | AgentTraceEvent], None] | None
@@ -35,6 +33,9 @@ def run_fast_plan(
     student_message: str,
     trace: list[AgentTraceEvent],
     callback: TraceCallback,
+    *,
+    router_type: str = "deterministic_fast_path",
+    force_local_search: bool = False,
 ) -> AgentOrchestrationResult:
     """Load only the needed skill/tool and finish without an action-model call."""
 
@@ -44,11 +45,33 @@ def run_fast_plan(
     needs_local_search = bool(
         classification.subject is not None
         and classification.stage is not SchoolStage.UNKNOWN
-        and (classification.is_new_problem or is_concept_request(student_message))
+        and (force_local_search or needs_local_evidence(student_message))
     )
     needs_quality_qa = bool(
         qa_cache.lookup_enabled() and classification.use_quality_qa
     )
+    if needs_local_search:
+        retrieval_decision = RetrievalDecision(
+            mode=RetrievalMode.LOCAL,
+            reason=(
+                "动态工具请求先完成本地课程资料检索"
+                if force_local_search
+                else "学生明确要求教材、课标或题库证据"
+            ),
+            confidence=1.0,
+        )
+    elif needs_quality_qa:
+        retrieval_decision = RetrievalDecision(
+            mode=RetrievalMode.LOCAL,
+            reason="当前经验、常见错误或反馈型问题可参考历史优质问答",
+            confidence=1.0,
+        )
+    else:
+        retrieval_decision = RetrievalDecision(
+            mode=RetrievalMode.NONE,
+            reason="当前请求可直接作答，且未明确要求外部证据",
+            confidence=1.0,
+        )
     planned_tools = (
         (["load_skill"] if skill_name else [])
         + (["search_local_knowledge"] if needs_local_search else [])
@@ -58,9 +81,10 @@ def run_fast_plan(
         trace,
         AgentTraceEvent(
             step=1,
-            event_type="fast_route",
-            summary=f"高置信度快速路由：{fast_route.reason}",
+            event_type="deterministic_plan",
+            summary=f"确定性执行计划：{fast_route.reason}",
             details={
+                "router": router_type,
                 "skill": skill_name,
                 "planned_tools": planned_tools,
             },
@@ -142,15 +166,16 @@ def run_fast_plan(
     return AgentOrchestrationResult(
         classification=classification,
         teaching_contract=contract,
+        retrieval_decision=retrieval_decision,
         rag_context=rag_context,
         observations=observations,
         trace=trace,
         loaded_skills=loaded_skills,
         loaded_skill_guidance=loaded_skill_guidance,
-        termination_reason="deterministic_fast_path",
+        termination_reason=router_type,
         routing_guidance={
             "answer_mode": classification.answer_mode.value,
-            "router": "deterministic_fast_path",
+            "router": router_type,
         },
     )
 

@@ -91,6 +91,7 @@ from prototypes.llm_led_teacher.public_thinking import (
     PublicThinkingEvent,
     PublicThinkingRecorder,
     PublicThinkingSection,
+    ReasoningTraceStage,
     ThinkingUpdateCallback,
 )
 from prototypes.llm_led_teacher.rag_hook import RagContext, retrieve_context
@@ -169,6 +170,9 @@ class PrototypeTurnRecord(BaseModel):
     backend_total_seconds: float = 0.0
     display_seconds: float = 0.0
     repair_performed: bool = False
+    semantic_audit_performed: bool = False
+    router_type: str = ""
+    agent_iterations: int = 0
     draft_character_count: int = 0
     final_character_count: int = 0
     classification: RequestClassification | None = None
@@ -188,6 +192,7 @@ class PrototypeTurnRecord(BaseModel):
     agent_trace: list[AgentTraceEvent] = Field(default_factory=list)
     public_thinking_events: list[PublicThinkingEvent] = Field(default_factory=list)
     sections: list[PublicThinkingSection] = Field(default_factory=list)
+    reasoning_trace: list[ReasoningTraceStage] = Field(default_factory=list)
     loaded_skills: list[str] = Field(default_factory=list)
     agent_termination_reason: str = ""
     teaching_contract: TeachingContract | None = None
@@ -692,6 +697,26 @@ def _requires_semantic_boundary_audit(contract: TeachingContract) -> bool:
     }
 
 
+def _is_low_risk_fast_generation(
+    orchestration_result: AgentOrchestrationResult,
+    student_message: str,
+) -> bool:
+    """Identify the narrow fast-concept case safe for deterministic auditing."""
+
+    contract = orchestration_result.teaching_contract
+    classification = orchestration_result.classification
+    return bool(
+        orchestration_result.termination_reason
+        in {"deterministic_fast_path", "model_classifier_direct_path"}
+        and classification.scope is RequestScope.K9
+        and classification.is_new_problem
+        and contract.response_mode is TeachingResponseMode.CONCEPT_EXPLANATION
+        and not contract.may_apply_to_active_problem
+        and not contract.may_reveal_final_answer
+        and not has_no_answer_request(student_message)
+    )
+
+
 def _chat_teaching_turn(
     client: StructuredTeacherClient,
     system: str,
@@ -1086,19 +1111,26 @@ def _run_turn_impl(
             enter_stage("retrieving")
             rag = retrieve_context(episode.problem_context, online_mode="off")
 
+    contract = (
+        orchestration_result.teaching_contract
+        if orchestration_result is not None
+        else None
+    )
     thinking.strategy(_PUBLIC_STRATEGY_BY_PACING[guidance.pacing])
+    if contract is not None:
+        thinking.teaching_plan(contract)
     thinking.verification(verification)
+    if orchestration_result is not None:
+        thinking.retrieval_decision(
+            mode=orchestration_result.retrieval_decision.mode.value,
+            reason=orchestration_result.retrieval_decision.reason,
+        )
     thinking.retrieval(
         source=rag.source,
         hit_count=len(rag.hits),
         online_triggered=rag.online_triggered,
         online_status=rag.online_status,
     )
-    if orchestration_result is not None:
-        thinking.retrieval_decision(
-            mode=orchestration_result.retrieval_decision.mode.value,
-            reason=orchestration_result.retrieval_decision.reason,
-        )
     thinking.composition(_PUBLIC_COMPOSITION_BY_PACING[guidance.pacing])
     payload = _teacher_payload(
         episode,
@@ -1107,11 +1139,6 @@ def _run_turn_impl(
         guidance,
         rag,
         orchestration_result,
-    )
-    contract = (
-        orchestration_result.teaching_contract
-        if orchestration_result is not None
-        else None
     )
     generation_max_tokens = _generation_token_budget(contract)
     enter_stage("generating")
@@ -1154,10 +1181,20 @@ def _run_turn_impl(
     verifier_applicable = LinearEquationVerifier().supports(
         VerificationRequest(problem_context=episode.problem_context)
     )
+    low_risk_fast_generation = bool(
+        orchestration_result is not None
+        and _is_low_risk_fast_generation(
+            orchestration_result,
+            clean_message,
+        )
+        and not verifier_applicable
+        and verification.status is not VerificationStatus.VERIFIED_INCORRECT
+    )
     needs_semantic_audit = bool(
         contract is not None
         and orchestration_result.termination_reason != "memory_clarification"
         and _requires_semantic_boundary_audit(contract)
+        and not low_risk_fast_generation
     )
     if needs_semantic_audit or verifier_applicable or orchestration_result is None:
         enter_stage("auditing")
@@ -1194,6 +1231,22 @@ def _run_turn_impl(
         include_advisory=True,
         include_disclosure=orchestration_result is None,
     )
+    if low_risk_fast_generation:
+        assert orchestration_result is not None
+        hard_violations = hard_boundary_recheck(
+            episode.problem_context,
+            orchestration_result.teaching_contract,
+            output.response,
+        )
+        repair_reasons = list(
+            dict.fromkeys(
+                repair_reasons
+                + [
+                    f"deterministic_boundary:{violation.value}"
+                    for violation in hard_violations
+                ]
+            )
+        )
     if boundary_audit is not None and not boundary_audit.passed:
         boundary_repair_reasons = list(boundary_audit.repair_instructions)
         if not boundary_repair_reasons:
@@ -1222,29 +1275,32 @@ def _run_turn_impl(
         model_generation_metadata = dict(
             getattr(active_client, "last_chat_metadata", {}) or {}
         )
-        if orchestration_result is not None and boundary_auditor is not None:
-            post_repair_boundary_audit = boundary_auditor.audit(
-                clean_message,
-                episode.problem_context,
-                orchestration_result.teaching_contract,
-                output.response,
-            )
-            if not post_repair_boundary_audit.passed:
-                if post_repair_boundary_audit.audit_error:
-                    boundary_fallback_reason = (
-                        "post_repair_audit_error:"
-                        f"{post_repair_boundary_audit.audit_error}"
-                    )
-                else:
-                    violation_names = ",".join(
-                        violation.value
-                        for violation in post_repair_boundary_audit.violations
-                    ) or "no_public_violation"
-                    boundary_fallback_reason = (
-                        f"post_repair_audit_failed:{violation_names}"
-                    )
+        if orchestration_result is not None:
+            if boundary_auditor is not None:
+                post_repair_boundary_audit = boundary_auditor.audit(
+                    clean_message,
+                    episode.problem_context,
+                    orchestration_result.teaching_contract,
+                    output.response,
+                )
+                if not post_repair_boundary_audit.passed:
+                    if post_repair_boundary_audit.audit_error:
+                        boundary_fallback_reason = (
+                            "post_repair_audit_error:"
+                            f"{post_repair_boundary_audit.audit_error}"
+                        )
+                    else:
+                        violation_names = ",".join(
+                            violation.value
+                            for violation in post_repair_boundary_audit.violations
+                        ) or "no_public_violation"
+                        boundary_fallback_reason = (
+                            f"post_repair_audit_failed:{violation_names}"
+                        )
 
-            if not boundary_fallback_reason:
+            if not boundary_fallback_reason and (
+                boundary_auditor is not None or low_risk_fast_generation
+            ):
                 hard_violations = hard_boundary_recheck(
                     episode.problem_context,
                     orchestration_result.teaching_contract,
@@ -1297,6 +1353,19 @@ def _run_turn_impl(
     thinking.audit(
         repair_performed=repair_performed,
         remaining_warning_count=len(remaining_warnings),
+        semantic_audit_performed=boundary_audit is not None,
+        deterministic_boundary_checked=low_risk_fast_generation,
+        boundary_passed=(
+            post_repair_boundary_audit.passed
+            if post_repair_boundary_audit is not None
+            else boundary_audit.passed
+            if boundary_audit is not None
+            else None
+        ),
+        post_repair_audit_performed=post_repair_boundary_audit is not None,
+        post_repair_boundary_checked=bool(
+            low_risk_fast_generation and repair_performed
+        ),
     )
     if usage_history_offset is not None:
         current_history = getattr(active_client, "usage_history", [])
@@ -1304,6 +1373,28 @@ def _run_turn_impl(
             current_history[usage_history_offset:]
         )
     model_generation_metadata.update(compaction_result.to_metadata())
+    router_type = ""
+    agent_iterations = 0
+    if orchestration_result is not None:
+        router_type = str(
+            orchestration_result.routing_guidance.get("router", "")
+        )
+        if not router_type and orchestration_result.termination_reason in {
+            "deterministic_fast_path",
+            "model_classifier_direct_path",
+            "dynamic_agent_path",
+            "memory_clarification_reply",
+        }:
+            router_type = orchestration_result.termination_reason
+        agent_iterations = orchestration_result.agent_iterations
+    model_generation_metadata.update(
+        {
+            "router_type": router_type,
+            "agent_iterations": agent_iterations,
+            "repair_performed": repair_performed,
+            "semantic_audit_performed": boundary_audit is not None,
+        }
+    )
     if rag.diagnostics.get("quality_qa_used"):
         model_generation_metadata.update(
             {
@@ -1355,6 +1446,9 @@ def _run_turn_impl(
         model_generation_metadata=model_generation_metadata,
         backend_total_seconds=backend_total_seconds,
         repair_performed=repair_performed,
+        semantic_audit_performed=boundary_audit is not None,
+        router_type=router_type,
+        agent_iterations=agent_iterations,
         draft_character_count=draft_character_count,
         final_character_count=len(output.response),
         classification=(
@@ -1375,6 +1469,9 @@ def _run_turn_impl(
         agent_trace=(orchestration_result.trace if orchestration_result else []),
         public_thinking_events=thinking.events,
         sections=thinking.sections,
+        reasoning_trace=[
+            stage.model_copy(deep=True) for stage in thinking.reasoning_trace
+        ],
         loaded_skills=(orchestration_result.loaded_skills if orchestration_result else []),
         agent_termination_reason=(
             orchestration_result.termination_reason if orchestration_result else ""

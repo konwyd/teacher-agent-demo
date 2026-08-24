@@ -53,9 +53,8 @@ class LiveThinkingPanel:
         self._state = completed
         seconds = max(round(total_seconds), 0)
         self._status.update(
-            label=f"🧠 已思考（用时 {seconds} 秒）",
+            label=f"🧠 AI教学决策完成（用时 {seconds} 秒）",
             state="complete",
-            expanded=False,
         )
 
     def fail(self) -> None:
@@ -64,7 +63,6 @@ class LiveThinkingPanel:
             return
         self._state = failed
         self._status.update(
-            label="🧠 思考中断",
+            label="🧠 AI教学决策中断",
             state="error",
-            expanded=True,
         )

@@ -153,7 +153,8 @@ def _tool_calls(turn) -> list[dict[str, object]]:
             "summary": event.summary,
         }
         for event in turn.agent_trace
-        if event.tool_name or event.event_type in {"fast_route", "fallback"}
+        if event.tool_name
+        or event.event_type in {"fast_route", "deterministic_plan", "fallback"}
     ]
 
 
@@ -170,6 +171,11 @@ def _turn_record(turn, *, elapsed_seconds: float) -> dict[str, object]:
         "loaded_skills": list(turn.loaded_skills),
         "tool_calls": _tool_calls(turn),
         "agent_termination_reason": turn.agent_termination_reason,
+        "router_type": getattr(turn, "router_type", ""),
+        "agent_iterations": int(getattr(turn, "agent_iterations", 0) or 0),
+        "semantic_audit_performed": bool(
+            getattr(turn, "semantic_audit_performed", False)
+        ),
         "teaching_contract": (
             turn.teaching_contract.model_dump(mode="json")
             if turn.teaching_contract
