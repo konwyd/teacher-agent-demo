@@ -43,23 +43,23 @@ QUALIFIER_PAYLOAD_KEYS = frozenset(
         "correction_of",
     }
 )
-PREFERENCE_STATEMENT_MARKERS = (
-    "我喜欢",
-    "我更喜欢",
-    "比较喜欢",
-    "更喜欢",
-    "有点喜欢",
-    "我不喜欢",
-    "我偏好",
-    "我习惯",
-    "我希望",
-    "我不希望",
-    "我不想",
-    "我的偏好",
+EXPLICIT_SELF_PREFERENCE_RE = re.compile(
+    r"(?:我(?:喜欢|更喜欢|比较喜欢|特别喜欢|不喜欢|不太喜欢|有点喜欢|"
+    r"偏好|习惯|希望|不希望|不想)|我的偏好)"
+)
+IMPLICIT_SELF_PREFERENCE_RE = re.compile(
+    r"^(?:喜欢|更喜欢|比较喜欢|特别喜欢|不喜欢|不太喜欢|有点喜欢|"
+    r"偏好|习惯|希望|不希望|不想)"
+)
+BOUNDED_PREFERENCE_REQUEST_RE = re.compile(
+    r"^(?:(?:本次|这次|本轮|这一轮|这节课|本节课|今天这次|当前会话|暂时|"
+    r"这一会儿|这几天|一段时间|最近|从现在起|以后都|今后|长期|一直)\s*)?"
+    r"(?:请|给|举|画|讲(?:慢|得)|用(?:图|例)|展示|说明)|"
+    r"^只在[^,，。;；]{1,20}课(?:请|给|举|画|讲(?:慢|得)|用(?:图|例)|展示|说明)"
 )
 CURRENT_INSTRUCTIONAL_REQUEST_RE = re.compile(
-    r"(?:这道题|本题).*(?:例子|举例|示范|画图|图示|图解)|"
-    r"(?:我希望你|我想让你|请你).*(?:给我|举|画).*(?:例子|图)"
+    r"(?:这|本)(?:一)?(?:道)?题.*(?:例子|例题|举例|示范|画图|图示|图解)|"
+    r"(?:我希望你|我想让你|请你).*(?:给(?:我)?|讲|举|画|用|展示).*(?:例子|例题|图)"
 )
 
 
@@ -169,11 +169,15 @@ def _parse_preference(analysis: QualifierAnalysis) -> ParsedFamily | None:
         and CURRENT_INSTRUCTIONAL_REQUEST_RE.search(analysis.text)
     ):
         return None
-    if not (
-        any(marker in analysis.text for marker in PREFERENCE_STATEMENT_MARKERS)
-        or analysis.condition
-        or analysis.temporal_expression
-    ):
+    self_statement = bool(
+        EXPLICIT_SELF_PREFERENCE_RE.search(analysis.text)
+        or IMPLICIT_SELF_PREFERENCE_RE.match(analysis.text)
+    )
+    bounded_request = bool(
+        (analysis.condition or analysis.temporal_expression)
+        and BOUNDED_PREFERENCE_REQUEST_RE.match(analysis.text)
+    )
+    if not (self_statement or bounded_request):
         return None
     preferences = [
         label
@@ -205,7 +209,7 @@ def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
     if analysis.negated is True:
         return None
     grade_match = re.match(
-        r"^(?:(?:我|本人)(?:是|读|上)?|)([一二三四五六七八九1-9])年级",
+        r"^(?:(?:我|本人)(?:现在|今年|目前|当前)?(?:是|读|上)?|)([一二三四五六七八九1-9])年级",
         analysis.text,
     )
     name_match = re.search(
@@ -313,14 +317,15 @@ def _parse_learning_episode(
         return None
     summary = analysis.text.strip(" ,，。")[:180]
     episode_markers = ("上次", "昨天", "刚才", "那次", "上节课", "上周")
-    if not summary.startswith(
-        episode_markers + tuple(f"我{item}" for item in episode_markers)
-    ):
+    episode = re.match(
+        rf"^(?:我)?(?:{'|'.join(episode_markers)})(?P<body>.*)$", summary
+    )
+    if not episode:
         return None
-    if not any(
-        marker in summary
-        for marker in ("练习", "测验", "考试", "课堂", "做", "解", "学", "答")
-    ):
+    body = episode.group("body").strip()
+    body = re.sub(r"^我", "", body).strip()
+    body = re.sub(r"^(?:自己|独立|认真|成功地?)", "", body).strip()
+    if not body.startswith(("练习", "测验", "考试", "课堂", "做", "解", "学", "答")):
         return None
     return (
         MemoryType.LEARNING_EPISODE,
@@ -370,7 +375,7 @@ def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily
             TemporalScope.SHORT_LIVED,
         )
     noncomprehension = re.match(
-        r"^(?:我)?(?:还是|总是|一直|有点|有些|不太)?(?P<verb>不懂|不会|不明白|没懂|弄不清)(?P<topic>[^，,。]{1,80})",
+        r"^(?:我)?(?:还是|总是|一直|有点|有些|不太|完全)?(?P<verb>不懂|不会|不明白|没懂|弄不清)(?P<topic>[^，,。]{1,80})",
         analysis.text,
     )
     if noncomprehension:

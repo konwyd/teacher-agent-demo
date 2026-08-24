@@ -377,6 +377,9 @@ def test_duplicate_compatible_candidates_are_merged_once(route_b_factory):
         ("张三是六年级", SemanticFamily.PROFILE),
         ("张三经常把正负号搞反", SemanticFamily.DIFFICULTY),
         ("张三连续三次都算对了方程", SemanticFamily.BEHAVIOR_EVIDENCE),
+        ("张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
+        ("昨天张三练习解出了方程", SemanticFamily.LEARNING_EPISODE),
+        ("本次张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
     ),
 )
 def test_third_person_fact_is_a_hard_negative(route_b_factory, utterance, family):
@@ -445,6 +448,13 @@ def test_implicit_first_person_progress_is_not_suppressed(route_b_factory):
         ("比较喜欢图示讲解", SemanticFamily.PREFERENCE, MemoryType.PREFERENCE),
         ("有点不懂二次函数", SemanticFamily.DIFFICULTY, MemoryType.DIFFICULTY),
         ("本人读六年级", SemanticFamily.PROFILE, MemoryType.PROFILE_FACT),
+        ("老师讲慢点我更喜欢", SemanticFamily.PREFERENCE, MemoryType.PREFERENCE),
+        ("小例子我更喜欢", SemanticFamily.PREFERENCE, MemoryType.PREFERENCE),
+        ("阿拉伯数字我更喜欢用图示", SemanticFamily.PREFERENCE, MemoryType.PREFERENCE),
+        ("特别喜欢图示讲解", SemanticFamily.PREFERENCE, MemoryType.PREFERENCE),
+        ("完全不懂二次函数", SemanticFamily.DIFFICULTY, MemoryType.DIFFICULTY),
+        ("我现在读六年级", SemanticFamily.PROFILE, MemoryType.PROFILE_FACT),
+        ("我今年读六年级", SemanticFamily.PROFILE, MemoryType.PROFILE_FACT),
     ),
 )
 def test_common_first_person_claim_is_not_suppressed(
@@ -468,6 +478,8 @@ def test_common_first_person_claim_is_not_suppressed(
         "这道题能画图吗",
         "我希望这道题能画图",
         "我希望你给我一个例子",
+        "我希望你讲个例题",
+        "我希望这题能画图",
     ),
 )
 def test_current_instructional_request_is_not_a_persistent_preference(

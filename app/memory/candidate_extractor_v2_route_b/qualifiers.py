@@ -20,11 +20,6 @@ KINSHIP_REFERENT_RE = re.compile(
     r"^我(?:的)?(?:哥哥|姐姐|弟弟|妹妹|兄弟|姐妹|爸爸|妈妈|父亲|母亲|"
     r"爷爷|奶奶|外公|外婆|朋友|同学|老师)"
 )
-EXPLICIT_THIRD_PERSON_OWNER_RE = re.compile(
-    r"^(?:(?:小|阿)[\u4e00-\u9fff]{1,3}|"
-    r"(?:这位|那位|那个|一名|一位)?(?:学生|同学|老师|朋友|孩子|男生|女生)|"
-    r"[\u4e00-\u9fff]{1,3}(?:同学|老师|同桌))"
-)
 META_QUOTED_RE = re.compile(r"[‘'\"“].+?[’'\"”].*(?:这个词|含义|是什么意思|定义)")
 PRIVACY_PROHIBITION_RE = re.compile(r"(?:不要|别|请勿).{0,8}(?:保存|记住|记录|存储)")
 INSTRUCTIONAL_EXAMPLE_PATTERNS = ("举例说明", "例题中的", "假设学生")
@@ -103,9 +98,7 @@ def _hard_negative_reason(text: str) -> str:
 
 
 def _has_third_person_owner(text: str) -> bool:
-    return bool(
-        KINSHIP_REFERENT_RE.match(text) or EXPLICIT_THIRD_PERSON_OWNER_RE.match(text)
-    )
+    return bool(KINSHIP_REFERENT_RE.match(text))
 
 
 def _negation_parity(text: str) -> tuple[bool | None, str]:
