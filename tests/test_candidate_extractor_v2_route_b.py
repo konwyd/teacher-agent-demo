@@ -380,6 +380,14 @@ def test_duplicate_compatible_candidates_are_merged_once(route_b_factory):
         ("张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
         ("昨天张三练习解出了方程", SemanticFamily.LEARNING_EPISODE),
         ("本次张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
+        ("我希望张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
+        ("本次讲慢点张三更喜欢", SemanticFamily.PREFERENCE),
+        ("本次请给张三一个例子", SemanticFamily.PREFERENCE),
+        ("只在数学课给张三讲慢一点", SemanticFamily.PREFERENCE),
+        ("只在数学课讲慢点张三更喜欢", SemanticFamily.PREFERENCE),
+        ("如果张三需要请讲慢一些", SemanticFamily.PREFERENCE),
+        ("以后都用图示张三更喜欢", SemanticFamily.PREFERENCE),
+        ("昨天练习时张三解出了方程", SemanticFamily.LEARNING_EPISODE),
     ),
 )
 def test_third_person_fact_is_a_hard_negative(route_b_factory, utterance, family):
@@ -455,6 +463,21 @@ def test_implicit_first_person_progress_is_not_suppressed(route_b_factory):
         ("完全不懂二次函数", SemanticFamily.DIFFICULTY, MemoryType.DIFFICULTY),
         ("我现在读六年级", SemanticFamily.PROFILE, MemoryType.PROFILE_FACT),
         ("我今年读六年级", SemanticFamily.PROFILE, MemoryType.PROFILE_FACT),
+        (
+            "我真的特别喜欢图示讲解",
+            SemanticFamily.PREFERENCE,
+            MemoryType.PREFERENCE,
+        ),
+        (
+            "我还是更喜欢图示讲解",
+            SemanticFamily.PREFERENCE,
+            MemoryType.PREFERENCE,
+        ),
+        (
+            "我真的完全不懂二次函数",
+            SemanticFamily.DIFFICULTY,
+            MemoryType.DIFFICULTY,
+        ),
     ),
 )
 def test_common_first_person_claim_is_not_suppressed(
@@ -480,6 +503,8 @@ def test_common_first_person_claim_is_not_suppressed(
         "我希望你给我一个例子",
         "我希望你讲个例题",
         "我希望这题能画图",
+        "我希望你演示一道例题",
+        "我希望你做一道示范",
     ),
 )
 def test_current_instructional_request_is_not_a_persistent_preference(
@@ -505,6 +530,17 @@ def test_explicitly_bounded_instructional_preference_is_extractable(
     [candidate] = extractor.extract(utterance, {}, conversation_id="route-b-bounded")
 
     assert candidate.temporal_scope is expected_scope
+
+
+def test_conditional_instructional_preference_is_extractable(route_b_factory):
+    utterance = "如果需要请讲慢一些"
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+
+    [candidate] = extractor.extract(utterance, {}, conversation_id="route-b-condition")
+
+    assert candidate.payload["teaching_preferences"] == ["慢节奏讲解"]
+    assert candidate.payload["condition"] == "需要请讲慢一些"
+    assert candidate.temporal_scope is TemporalScope.PERSISTENT
 
 
 def test_stated_durable_preference_remains_extractable(route_b_factory):

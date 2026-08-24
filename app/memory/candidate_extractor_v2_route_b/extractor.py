@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 import hashlib
 import json
 import re
@@ -43,23 +44,54 @@ QUALIFIER_PAYLOAD_KEYS = frozenset(
         "correction_of",
     }
 )
-EXPLICIT_SELF_PREFERENCE_RE = re.compile(
-    r"(?:我(?:喜欢|更喜欢|比较喜欢|特别喜欢|不喜欢|不太喜欢|有点喜欢|"
-    r"偏好|习惯|希望|不希望|不想)|我的偏好)"
+OWNER_MODIFIER_FRAGMENT = (
+    r"(?:(?:真的|确实|其实|还是|仍然|依然|总是|一直|比较|特别|非常|更|"
+    r"有点|有些|不太|完全|独立|自己|认真|成功地?)\s*)*"
 )
-IMPLICIT_SELF_PREFERENCE_RE = re.compile(
-    r"^(?:喜欢|更喜欢|比较喜欢|特别喜欢|不喜欢|不太喜欢|有点喜欢|"
-    r"偏好|习惯|希望|不希望|不想)"
+PREFERENCE_IMPLICIT_PREFIX_RE = re.compile(
+    r"(?:(?:真的|确实|还是|仍然|依然|比较|特别|非常|更|有点|有些|不太)\s*)*"
 )
-BOUNDED_PREFERENCE_REQUEST_RE = re.compile(
-    r"^(?:(?:本次|这次|本轮|这一轮|这节课|本节课|今天这次|当前会话|暂时|"
-    r"这一会儿|这几天|一段时间|最近|从现在起|以后都|今后|长期|一直)\s*)?"
-    r"(?:请|给|举|画|讲(?:慢|得)|用(?:图|例)|展示|说明)|"
-    r"^只在[^,，。;；]{1,20}课(?:请|给|举|画|讲(?:慢|得)|用(?:图|例)|展示|说明)"
+DIFFICULTY_IMPLICIT_PREFIX_RE = re.compile(
+    r"(?:(?:真的|确实|还是|仍然|依然|总是|一直|有点|有些|不太|完全)\s*)*"
 )
-CURRENT_INSTRUCTIONAL_REQUEST_RE = re.compile(
-    r"(?:这|本)(?:一)?(?:道)?题.*(?:例子|例题|举例|示范|画图|图示|图解)|"
-    r"(?:我希望你|我想让你|请你).*(?:给(?:我)?|讲|举|画|用|展示).*(?:例子|例题|图)"
+CONDITION_IMPLICIT_PREFIX_RE = re.compile(r"(?:(?:有|确实|真的)\s*)*")
+CONDITION_TRIGGER_RE = re.compile(r"需要|想要|希望|想|要")
+EPISODE_IMPLICIT_PREFIX_RE = re.compile(
+    r"(?:(?:自己|独立|认真|成功地?)\s*)*"
+    r"(?:(?:练习|测验|考试|课堂|做题?|解题?|学习|答题?)(?:时|中)?\s*)?"
+    r"(?:(?:自己|独立|认真|成功地?)\s*)*"
+)
+EXPLICIT_SELF_OWNER_RE = re.compile(rf"(?:我|本人)(?:的)?\s*{OWNER_MODIFIER_FRAGMENT}$")
+THIRD_PERSON_ROLE_FRAGMENT = (
+    r"老师|同学|学生|学员|孩子|哥哥|姐姐|弟弟|妹妹|爸爸|妈妈|父亲|母亲|"
+    r"爷爷|奶奶|外公|外婆|朋友"
+)
+THIRD_PERSON_OWNER_RE = re.compile(
+    rf"(?:{THIRD_PERSON_ROLE_FRAGMENT}|[\u4e00-\u9fff]{{2,4}}|"
+    rf"[A-Za-z][A-Za-z0-9_-]{{0,31}})\s*{OWNER_MODIFIER_FRAGMENT}$"
+)
+PREFERENCE_PREDICATE_RE = re.compile(r"不太喜欢|不喜欢|不希望|不想|喜欢|偏好|习惯|希望")
+DIFFICULTY_PREDICATE_RE = re.compile(r"不明白|弄不清|不懂|不会|没懂")
+EPISODE_RESULT_PREDICATE_RE = re.compile(
+    r"解出|做出|答出|答对|算对|完成|掌握|学会|弄懂|解决"
+)
+EPISODE_LEADING_ACTIVITY_RE = re.compile(
+    r"^(?:我)?(?:自己|独立|认真|成功地?)?"
+    r"(?:练习|测验|考试|课堂|做|解|学|答)"
+)
+REQUEST_ACTION_RE = re.compile(
+    r"(?:请|给(?:我)?|举|画|讲(?:慢|得)?|用(?:图|例)|展示|说明)"
+)
+CURRENT_PROBLEM_INSTRUCTION_RE = re.compile(
+    r"(?:这|本)(?:一)?(?:道)?题.*(?:例子|例题|举例|示范|画图|图示|图解)"
+)
+TEACHER_REQUEST_PREFIX_RE = re.compile(r"(?:我希望你|我想让你|请你)")
+INSTRUCTIONAL_ACTION_RE = re.compile(r"(?:给(?:我)?|讲|举|画|用|展示|演示|做)")
+INSTRUCTIONAL_OBJECT_RE = re.compile(r"(?:例子|例题|示范|画图|图示|图解)")
+REQUEST_RECIPIENT_RE = re.compile(
+    rf"(?:给|向|为)(?P<recipient>我|本人|{THIRD_PERSON_ROLE_FRAGMENT}|"
+    rf"[\u4e00-\u9fff]{{2,4}}|[A-Za-z][A-Za-z0-9_-]{{0,31}})"
+    r"(?=(?:一|几|些|个|讲|展示|说明|看|用|画|举|听|做|解))"
 )
 
 
@@ -138,6 +170,105 @@ class CandidateExtractorRouteB:
 ParsedFamily = tuple[MemoryType, dict[str, Any], TemporalScope]
 
 
+class PredicateOwner(str, Enum):
+    SELF = "self"
+    THIRD_PERSON = "third_person"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class FamilyPredicate:
+    text: str
+    start: int
+    end: int
+    owner: PredicateOwner
+
+
+def _owned_family_predicates(
+    text: str,
+    pattern: re.Pattern[str],
+    *,
+    implicit_prefix_re: re.Pattern[str],
+) -> tuple[FamilyPredicate, ...]:
+    return tuple(
+        FamilyPredicate(
+            text=match.group(0),
+            start=match.start(),
+            end=match.end(),
+            owner=_resolve_predicate_owner(
+                text, match.start(), implicit_prefix_re=implicit_prefix_re
+            ),
+        )
+        for match in pattern.finditer(text)
+    )
+
+
+def _resolve_predicate_owner(
+    text: str,
+    predicate_start: int,
+    *,
+    implicit_prefix_re: re.Pattern[str],
+) -> PredicateOwner:
+    prefix = text[:predicate_start]
+    if EXPLICIT_SELF_OWNER_RE.search(prefix):
+        return PredicateOwner.SELF
+    if implicit_prefix_re.fullmatch(prefix):
+        return PredicateOwner.SELF
+    if THIRD_PERSON_OWNER_RE.search(prefix):
+        return PredicateOwner.THIRD_PERSON
+    return PredicateOwner.UNKNOWN
+
+
+def _is_current_instructional_request(text: str) -> bool:
+    if CURRENT_PROBLEM_INSTRUCTION_RE.search(text):
+        return True
+    requester = TEACHER_REQUEST_PREFIX_RE.search(text)
+    if requester is None:
+        return False
+    action = INSTRUCTIONAL_ACTION_RE.search(text, requester.end())
+    if action is None:
+        return False
+    return INSTRUCTIONAL_OBJECT_RE.search(text, action.end()) is not None
+
+
+def _request_recipient_owners(text: str) -> tuple[PredicateOwner, ...]:
+    return tuple(
+        PredicateOwner.SELF
+        if match.group("recipient") in {"我", "本人"}
+        else PredicateOwner.THIRD_PERSON
+        for match in REQUEST_RECIPIENT_RE.finditer(text)
+    )
+
+
+def _is_bounded_preference_request(analysis: QualifierAnalysis) -> bool:
+    if not (analysis.condition or analysis.temporal_expression):
+        return False
+    text = analysis.text
+    if PredicateOwner.THIRD_PERSON in _request_recipient_owners(text):
+        return False
+    if text.startswith("如果"):
+        action = REQUEST_ACTION_RE.search(text, len("如果"))
+        if action is None:
+            return False
+        condition = text[len("如果") : action.start()].strip()
+        condition_triggers = _owned_family_predicates(
+            condition,
+            CONDITION_TRIGGER_RE,
+            implicit_prefix_re=CONDITION_IMPLICIT_PREFIX_RE,
+        )
+        return bool(condition_triggers) and all(
+            trigger.owner is PredicateOwner.SELF for trigger in condition_triggers
+        )
+    if analysis.condition:
+        prefix = f"只在{analysis.condition}"
+        if text.startswith(prefix):
+            return REQUEST_ACTION_RE.match(text[len(prefix) :].lstrip()) is not None
+    for expression in analysis.temporal_expression.split("；"):
+        if expression and text.startswith(expression):
+            return REQUEST_ACTION_RE.match(text[len(expression) :].lstrip()) is not None
+    return False
+
+
 def _parse_utterance_family(
     family: SemanticFamily,
     analysis: QualifierAnalysis,
@@ -166,16 +297,21 @@ def _parse_preference(analysis: QualifierAnalysis) -> ParsedFamily | None:
     if (
         not analysis.temporal_expression
         and not analysis.condition
-        and CURRENT_INSTRUCTIONAL_REQUEST_RE.search(analysis.text)
+        and _is_current_instructional_request(analysis.text)
     ):
         return None
-    self_statement = bool(
-        EXPLICIT_SELF_PREFERENCE_RE.search(analysis.text)
-        or IMPLICIT_SELF_PREFERENCE_RE.match(analysis.text)
+    stances = _owned_family_predicates(
+        analysis.text,
+        PREFERENCE_PREDICATE_RE,
+        implicit_prefix_re=PREFERENCE_IMPLICIT_PREFIX_RE,
     )
-    bounded_request = bool(
-        (analysis.condition or analysis.temporal_expression)
-        and BOUNDED_PREFERENCE_REQUEST_RE.match(analysis.text)
+    has_self_stance = any(stance.owner is PredicateOwner.SELF for stance in stances)
+    has_foreign_or_ambiguous_stance = any(
+        stance.owner is not PredicateOwner.SELF for stance in stances
+    )
+    self_statement = has_self_stance and not has_foreign_or_ambiguous_stance
+    bounded_request = (
+        _is_bounded_preference_request(analysis) and not has_foreign_or_ambiguous_stance
     )
     if not (self_statement or bounded_request):
         return None
@@ -323,9 +459,16 @@ def _parse_learning_episode(
     if not episode:
         return None
     body = episode.group("body").strip()
-    body = re.sub(r"^我", "", body).strip()
-    body = re.sub(r"^(?:自己|独立|认真|成功地?)", "", body).strip()
-    if not body.startswith(("练习", "测验", "考试", "课堂", "做", "解", "学", "答")):
+    result_predicates = _owned_family_predicates(
+        body,
+        EPISODE_RESULT_PREDICATE_RE,
+        implicit_prefix_re=EPISODE_IMPLICIT_PREFIX_RE,
+    )
+    if result_predicates:
+        decisive_result = result_predicates[-1]
+        if decisive_result.owner is not PredicateOwner.SELF:
+            return None
+    elif not EPISODE_LEADING_ACTIVITY_RE.match(body):
         return None
     return (
         MemoryType.LEARNING_EPISODE,
@@ -374,19 +517,22 @@ def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily
             },
             TemporalScope.SHORT_LIVED,
         )
-    noncomprehension = re.match(
-        r"^(?:我)?(?:还是|总是|一直|有点|有些|不太|完全)?(?P<verb>不懂|不会|不明白|没懂|弄不清)(?P<topic>[^，,。]{1,80})",
+    noncomprehension = _owned_family_predicates(
         analysis.text,
+        DIFFICULTY_PREDICATE_RE,
+        implicit_prefix_re=DIFFICULTY_IMPLICIT_PREFIX_RE,
     )
-    if noncomprehension:
-        topic = noncomprehension.group("topic").strip(" 了")
+    for predicate in noncomprehension:
+        if predicate.owner is not PredicateOwner.SELF:
+            continue
+        topic = analysis.text[predicate.end :].strip(" 了,，。")[:80]
         if topic:
             return (
                 MemoryType.DIFFICULTY,
                 {
                     "subject": subject,
                     "topic": topic,
-                    "statement": f"{noncomprehension.group('verb')}{topic}",
+                    "statement": f"{predicate.text}{topic}",
                 },
                 TemporalScope.SHORT_LIVED,
             )
