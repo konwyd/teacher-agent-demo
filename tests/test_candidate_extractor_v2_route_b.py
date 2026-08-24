@@ -415,6 +415,11 @@ def test_duplicate_compatible_candidates_are_merged_once(route_b_factory):
         ("本次张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
         ("我希望张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
         ("本次讲慢点张三更喜欢", SemanticFamily.PREFERENCE),
+        ("本次张三讲慢点", SemanticFamily.PREFERENCE),
+        ("今天老师逐步说明", SemanticFamily.PREFERENCE),
+        ("逐步说明", SemanticFamily.PREFERENCE),
+        ("麻烦张三逐步说明", SemanticFamily.PREFERENCE),
+        ("如果是张三请示范", SemanticFamily.PREFERENCE),
         ("本次请给张三一个例子", SemanticFamily.PREFERENCE),
         ("以后都给 张三一个例子", SemanticFamily.PREFERENCE),
         ("以后都给张三非常耐心地讲一个例子", SemanticFamily.PREFERENCE),
@@ -1213,3 +1218,239 @@ def test_cold_load_is_first_embedding_consuming_case(route_b_factory):
 
     assert report["operational"]["cold_load_case_id"] == "synthetic-profile"
     assert report["operational"]["primary_encode_calls"] == 1
+
+
+def test_tuned_default_threshold_admits_a_moderate_generic_family_match():
+    extractor = CandidateExtractorRouteB(
+        StubFamilyRanker({"请称呼我小禾": SemanticFamily.PROFILE}, similarity=0.5)
+    )
+    [candidate] = extractor.extract(
+        "请称呼我小禾", {}, conversation_id="route-b-tuned-threshold"
+    )
+    assert candidate.memory_type is MemoryType.PROFILE_FACT
+
+
+@pytest.mark.parametrize(
+    ("utterance", "expected_payload", "expected_scope"),
+    (
+        (
+            "麻烦逐步说明",
+            {"teaching_preferences": ["分步骤讲解"]},
+            TemporalScope.PERSISTENT,
+        ),
+        (
+            "麻烦尽量逐步说明",
+            {"teaching_preferences": ["分步骤讲解"]},
+            TemporalScope.PERSISTENT,
+        ),
+        (
+            "如果是代数题请示范",
+            {"teaching_preferences": ["示例讲解"], "condition": "代数题"},
+            TemporalScope.PERSISTENT,
+        ),
+        (
+            "或许以后请讲慢一些",
+            {
+                "teaching_preferences": ["慢节奏讲解"],
+                "temporal_expression": "以后",
+                "uncertainty": "hedged",
+            },
+            TemporalScope.UNKNOWN,
+        ),
+        (
+            "平时请举例，这道题不要",
+            {
+                "teaching_preferences": ["示例讲解"],
+                "condition": "except current problem",
+                "scope": "general",
+            },
+            TemporalScope.PERSISTENT,
+        ),
+    ),
+)
+def test_generalized_preference_requests_preserve_bounds(
+    route_b_factory, utterance, expected_payload, expected_scope
+):
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+    [candidate] = extractor.extract(utterance, {}, conversation_id="route-b-tuning")
+    assert candidate.payload == expected_payload
+    assert candidate.temporal_scope is expected_scope
+
+
+def test_generalized_deadline_first_goal_preserves_temporal_expression(route_b_factory):
+    utterance = "月考前掌握百分数"
+    extractor = route_b_factory({utterance: SemanticFamily.LEARNING_GOAL})
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-tuning-goal",
+    )
+    assert candidate.payload == {
+        "subject": "数学",
+        "goal": "掌握百分数",
+        "temporal_expression": "月考前",
+    }
+    assert candidate.temporal_scope is TemporalScope.SHORT_LIVED
+
+
+def test_generalized_stable_confusion_maps_to_a_topic(route_b_factory):
+    utterance = "我总弄混被除数和除数"
+    extractor = route_b_factory({utterance: SemanticFamily.DIFFICULTY})
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-tuning-difficulty",
+    )
+    assert candidate.payload == {
+        "subject": "数学",
+        "topic": "除法",
+        "statement": "弄混被除数和除数",
+    }
+    assert candidate.temporal_scope is TemporalScope.PERSISTENT
+
+
+def test_generalized_continuation_is_turn_bounded(route_b_factory):
+    utterance = "接着上一题"
+    extractor = route_b_factory({utterance: SemanticFamily.TASK_STATE})
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-tuning-task",
+    )
+    assert candidate.payload == {"subject": "数学", "requested_target": "上一题"}
+    assert candidate.temporal_scope is TemporalScope.TURN_ONLY
+
+
+def test_generalized_resolution_transition_is_topic_progress(route_b_factory):
+    utterance = "我以前怕小数，现在会了"
+    extractor = route_b_factory({utterance: SemanticFamily.TOPIC_PROGRESS})
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-tuning-progress",
+    )
+    assert candidate.payload == {
+        "subject": "数学",
+        "topic": "小数",
+        "status": "resolved",
+        "explicit_correction": True,
+        "correction_of": "difficulty",
+    }
+    assert candidate.temporal_scope is TemporalScope.SHORT_LIVED
+
+
+def test_profile_hedge_uses_contract_uncertainty_value(route_b_factory):
+    utterance = "我可能叫小禾"
+    extractor = route_b_factory({utterance: SemanticFamily.PROFILE})
+    [candidate] = extractor.extract(
+        utterance, {}, conversation_id="route-b-tuning-name"
+    )
+    assert candidate.payload == {
+        "preferred_name": "小禾",
+        "uncertainty": "uncertain",
+    }
+    assert candidate.temporal_scope is TemporalScope.UNKNOWN
+
+
+def test_preference_correction_has_typed_correction_target(route_b_factory):
+    utterance = "纠正一下，我其实偏好图解"
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+    [candidate] = extractor.extract(
+        utterance, {}, conversation_id="route-b-tuning-correction"
+    )
+    assert candidate.payload["correction_of"] == "prior preference"
+
+
+@pytest.mark.parametrize(
+    ("utterance", "expression", "scope"),
+    (
+        ("今天先逐步说明，明天恢复", "今天;明天恢复", TemporalScope.SESSION),
+        ("本轮请示范，之后不用", "本轮;之后不用", TemporalScope.TURN_ONLY),
+    ),
+)
+def test_generalized_restore_bound_stays_clause_local(
+    route_b_factory, utterance, expression, scope
+):
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+    [candidate] = extractor.extract(
+        utterance, {}, conversation_id="route-b-tuning-restore"
+    )
+    assert candidate.payload["temporal_expression"] == expression
+    assert "negated" not in candidate.payload
+    assert "polarity" not in candidate.payload
+    assert candidate.temporal_scope is scope
+
+
+def test_explicit_self_double_negation_keeps_preference_owner(route_b_factory):
+    utterance = "我不是不偏好图解"
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+    [candidate] = extractor.extract(
+        utterance, {}, conversation_id="route-b-tuning-negation"
+    )
+    assert candidate.payload["negated"] is False
+
+
+def test_grammatical_and_lexical_bu_do_not_cancel_each_other(route_b_factory):
+    difficulty_text = "我不懂不等式"
+    preference_text = "我不喜欢用不等式图示讲解"
+    extractor = route_b_factory(
+        {
+            difficulty_text: SemanticFamily.DIFFICULTY,
+            preference_text: SemanticFamily.PREFERENCE,
+        }
+    )
+
+    [difficulty] = extractor.extract(
+        difficulty_text,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-mixed-negation-difficulty",
+    )
+    [preference] = extractor.extract(
+        preference_text, {}, conversation_id="route-b-mixed-negation-preference"
+    )
+
+    assert difficulty.payload["negated"] is True
+    assert difficulty.payload["polarity"] == "negative"
+    assert preference.payload["negated"] is True
+    assert preference.payload["polarity"] == "negative"
+
+
+def test_lexical_bu_inside_profile_and_task_payload_is_not_negation(route_b_factory):
+    profile_text = "我可能叫不凡"
+    task_text = "接着做不等式"
+    extractor = route_b_factory(
+        {
+            profile_text: SemanticFamily.PROFILE,
+            task_text: SemanticFamily.TASK_STATE,
+        }
+    )
+
+    [profile] = extractor.extract(
+        profile_text, {}, conversation_id="route-b-lexical-profile"
+    )
+    [task] = extractor.extract(
+        task_text,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-lexical-task",
+    )
+
+    assert profile.payload == {"preferred_name": "不凡", "uncertainty": "uncertain"}
+    assert task.payload == {"subject": "数学", "requested_target": "不等式"}
+
+
+@pytest.mark.parametrize(
+    ("utterance", "family"),
+    (
+        ("我以前怕不等式，现在会了", SemanticFamily.TOPIC_PROGRESS),
+        ("我总弄混不等式和等式", SemanticFamily.DIFFICULTY),
+    ),
+)
+def test_lexical_bu_does_not_leak_into_qualifiers(route_b_factory, utterance, family):
+    extractor = route_b_factory({utterance: family})
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-lexical-negation",
+    )
+    assert "negated" not in candidate.payload
+    assert "polarity" not in candidate.payload

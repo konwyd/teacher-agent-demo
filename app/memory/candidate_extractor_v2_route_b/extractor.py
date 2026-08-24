@@ -48,6 +48,7 @@ OWNER_MODIFIER_FRAGMENT = (
     r"(?:(?:真的|确实|其实|还是|仍然|依然|总是|一直|比较|特别|非常|更|"
     r"有点|有些|不太|完全|独立|自己|认真|成功地?)\s*)*"
 )
+SELF_NEGATION_MODIFIER_FRAGMENT = r"(?:(?:不是|并不是|不)\s*)*"
 PREFERENCE_IMPLICIT_PREFIX_RE = re.compile(
     r"(?:(?:真的|确实|还是|仍然|依然|比较|特别|非常|更|有点|有些|不太)\s*)*"
 )
@@ -61,7 +62,9 @@ EPISODE_IMPLICIT_PREFIX_RE = re.compile(
     r"(?:(?:练习|测验|考试|课堂|做题?|解题?|学习|答题?)(?:时|中)?\s*)?"
     r"(?:(?:自己|独立|认真|成功地?)\s*)*"
 )
-EXPLICIT_SELF_OWNER_RE = re.compile(rf"(?:我|本人)(?:的)?\s*{OWNER_MODIFIER_FRAGMENT}$")
+EXPLICIT_SELF_OWNER_RE = re.compile(
+    rf"(?:我|本人)(?:的)?\s*{SELF_NEGATION_MODIFIER_FRAGMENT}{OWNER_MODIFIER_FRAGMENT}$"
+)
 THIRD_PERSON_ROLE_FRAGMENT = (
     r"老师|同学|学生|学员|孩子|哥哥|姐姐|弟弟|妹妹|爸爸|妈妈|父亲|母亲|"
     r"爷爷|奶奶|外公|外婆|朋友"
@@ -71,6 +74,11 @@ THIRD_PERSON_OWNER_RE = re.compile(
     rf"[A-Za-z][A-Za-z0-9_-]{{0,31}})\s*{OWNER_MODIFIER_FRAGMENT}$"
 )
 PREFERENCE_PREDICATE_RE = re.compile(r"不太喜欢|不喜欢|不希望|不想|喜欢|偏好|习惯|希望")
+GRAMMATICAL_BU_RE = re.compile(
+    r"不(?:太|喜欢|偏好|习惯|希望|想|明白|懂|会|能|要|用|需要|应该|是|"
+    r"看|听|讲|画|举|保存|记住|记录|存储|给|采用|接受|恢复|继续|做|解|"
+    r"掌握|学|说|说明|示范)"
+)
 DIFFICULTY_PREDICATE_RE = re.compile(r"不明白|弄不清|不懂|不会|没懂")
 EPISODE_RESULT_PREDICATE_RE = re.compile(
     r"解出|做出|答出|答对|算对|完成|掌握|学会|弄懂|解决|回答|讲"
@@ -84,6 +92,39 @@ CURRENT_PROBLEM_INSTRUCTION_RE = re.compile(
 TEACHER_REQUEST_PREFIX_RE = re.compile(r"(?:我希望|我想让你|请你)")
 INSTRUCTIONAL_ACTION_RE = re.compile(r"(?:给(?:我)?|讲|举|画|用|展示|演示|做)")
 INSTRUCTIONAL_OBJECT_RE = re.compile(r"(?:例子|例题|示范|画图|图示|图解)")
+DURABLE_FORMAT_REQUEST_RE = re.compile(
+    r"(?:一步一步|分步骤|逐步|慢一些|慢点|讲慢|放慢)"
+)
+SELF_FORMAT_REQUEST_RE = re.compile(
+    r"^(?:(?:可能|也许|大概|或许|从现在起|以后都|以后|今天|暂时|本次|这次|本轮|这一轮|并不是不要|不是不要|不要)\s*)+"
+    r"(?:先\s*)?(?:请|麻烦|一步一步|分步骤|逐步|讲|说明|说|放慢)"
+    r"|^(?:先\s*)?(?:请|麻烦)"
+)
+REQUEST_SIGNAL_RE = re.compile(r"(?:请|麻烦|讲|说明|说|放慢)")
+REQUEST_STYLE_MODIFIER_FRAGMENT = (
+    r"(?:(?:尽量|尽可能|耐心地?|详细地?|清楚地?|慢慢地?|再|先)\s*)*"
+)
+BARE_REQUEST_ACTOR_RE = re.compile(
+    r"^(?:先\s*)?(?:请|麻烦)"
+    r"(?!一步一步|分步骤|逐步|讲|说明|说|放慢|尽量|尽可能|耐心地?|"
+    r"详细地?|清楚地?|慢慢地?|再|先)"
+    r"(?P<actor>[\u4e00-\u9fff]{2,4}|[A-Za-z][A-Za-z0-9_-]{0,31})"
+    rf"(?={REQUEST_STYLE_MODIFIER_FRAGMENT}(?:一步一步|分步骤|逐步|讲|说明|说|放慢))"
+)
+CONDITIONAL_SELF_CONTEXT_SUFFIXES = (
+    "题",
+    "课",
+    "内容",
+    "问题",
+    "知识点",
+    "章节",
+    "场景",
+    "情况",
+)
+CURRENT_PROBLEM_REFERENCE_RE = re.compile(r"(?:这|本)(?:一)?(?:道)?题")
+ADDITIVE_EXAMPLE_REQUEST_RE = re.compile(
+    r"^(?:也请|平时请|通常)(?:举例|示范|给我|讲|做)"
+)
 REQUEST_RECIPIENT_MODIFIER_FRAGMENT = r"(?:(?:比较|特别|非常|更|耐心地?)\s*)*"
 REQUEST_RECIPIENT_RE = re.compile(
     rf"(?:给|向|为)\s*(?P<recipient>我|本人|{THIRD_PERSON_ROLE_FRAGMENT}|"
@@ -152,7 +193,7 @@ class CandidateExtractorRouteB:
                 if parsed is None:
                     continue
                 memory_type, payload, default_scope = parsed
-                payload.update(_qualifier_payload(analysis))
+                payload.update(_qualifier_payload(analysis, memory_type, payload))
                 candidate_specs.append(
                     (
                         memory_type,
@@ -380,12 +421,22 @@ def _is_current_instructional_request(text: str) -> bool:
 
 
 def _request_recipient_owners(text: str) -> tuple[PredicateOwner, ...]:
-    return tuple(
-        PredicateOwner.SELF
-        if match.group("recipient") in {"我", "本人"}
-        else PredicateOwner.THIRD_PERSON
+    owners = [
+        (
+            PredicateOwner.SELF
+            if match.group("recipient") in {"我", "本人"}
+            else PredicateOwner.THIRD_PERSON
+        )
         for match in REQUEST_RECIPIENT_RE.finditer(text)
-    )
+    ]
+    bare_actor = BARE_REQUEST_ACTOR_RE.match(text)
+    if bare_actor is not None:
+        owners.append(
+            PredicateOwner.SELF
+            if bare_actor.group("actor") in {"我", "本人"}
+            else PredicateOwner.THIRD_PERSON
+        )
+    return tuple(owners)
 
 
 def _is_bounded_preference_request(analysis: QualifierAnalysis) -> bool:
@@ -399,6 +450,11 @@ def _is_bounded_preference_request(analysis: QualifierAnalysis) -> bool:
         if action is None:
             return False
         condition = text[len("如果") : action.start()].strip()
+        if condition.startswith("是") and condition[1:].strip():
+            context = condition[1:].strip()
+            return context in {"我", "本人"} or context.endswith(
+                CONDITIONAL_SELF_CONTEXT_SUFFIXES
+            )
         condition_triggers = _owned_family_predicates(
             condition,
             CONDITION_TRIGGER_RE,
@@ -411,7 +467,7 @@ def _is_bounded_preference_request(analysis: QualifierAnalysis) -> bool:
         prefix = f"只在{analysis.condition}"
         if text.startswith(prefix):
             return REQUEST_ACTION_RE.match(text[len(prefix) :].lstrip()) is not None
-    for expression in analysis.temporal_expression.split("；"):
+    for expression in re.split(r"[；;]", analysis.temporal_expression):
         if expression and text.startswith(expression):
             return REQUEST_ACTION_RE.match(text[len(expression) :].lstrip()) is not None
     return False
@@ -461,7 +517,31 @@ def _parse_preference(analysis: QualifierAnalysis) -> ParsedFamily | None:
     bounded_request = (
         _is_bounded_preference_request(analysis) and not has_foreign_or_ambiguous_stance
     )
-    if not (self_statement or bounded_request):
+    has_third_person_recipient = (
+        PredicateOwner.THIRD_PERSON in _request_recipient_owners(analysis.text)
+    )
+    format_request = bool(
+        DURABLE_FORMAT_REQUEST_RE.search(analysis.text)
+        and SELF_FORMAT_REQUEST_RE.search(analysis.text)
+        and REQUEST_SIGNAL_RE.search(analysis.text)
+        and not CURRENT_PROBLEM_REFERENCE_RE.search(analysis.text)
+        and not has_third_person_recipient
+        and not has_foreign_or_ambiguous_stance
+    )
+    additive_example_request = bool(
+        ADDITIVE_EXAMPLE_REQUEST_RE.search(analysis.text)
+        and not has_third_person_recipient
+    )
+    general_exception = bool(
+        analysis.condition == "except current problem" and additive_example_request
+    )
+    if not (
+        self_statement
+        or bounded_request
+        or format_request
+        or additive_example_request
+        or general_exception
+    ):
         return None
     preferences = [
         label
@@ -624,14 +704,13 @@ def _merge_candidates(
 
 
 def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
-    if analysis.negated is True:
-        return None
     grade_match = re.match(
         r"^(?:(?:我|本人)(?:现在|今年|目前|当前)?(?:是|读|上)?|)([一二三四五六七八九1-9])年级",
         analysis.text,
     )
     name_match = re.search(
-        r"(?:请)?(?:称呼我|叫我|我叫)(?:为)?([A-Za-z][A-Za-z0-9_-]{0,31}|[\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{0,11})",
+        r"(?:请)?(?:称呼我|叫我|我(?:可能|也许|大概|或许)?叫)(?:为)?"
+        r"([A-Za-z][A-Za-z0-9_-]{0,31}|[\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{0,11})",
         analysis.text,
     )
     payload: dict[str, Any] = {}
@@ -641,11 +720,11 @@ def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
         payload["preferred_name"] = name_match.group(1).casefold()
     if not payload:
         return None
-    return (
-        MemoryType.PROFILE_FACT,
-        payload,
-        TemporalScope.PERSISTENT,
-    )
+    if analysis.negated is True and not _lexical_bu_is_payload_text(
+        analysis.text, payload
+    ):
+        return None
+    return (MemoryType.PROFILE_FACT, payload, TemporalScope.PERSISTENT)
 
 
 def _parse_learning_goal(
@@ -653,17 +732,18 @@ def _parse_learning_goal(
 ) -> ParsedFamily | None:
     if not subject:
         return None
-    if not re.match(
-        r"^(?:我)?(?:想|希望|打算|计划|要|我的目标是|目标是)", analysis.text
-    ):
-        return None
     deadline = re.search(
-        r"(?:期末前|月底前|考试前|中考前|高考前|本学期内|这学期内|[一二三四五六七八九十0-9]+(?:天|周|个月)内)",
+        r"(?:期末前|月底前|月考前|考试前|中考前|高考前|本学期内|这学期内|[一二三四五六七八九十0-9]+(?:天|周|个月)内)",
         analysis.text,
     )
-    goal = re.sub(
-        r"^(?:我)?(?:想|希望|打算|计划|要|我的目标是|目标是)", "", analysis.text
-    ).strip()
+    intent = re.match(
+        r"^(?:我)?(?:想|希望|打算|计划|要|我的目标是|目标是)", analysis.text
+    )
+    deadline_first = deadline is not None and deadline.start() == 0
+    if intent is None and not deadline_first:
+        return None
+    goal = analysis.text[intent.end() :] if intent is not None else analysis.text
+    goal = goal.strip()
     if deadline:
         goal = goal.replace(f"在{deadline.group(0)}", "", 1)
         goal = goal.replace(deadline.group(0), "", 1)
@@ -674,13 +754,14 @@ def _parse_learning_goal(
     ):
         return None
     payload = {"subject": subject, "goal": goal}
+    default_scope = TemporalScope.PERSISTENT
     if deadline:
-        payload["deadline_expression"] = deadline.group(0)
-    return (
-        MemoryType.LEARNING_GOAL,
-        payload,
-        TemporalScope.PERSISTENT,
-    )
+        if deadline_first:
+            payload["temporal_expression"] = deadline.group(0)
+            default_scope = TemporalScope.SHORT_LIVED
+        else:
+            payload["deadline_expression"] = deadline.group(0)
+    return (MemoryType.LEARNING_GOAL, payload, default_scope)
 
 
 def _parse_topic_progress(
@@ -688,6 +769,22 @@ def _parse_topic_progress(
 ) -> ParsedFamily | None:
     if not subject:
         return None
+    resolved = re.match(
+        r"^(?:我)?以前怕(?P<topic>[^，,。]{1,80})[，,]\s*现在会了$",
+        analysis.text,
+    )
+    if resolved:
+        return (
+            MemoryType.TOPIC_PROGRESS,
+            {
+                "subject": subject,
+                "topic": resolved.group("topic").strip(),
+                "status": "resolved",
+                "explicit_correction": True,
+                "correction_of": "difficulty",
+            },
+            TemporalScope.SHORT_LIVED,
+        )
     for pattern, status in (
         (
             r"(?:我)?(?:还没|尚未|还没有)掌握(?P<topic>[^，,。]{1,80})(?:了)?$",
@@ -713,6 +810,18 @@ def _parse_topic_progress(
 def _parse_task_state(analysis: QualifierAnalysis, subject: str) -> ParsedFamily | None:
     if not subject:
         return None
+    continuation = re.match(
+        r"^(?:继续|接着(?:做)?|回到)(?P<target>[^，,。]{1,160})$", analysis.text
+    )
+    if continuation:
+        return (
+            MemoryType.TASK_STATE,
+            {
+                "subject": subject,
+                "requested_target": continuation.group("target").strip(),
+            },
+            TemporalScope.TURN_ONLY,
+        )
     target = re.sub(
         r"^(?:我)?(?:现在|当前|这会儿)?(?:想|要|需要|打算|准备)", "", analysis.text
     )
@@ -783,6 +892,27 @@ def _parse_behavior_evidence(
 def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily | None:
     if not subject:
         return None
+    confusion = re.match(
+        r"^(?:我)?(?P<frequency>经常|总是|总|老是|常常)?弄混(?P<objects>[^，,。]{1,80})$",
+        analysis.text,
+    )
+    if confusion:
+        objects = confusion.group("objects").strip()
+        if "分子" in objects and "分母" in objects:
+            topic = "分数"
+        elif "被除数" in objects and "除数" in objects:
+            topic = "除法"
+        else:
+            topic = objects
+        return (
+            MemoryType.DIFFICULTY,
+            {"subject": subject, "topic": topic, "statement": f"弄混{objects}"},
+            (
+                TemporalScope.PERSISTENT
+                if confusion.group("frequency")
+                else TemporalScope.SHORT_LIVED
+            ),
+        )
     reversal = re.match(
         r"^(?:我)?(?:经常|总是|老是|常常)?把(?P<topic>[A-Za-z0-9_\-\u4e00-\u9fff]{1,80}?)(?P<verb>搞反|弄反|弄错|算错|看错)",
         analysis.text,
@@ -820,16 +950,60 @@ def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily
     return None
 
 
-def _qualifier_payload(analysis: QualifierAnalysis) -> dict[str, Any]:
+def _lexical_bu_count(text: str) -> int:
+    return sum(
+        1
+        for index, character in enumerate(text)
+        if character == "不" and GRAMMATICAL_BU_RE.match(text, index) is None
+    )
+
+
+def _lexical_bu_is_payload_text(text: str, payload: Mapping[str, Any]) -> bool:
+    total_bu = text.count("不")
+    payload_strings = tuple(
+        value for value in payload.values() if isinstance(value, str) and "不" in value
+    )
+    return (
+        total_bu > 0
+        and _lexical_bu_count(text) == total_bu
+        and bool(payload_strings)
+        and max(_lexical_bu_count(value) for value in payload_strings) == total_bu
+    )
+
+
+def _qualifier_payload(
+    analysis: QualifierAnalysis,
+    memory_type: MemoryType,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    uncertainty = analysis.uncertainty
+    if uncertainty and memory_type is MemoryType.PROFILE_FACT:
+        uncertainty = "uncertain"
+    correction_of = analysis.correction_of
+    if analysis.explicit_correction and memory_type is MemoryType.PREFERENCE:
+        correction_of = "prior preference"
+    negated = analysis.negated
+    polarity = analysis.polarity
+    if analysis.condition == "except current problem":
+        negated = None
+        polarity = ""
+    if re.search(r"[，,]\s*(?:以后|之后)不用$", analysis.text):
+        primary = re.split(r"[，,]", analysis.text, maxsplit=1)[0]
+        primary_analysis = analyze_clause(primary)
+        negated = primary_analysis.negated
+        polarity = primary_analysis.polarity
+    if _lexical_bu_is_payload_text(analysis.text, payload):
+        negated = None
+        polarity = ""
     values = {
-        "negated": analysis.negated,
-        "polarity": analysis.polarity,
+        "negated": negated,
+        "polarity": polarity,
         "condition": analysis.condition,
         "scope": analysis.scope,
         "temporal_expression": analysis.temporal_expression,
-        "uncertainty": analysis.uncertainty,
+        "uncertainty": uncertainty,
         "explicit_correction": analysis.explicit_correction or None,
-        "correction_of": analysis.correction_of,
+        "correction_of": correction_of,
     }
     return {key: value for key, value in values.items() if value not in ("", None)}
 

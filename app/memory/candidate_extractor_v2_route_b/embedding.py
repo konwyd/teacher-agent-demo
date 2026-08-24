@@ -76,7 +76,7 @@ DEFAULT_PROTOTYPES: Mapping[SemanticFamily, tuple[str, ...]] = {
     ),
 }
 DEFAULT_THRESHOLDS: Mapping[SemanticFamily, float] = {
-    family: 0.70 for family in SemanticFamily
+    family: 0.45 for family in SemanticFamily
 }
 
 

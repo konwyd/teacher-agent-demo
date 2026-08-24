@@ -23,7 +23,11 @@ KINSHIP_REFERENT_RE = re.compile(
 META_QUOTED_RE = re.compile(r"[‘'\"“].+?[’'\"”].*(?:这个词|含义|是什么意思|定义)")
 PRIVACY_PROHIBITION_RE = re.compile(r"(?:不要|别|请勿).{0,8}(?:保存|记住|记录|存储)")
 INSTRUCTIONAL_EXAMPLE_PATTERNS = ("举例说明", "例题中的", "假设学生")
-NEGATION_MARKERS = ("不是", "不", "没", "没有", "勿", "别")
+NEGATION_TOKEN_RE = re.compile(
+    r"不是|不(?=太|喜欢|偏好|习惯|希望|想|明白|懂|会|能|要|用|需要|应该|是|"
+    r"看|听|讲|画|举|保存|记住|记录|存储|给|采用|接受|恢复|继续|做|解|"
+    r"掌握|学|说|说明|示范)|没有|没|勿|别"
+)
 CORRECTION_MARKERS = ("改一下", "更正", "纠正", "我其实", "其实")
 HEDGE_MARKERS = ("可能", "也许", "大概", "或许", "不一定", "应该")
 SCOPE_MARKERS = (
@@ -34,6 +38,7 @@ SCOPE_MARKERS = (
     ("英语", "english"),
 )
 CONDITION_PATTERNS = (
+    re.compile(r"如果是(?P<condition>[^，。；;]{1,80}?)(?=请|给|讲|举|画|展示|说明)"),
     re.compile(r"只在(?P<condition>[^，。；;]+?课)"),
     re.compile(r"如果(?P<condition>[^，。；;]+)(?:[，。；;]|$)"),
 )
@@ -42,6 +47,9 @@ TEMPORAL_RULES = (
     (TemporalScope.SESSION, ("这节课", "本节课", "今天", "今天这次", "当前会话")),
     (TemporalScope.SHORT_LIVED, ("暂时", "这一会儿", "这几天", "一段时间", "最近")),
     (TemporalScope.PERSISTENT, ("从现在起", "以后都", "今后", "长期", "一直")),
+)
+RESTORE_BOUND_RE = re.compile(
+    r"(?:[，,]\s*)?(?P<expression>明天恢复(?:默认)?|以后不用|之后不用)$"
 )
 
 
@@ -76,8 +84,21 @@ def segment_clauses(text: str) -> tuple[str, ...]:
 
 def _is_bound_qualifier_clause(text: str) -> bool:
     return bool(
-        re.match(r"(?:改一下|更正|纠正)[，,]\s*(?:我其实|其实)", text)
+        re.match(
+            r"(?:改一下|更正(?:一下)?|纠正(?:一下)?)[，,]\s*(?:我其实|其实)",
+            text,
+        )
         or re.match(r"(?:本次|这次|本轮|这一轮)[^，,]*[，,]\s*之后恢复默认$", text)
+        or re.match(
+            r"(?:今天|本次|这次|本轮|这一轮)[^，,]*[，,]\s*"
+            r"(?:明天恢复(?:默认)?|以后不用|之后不用)$",
+            text,
+        )
+        or re.match(
+            r"(?:通常|平时)[^，,]*[，,]\s*(?:这|本)(?:一)?(?:道)?题(?:不要|不用)$",
+            text,
+        )
+        or re.match(r"(?:我)?以前怕[^，,。]{1,80}[，,]\s*现在会了$", text)
     )
 
 
@@ -102,17 +123,7 @@ def _has_third_person_owner(text: str) -> bool:
 
 
 def _negation_parity(text: str) -> tuple[bool | None, str]:
-    count = 0
-    index = 0
-    while index < len(text):
-        marker = next(
-            (item for item in NEGATION_MARKERS if text.startswith(item, index)), ""
-        )
-        if marker:
-            count += 1
-            index += len(marker)
-        else:
-            index += 1
+    count = sum(1 for _ in NEGATION_TOKEN_RE.finditer(text))
     if not count:
         return None, ""
     negated = bool(count % 2)
@@ -120,6 +131,11 @@ def _negation_parity(text: str) -> tuple[bool | None, str]:
 
 
 def _condition_and_scope(text: str) -> tuple[str, str]:
+    if re.match(
+        r"(?:通常|平时)[^，,]*[，,]\s*(?:这|本)(?:一)?(?:道)?题(?:不要|不用)$",
+        text,
+    ):
+        return "except current problem", "general"
     condition = ""
     for pattern in CONDITION_PATTERNS:
         match = pattern.search(text)
@@ -145,7 +161,11 @@ def _temporal_analysis(text: str, uncertainty: str) -> tuple[str, TemporalScope 
             expressions.extend(found)
             temporal_hint = scope
             break
-    if "以后" in text and "以后都" not in text:
+    restore = RESTORE_BOUND_RE.search(text)
+    if restore and restore.group("expression") not in expressions:
+        expressions.append(restore.group("expression"))
+        return ";".join(expressions), temporal_hint
+    if "以后" in text and "以后都" not in text and "以后不用" not in text:
         expressions.append("以后")
     return "；".join(expressions), temporal_hint
 

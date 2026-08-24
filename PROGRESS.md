@@ -47,7 +47,7 @@ Status:
 ACTIVE DEVELOPMENT
 
 Current phase:
-Memory V2 — CandidateExtractorV2 comparative spike / Route B Tasks 1–6 implemented; development-only real-model tuning pending
+Memory V2 — CandidateExtractorV2 comparative spike / Route B Tasks 1–8 implemented; coordinator governance review pending
 
 Active branch:
 `spike/candidate-extractor-v2-embedding-hybrid`
@@ -66,31 +66,34 @@ Last updated:
 - Route B utterance and frozen-upstream candidate extraction for the eight supported memory families, including bounded multi-candidate merge and malformed-input diagnostics
 - Route B read-only development/Layer B benchmark adapter and CLI with deterministic replay and operational reporting
 - Route B optional dependency, model metadata, reproducible procedure, safety controls, and provisional evidence documentation
+- Route B real CPU development-only tuning using a generic 0.45 threshold and generalized parser TDD, followed by unchanged Layer B regression measurement
+- Route B final verification: 139 targeted Route B/benchmark tests, 956 full repository tests, offline evaluation 38/38, Memory admission robustness exit 0, manifest verification exit 0, and protected-scope audit clean
 
 ### Current findings
 
 - Admission Policy V1 is not currently the primary bottleneck; candidate extraction quality remains a major comparative question.
 - Route B keeps embeddings advisory: deterministic parsers own fields, source kind, qualifiers, and temporal scope.
 - Route B uses local `BAAI/bge-m3` (MIT, 1024 dimensions) through `sentence-transformers==5.6.0`, defaults to CPU, and does not download weights implicitly.
+- Real BGE-M3 development evidence reached exact candidate-set accuracy 1.0000 (32/32) with precision/recall/F1 1.0000 and clean frozen safety slices.
+- Unchanged Layer B aggregate evidence reached exact accuracy 0.28125 (9/32), precision/recall/F1 0.9167/0.4231/0.5789, payload accuracy 0.3636, temporal-scope accuracy 0.8182, and temporal inflation 0.0909 (1/11).
+- Layer B case results and labels were not used for tuning. The aggregate regression gap remains material and Route B cannot be declared a winner.
 - The Route B runner accepts only `development` and unchanged `layer_b`; Route B sealed-holdout runs remain zero.
+- Governance disclosure: an earlier independent reviewer accidentally exposed sealed-holdout path content during a broad read-only search. The primary Route B worker did not receive or use labels/IDs, but the branch cannot provide a clean `SEALED_HOLDOUT_LABELS_INSPECTED=NO` attestation.
 - Route B is isolated from the authoritative runtime and baseline writer. Memory V2 admission remains shadow-only and baseline writing remains authoritative.
 - Causal duplicate observations can still incorrectly increase evidence maturity; the extractor spike intentionally does not solve causal-root identity.
 
 ### Current blockers
 
-1. Route B quality and operational values are not yet measured with the real local BGE-M3 backend. Tasks 1–6 provide implementation and offline unit/regression evidence only.
+1. The gap between perfect small-split development results and weak unchanged Layer B recall/payload/scope metrics is a material generalization and contamination risk.
 2. Causal observation identity remains a separate future contract problem outside the CandidateExtractorV2 spike.
 3. Overall route comparison and any controlled sealed-holdout evaluation belong to the coordinator; this branch cannot declare a winner.
+4. The accidental reviewer exposure requires coordinator governance disposition before this route is marked ready for coordinator evaluation.
 
 ### Next
 
-1. Prepare the first real local BGE-M3 run using development for tuning evidence and unchanged Layer B for regression evidence.
-2. Replace provisional quality/resource placeholders in `docs/memory/CANDIDATE_EXTRACTOR_V2_ROUTE_B.md` with fresh Task 7 measurements.
-3. Preserve generic prototypes and generalized parser rules; do not add case-ID or copied-utterance branches.
-4. Run and tune Route B on the frozen development split only; rerun unchanged Layer B after generalized changes.
-5. Record all frozen metrics, qualifier/contamination slices, latency, throughput, RAM/VRAM, encode counts, dependency versions, replay, and line count.
-6. Run full repository tests, offline evaluation, Memory admission robustness, manifest verification, and protected-scope audits.
-7. Hand the clean isolated branch to the coordinator without changing AdmissionPolicyV1, shared contracts, frozen evaluator/data/labels, existing Layer B labels, runtime policy, or causal-dedup semantics.
+1. Commit the final scoped Route B implementation and verification documentation on the assigned branch.
+2. Hand the clean isolated branch and governance disclosure to the coordinator without changing AdmissionPolicyV1, shared contracts, frozen evaluator/data/labels, existing Layer B labels, runtime policy, or causal-dedup semantics.
+3. Leave any sealed-holdout execution, governance disposition, and route comparison decision to the coordinator.
 
 
 ## 3. Agent Runtime / Agent Loop
