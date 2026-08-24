@@ -383,11 +383,16 @@ def test_duplicate_compatible_candidates_are_merged_once(route_b_factory):
         ("我希望张三更喜欢图示讲解", SemanticFamily.PREFERENCE),
         ("本次讲慢点张三更喜欢", SemanticFamily.PREFERENCE),
         ("本次请给张三一个例子", SemanticFamily.PREFERENCE),
+        ("以后都给 张三一个例子", SemanticFamily.PREFERENCE),
+        ("以后都给张三非常耐心地讲一个例子", SemanticFamily.PREFERENCE),
         ("只在数学课给张三讲慢一点", SemanticFamily.PREFERENCE),
+        ("只在数学课给张三非常耐心地讲慢一点", SemanticFamily.PREFERENCE),
         ("只在数学课讲慢点张三更喜欢", SemanticFamily.PREFERENCE),
         ("如果张三需要请讲慢一些", SemanticFamily.PREFERENCE),
         ("以后都用图示张三更喜欢", SemanticFamily.PREFERENCE),
         ("昨天练习时张三解出了方程", SemanticFamily.LEARNING_EPISODE),
+        ("昨天课堂张三回答了问题", SemanticFamily.LEARNING_EPISODE),
+        ("昨天练习时张三讲了方法", SemanticFamily.LEARNING_EPISODE),
     ),
 )
 def test_third_person_fact_is_a_hard_negative(route_b_factory, utterance, family):
@@ -505,6 +510,9 @@ def test_common_first_person_claim_is_not_suppressed(
         "我希望这题能画图",
         "我希望你演示一道例题",
         "我希望你做一道示范",
+        "我希望张三演示一道例题",
+        "我希望张三给我一个例子",
+        "我希望老师给我一个例子",
     ),
 )
 def test_current_instructional_request_is_not_a_persistent_preference(

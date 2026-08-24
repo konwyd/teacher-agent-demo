@@ -73,11 +73,7 @@ THIRD_PERSON_OWNER_RE = re.compile(
 PREFERENCE_PREDICATE_RE = re.compile(r"不太喜欢|不喜欢|不希望|不想|喜欢|偏好|习惯|希望")
 DIFFICULTY_PREDICATE_RE = re.compile(r"不明白|弄不清|不懂|不会|没懂")
 EPISODE_RESULT_PREDICATE_RE = re.compile(
-    r"解出|做出|答出|答对|算对|完成|掌握|学会|弄懂|解决"
-)
-EPISODE_LEADING_ACTIVITY_RE = re.compile(
-    r"^(?:我)?(?:自己|独立|认真|成功地?)?"
-    r"(?:练习|测验|考试|课堂|做|解|学|答)"
+    r"解出|做出|答出|答对|算对|完成|掌握|学会|弄懂|解决|回答|讲"
 )
 REQUEST_ACTION_RE = re.compile(
     r"(?:请|给(?:我)?|举|画|讲(?:慢|得)?|用(?:图|例)|展示|说明)"
@@ -85,12 +81,14 @@ REQUEST_ACTION_RE = re.compile(
 CURRENT_PROBLEM_INSTRUCTION_RE = re.compile(
     r"(?:这|本)(?:一)?(?:道)?题.*(?:例子|例题|举例|示范|画图|图示|图解)"
 )
-TEACHER_REQUEST_PREFIX_RE = re.compile(r"(?:我希望你|我想让你|请你)")
+TEACHER_REQUEST_PREFIX_RE = re.compile(r"(?:我希望|我想让你|请你)")
 INSTRUCTIONAL_ACTION_RE = re.compile(r"(?:给(?:我)?|讲|举|画|用|展示|演示|做)")
 INSTRUCTIONAL_OBJECT_RE = re.compile(r"(?:例子|例题|示范|画图|图示|图解)")
+REQUEST_RECIPIENT_MODIFIER_FRAGMENT = r"(?:(?:比较|特别|非常|更|耐心地?)\s*)*"
 REQUEST_RECIPIENT_RE = re.compile(
-    rf"(?:给|向|为)(?P<recipient>我|本人|{THIRD_PERSON_ROLE_FRAGMENT}|"
-    rf"[\u4e00-\u9fff]{{2,4}}|[A-Za-z][A-Za-z0-9_-]{{0,31}})"
+    rf"(?:给|向|为)\s*(?P<recipient>我|本人|{THIRD_PERSON_ROLE_FRAGMENT}|"
+    rf"[\u4e00-\u9fff]{{2,4}}?|[A-Za-z][A-Za-z0-9_-]{{0,31}})\s*"
+    rf"{REQUEST_RECIPIENT_MODIFIER_FRAGMENT}"
     r"(?=(?:一|几|些|个|讲|展示|说明|看|用|画|举|听|做|解))"
 )
 
@@ -464,11 +462,10 @@ def _parse_learning_episode(
         EPISODE_RESULT_PREDICATE_RE,
         implicit_prefix_re=EPISODE_IMPLICIT_PREFIX_RE,
     )
-    if result_predicates:
-        decisive_result = result_predicates[-1]
-        if decisive_result.owner is not PredicateOwner.SELF:
-            return None
-    elif not EPISODE_LEADING_ACTIVITY_RE.match(body):
+    if not result_predicates:
+        return None
+    decisive_result = result_predicates[-1]
+    if decisive_result.owner is not PredicateOwner.SELF:
         return None
     return (
         MemoryType.LEARNING_EPISODE,
