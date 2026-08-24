@@ -204,7 +204,9 @@ ParsedFamily = tuple[MemoryType, dict[str, Any], TemporalScope]
 
 
 def _required_text(value: Any, limit: int) -> str:
-    return str(value or "").strip()[:limit]
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:limit]
 
 
 def _normalize_observation(observation: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -282,6 +284,15 @@ def _sanitize_optional_upstream(
                     continue
                 claim = _required_text(inference.get("claim"), 80)
                 memory_type = _required_text(inference.get("memory_type"), 80)
+                if (
+                    "claim" in inference
+                    and "memory_type" in inference
+                    and claim
+                    and memory_type
+                    and claim != memory_type
+                ):
+                    malformed_count += 1
+                    continue
                 if not claim and not memory_type:
                     malformed_count += 1
                     continue

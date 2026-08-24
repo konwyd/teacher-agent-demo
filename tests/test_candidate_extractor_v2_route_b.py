@@ -1001,3 +1001,60 @@ def test_falsey_wrong_upstream_containers_are_counted_as_malformed(route_b_facto
         == []
     )
     assert extractor.diagnostics.malformed_upstream_items == 3
+
+
+def test_non_string_required_upstream_values_are_rejected_and_counted(
+    route_b_factory,
+):
+    extractor = route_b_factory({})
+
+    actual = extractor.extract(
+        "",
+        {
+            "verification": {"status": ["verified_correct"]},
+            "observations": (
+                {"episode": {"text": "diagram enabled understanding"}},
+                {"pattern": 3},
+                {"evidence_pattern": True},
+                {"topic": ["方程"], "status": "independent"},
+                {"topic": "方程", "status": {"value": "independent"}},
+            ),
+            "model_inferences": (
+                {"claim": ["difficulty"], "topic": "past tense"},
+                {"memory_type": "difficulty", "topic": {"name": "past tense"}},
+            ),
+        },
+        conversation_id="route-b-non-string-required",
+    )
+
+    assert actual == []
+    assert extractor.diagnostics.malformed_upstream_items == 8
+
+
+def test_conflicting_model_inference_discriminators_fail_safe_and_are_counted(
+    route_b_factory,
+):
+    extractor = route_b_factory({})
+
+    actual = extractor.extract(
+        "",
+        {
+            "classification": {"subject": "英语"},
+            "model_inferences": (
+                {
+                    "claim": "mastery",
+                    "memory_type": "difficulty",
+                    "topic": "past tense",
+                },
+                {
+                    "claim": "difficulty",
+                    "memory_type": "mastery",
+                    "topic": "past tense",
+                },
+            ),
+        },
+        conversation_id="route-b-conflicting-discriminator",
+    )
+
+    assert actual == []
+    assert extractor.diagnostics.malformed_upstream_items == 2
