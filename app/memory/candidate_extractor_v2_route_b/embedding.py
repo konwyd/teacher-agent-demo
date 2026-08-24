@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
 
+MODEL_ID = "BAAI/bge-m3"
+MODEL_LICENSE = "MIT"
+EMBEDDING_DIMENSION = 1024
 DEFAULT_MODEL_PATH = Path("/home/dockerContainerSave/.cache/modelscope/BAAI/bge-m3")
 
 
@@ -80,10 +83,14 @@ DEFAULT_THRESHOLDS: Mapping[SemanticFamily, float] = {
 class BgeM3Embedder:
     """Lazy wrapper around an existing local BGE-M3 snapshot."""
 
-    def __init__(self, model_path: str | Path = DEFAULT_MODEL_PATH, device: str = "cpu"):
+    def __init__(
+        self, model_path: str | Path = DEFAULT_MODEL_PATH, device: str = "cpu"
+    ):
         path = Path(model_path)
         if not path.is_dir():
-            raise RouteBEmbeddingError(f"local BGE-M3 model directory not found: {path}")
+            raise RouteBEmbeddingError(
+                f"local BGE-M3 model directory not found: {path}"
+            )
         self.model_path = path
         self.device = device
         self._model = None
@@ -114,7 +121,9 @@ class SemanticFamilyRanker:
         prototype_source = DEFAULT_PROTOTYPES if prototypes is None else prototypes
         self._prototypes = self._validate_prototypes(prototype_source)
         self._thresholds = self._build_thresholds(thresholds)
-        self._prototype_vectors: Mapping[SemanticFamily, tuple[tuple[float, ...], ...]] | None = None
+        self._prototype_vectors: (
+            Mapping[SemanticFamily, tuple[tuple[float, ...], ...]] | None
+        ) = None
         self._dimension: int | None = None
         self.encode_call_count = 0
         self.encoded_text_count = 0
@@ -125,18 +134,26 @@ class SemanticFamilyRanker:
     ) -> Mapping[SemanticFamily, tuple[str, ...]]:
         unknown_families = set(prototypes).difference(SemanticFamily)
         if unknown_families:
-            raise RouteBEmbeddingError("semantic-family prototypes contain an unknown family")
+            raise RouteBEmbeddingError(
+                "semantic-family prototypes contain an unknown family"
+            )
 
         validated: dict[SemanticFamily, tuple[str, ...]] = {}
         for family in SemanticFamily:
             if family not in prototypes:
                 continue
             texts = tuple(prototypes[family])
-            if not texts or any(not isinstance(text, str) or not text.strip() for text in texts):
-                raise RouteBEmbeddingError(f"semantic-family {family.value} needs non-empty prototypes")
+            if not texts or any(
+                not isinstance(text, str) or not text.strip() for text in texts
+            ):
+                raise RouteBEmbeddingError(
+                    f"semantic-family {family.value} needs non-empty prototypes"
+                )
             validated[family] = texts
         if not validated:
-            raise RouteBEmbeddingError("at least one semantic-family prototype is required")
+            raise RouteBEmbeddingError(
+                "at least one semantic-family prototype is required"
+            )
         return validated
 
     @staticmethod
@@ -147,7 +164,9 @@ class SemanticFamilyRanker:
         if thresholds is not None:
             unknown_families = set(thresholds).difference(SemanticFamily)
             if unknown_families:
-                raise RouteBEmbeddingError("semantic-family thresholds contain an unknown family")
+                raise RouteBEmbeddingError(
+                    "semantic-family thresholds contain an unknown family"
+                )
             values.update(thresholds)
         for family, value in values.items():
             if not math.isfinite(value) or not -1.0 <= value <= 1.0:
@@ -171,59 +190,83 @@ class SemanticFamilyRanker:
             matches = [
                 FamilyMatch(
                     family=family,
-                    similarity=max(self._dot(clause_vector, prototype) for prototype in vectors),
+                    similarity=max(
+                        self._dot(clause_vector, prototype) for prototype in vectors
+                    ),
                 )
                 for family, vectors in prototype_vectors.items()
             ]
             admitted = [
-                match for match in matches if match.similarity >= self._thresholds[match.family]
+                match
+                for match in matches
+                if match.similarity >= self._thresholds[match.family]
             ]
-            admitted.sort(key=lambda match: (-match.similarity, family_order[match.family]))
+            admitted.sort(
+                key=lambda match: (-match.similarity, family_order[match.family])
+            )
             rows.append(tuple(admitted))
         return tuple(rows)
 
-    def _load_prototype_vectors(self) -> Mapping[SemanticFamily, tuple[tuple[float, ...], ...]]:
+    def _load_prototype_vectors(
+        self,
+    ) -> Mapping[SemanticFamily, tuple[tuple[float, ...], ...]]:
         if self._prototype_vectors is not None:
             return self._prototype_vectors
 
         indexed_prototypes = [
-            (family, text) for family in SemanticFamily for text in self._prototypes.get(family, ())
+            (family, text)
+            for family in SemanticFamily
+            for text in self._prototypes.get(family, ())
         ]
-        vectors = self._encode_and_normalize(tuple(text for _, text in indexed_prototypes))
+        vectors = self._encode_and_normalize(
+            tuple(text for _, text in indexed_prototypes)
+        )
         grouped: dict[SemanticFamily, list[tuple[float, ...]]] = {
             family: [] for family in self._prototypes
         }
         for (family, _), vector in zip(indexed_prototypes, vectors, strict=True):
             grouped[family].append(vector)
         self._prototype_vectors = {
-            family: tuple(grouped[family]) for family in SemanticFamily if family in grouped
+            family: tuple(grouped[family])
+            for family in SemanticFamily
+            if family in grouped
         }
         return self._prototype_vectors
 
-    def _encode_and_normalize(self, texts: Sequence[str]) -> tuple[tuple[float, ...], ...]:
+    def _encode_and_normalize(
+        self, texts: Sequence[str]
+    ) -> tuple[tuple[float, ...], ...]:
         self.encode_call_count += 1
         self.encoded_text_count += len(texts)
         vectors = self._backend.encode(texts)
         if len(vectors) != len(texts):
-            raise RouteBEmbeddingError("embedding backend returned an unexpected vector count")
+            raise RouteBEmbeddingError(
+                "embedding backend returned an unexpected vector count"
+            )
         return tuple(self._normalize_vector(vector) for vector in vectors)
 
     def _normalize_vector(self, vector: Sequence[float]) -> tuple[float, ...]:
         try:
             values = tuple(float(value) for value in vector)
         except (TypeError, ValueError) as exc:
-            raise RouteBEmbeddingError("embedding vectors must contain numeric values") from exc
+            raise RouteBEmbeddingError(
+                "embedding vectors must contain numeric values"
+            ) from exc
         if not values:
             raise RouteBEmbeddingError("embedding vectors must not be empty")
         if not all(math.isfinite(value) for value in values):
-            raise RouteBEmbeddingError("embedding vectors must contain only finite values")
+            raise RouteBEmbeddingError(
+                "embedding vectors must contain only finite values"
+            )
         if self._dimension is None:
             self._dimension = len(values)
         elif len(values) != self._dimension:
             raise RouteBEmbeddingError("embedding vector dimension mismatch")
         norm = math.sqrt(sum(value * value for value in values))
         if not math.isfinite(norm) or norm == 0.0:
-            raise RouteBEmbeddingError("embedding vectors must have a finite non-zero norm")
+            raise RouteBEmbeddingError(
+                "embedding vectors must have a finite non-zero norm"
+            )
         return tuple(value / norm for value in values)
 
     @staticmethod

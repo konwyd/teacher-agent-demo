@@ -47,98 +47,50 @@ Status:
 ACTIVE DEVELOPMENT
 
 Current phase:
-Memory V2 — Phase 2A.6 preparation / CandidateExtractorV2 work
+Memory V2 — CandidateExtractorV2 comparative spike / Route B Tasks 1–6 implemented; development-only real-model tuning pending
+
+Active branch:
+`spike/candidate-extractor-v2-embedding-hybrid`
+
+Last updated:
+2026-08-24
 
 ### Completed
 
-- Memory system architecture audit
-- Memory V2 Phase 1.5 contract foundation
-- typed MemoryCandidate / provenance / temporal scope / lifecycle contracts
-- shadow record infrastructure
-- Memory V2 Phase 2A deterministic shadow admission controller
-- relation matching and admission feature extraction
-- isolated ShadowEvidenceLedger
-- type-specific deterministic admission policy
-- development / sealed holdout benchmark
-- Phase 2A.5 adversarial robustness evaluation
-- long-trajectory admission evaluation
-- policy-level robustness analysis
-- subsystem ownership / shared-interface audit
-- multi-agent collaboration governance established through `OWNERSHIP.md`
+- Memory V2 Phase 1.5 typed candidate, provenance, temporal-scope, and lifecycle contracts
+- Phase 2A deterministic shadow admission controller, matching, evidence ledger, and type-specific policy
+- development / sealed-holdout benchmark freeze, Phase 2A.5 adversarial robustness, and long-trajectory evaluation
+- CandidateExtractorV2 comparative governance checkpoint and isolated Route A/B/C worktrees
+- Route B deterministic qualifier parser with clause-local negation, condition, temporal, correction, uncertainty, and hard-negative handling
+- Route B local-only BGE-M3 semantic-family ranker with lazy loading, normalized batching, prototype caching, validation, and operational counters
+- Route B utterance and frozen-upstream candidate extraction for the eight supported memory families, including bounded multi-candidate merge and malformed-input diagnostics
+- Route B read-only development/Layer B benchmark adapter and CLI with deterministic replay and operational reporting
+- Route B optional dependency, model metadata, reproducible procedure, safety controls, and provisional evidence documentation
 
 ### Current findings
 
-- Admission Policy V1 is not currently the primary bottleneck.
-- Candidate extraction quality is a major remaining bottleneck.
-- Causal duplicate observations can incorrectly increase evidence maturity.
-- Same real student observation must eventually be distinguishable from repeated tool/retry events.
-- Candidate extraction must preserve qualifiers such as:
-  - negation
-  - temporal scope
-  - condition
-  - correction
-  - polarity
-  - scope
-- Memory V2 admission remains shadow-only.
-- Baseline writer remains authoritative.
-
-### Current work
-
-CandidateExtractorV2 comparative spike preparation.
-
-Planned experimental routes:
-
-A. deterministic extractor
-
-B. embedding + deterministic qualifier parser
-
-C. small specialized local extraction model
-
-All routes should:
-- use the same frozen benchmark
-- start from the same checkpoint
-- remain isolated
-- not modify AdmissionPolicyV1
-- not modify matcher/ledger semantics
-- not solve causal-root identity inside the extractor spike
+- Admission Policy V1 is not currently the primary bottleneck; candidate extraction quality remains a major comparative question.
+- Route B keeps embeddings advisory: deterministic parsers own fields, source kind, qualifiers, and temporal scope.
+- Route B uses local `BAAI/bge-m3` (MIT, 1024 dimensions) through `sentence-transformers==5.6.0`, defaults to CPU, and does not download weights implicitly.
+- The Route B runner accepts only `development` and unchanged `layer_b`; Route B sealed-holdout runs remain zero.
+- Route B is isolated from the authoritative runtime and baseline writer. Memory V2 admission remains shadow-only and baseline writing remains authoritative.
+- Causal duplicate observations can still incorrectly increase evidence maturity; the extractor spike intentionally does not solve causal-root identity.
 
 ### Current blockers
 
-1. Governance harness checkpoint
-
-The worktree compatibility/bootstrap repair is complete. The frozen benchmark
-parent is `3b9a648a0f15d26fdb2a1987d63f65e68df58824`; A/B/C were rebuilt from it
-and passed the common baseline gates before Route A/B/C implementation began.
-
-The remaining infrastructure blocker is that the intended governance harness
-was not committed into that frozen spike base. The approved repair is a
-governance-only checkpoint descending directly from the frozen benchmark
-parent, followed by fast-forward synchronization and baseline revalidation of
-A/B/C.
-
-2. Causal evidence identity
-
-Need a future contract capable of distinguishing approximately:
-
-conversation
-→ turn
-→ causal observation
-→ runtime/tool/retry event
-
-Same causal observation must not independently increase evidence maturity through duplicate runtime events.
-
-3. Candidate extraction quality
-
-Current extraction robustness is materially weaker than admission-policy robustness.
+1. Route B quality and operational values are not yet measured with the real local BGE-M3 backend. Tasks 1–6 provide implementation and offline unit/regression evidence only.
+2. Causal observation identity remains a separate future contract problem outside the CandidateExtractorV2 spike.
+3. Overall route comparison and any controlled sealed-holdout evaluation belong to the coordinator; this branch cannot declare a winner.
 
 ### Next
 
-1. Create the governance-only checkpoint from the frozen benchmark parent.
-2. Fast-forward A/B/C to the governance checkpoint and rerun common baseline verification.
-3. Execute comparative extractor spikes.
-4. Compare quality, qualifier preservation, latency and operational complexity.
-5. Separately design causal-root / causal-observation identity contract.
-6. Keep Memory V2 shadow until explicit architecture promotion decision.
+1. Prepare the first real local BGE-M3 run using development for tuning evidence and unchanged Layer B for regression evidence.
+2. Replace provisional quality/resource placeholders in `docs/memory/CANDIDATE_EXTRACTOR_V2_ROUTE_B.md` with fresh Task 7 measurements.
+3. Preserve generic prototypes and generalized parser rules; do not add case-ID or copied-utterance branches.
+4. Run and tune Route B on the frozen development split only; rerun unchanged Layer B after generalized changes.
+5. Record all frozen metrics, qualifier/contamination slices, latency, throughput, RAM/VRAM, encode counts, dependency versions, replay, and line count.
+6. Run full repository tests, offline evaluation, Memory admission robustness, manifest verification, and protected-scope audits.
+7. Hand the clean isolated branch to the coordinator without changing AdmissionPolicyV1, shared contracts, frozen evaluator/data/labels, existing Layer B labels, runtime policy, or causal-dedup semantics.
 
 
 ## 3. Agent Runtime / Agent Loop

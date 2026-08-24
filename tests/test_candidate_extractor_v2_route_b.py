@@ -1,5 +1,11 @@
+from pathlib import Path
 import subprocess
 import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 import unicodedata
 
 import pytest
@@ -9,6 +15,9 @@ from app.memory.candidate_extractor_v2_route_b.benchmark import run_route_b_benc
 from scripts.run_candidate_extractor_route_b import build_parser
 
 from app.memory.candidate_extractor_v2_route_b import (
+    EMBEDDING_DIMENSION,
+    MODEL_ID,
+    MODEL_LICENSE,
     BgeM3Embedder,
     CandidateExtractorRouteB,
     FamilyMatch,
@@ -28,6 +37,18 @@ from app.memory.contracts import (
     MemoryType,
     TemporalScope,
 )
+
+
+def test_route_b_dependency_and_model_metadata_are_explicit():
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    assert project["optional-dependencies"]["candidate-extractor-route-b"] == [
+        "sentence-transformers==5.6.0"
+    ]
+    assert MODEL_ID == "BAAI/bge-m3"
+    assert MODEL_LICENSE == "MIT"
+    assert EMBEDDING_DIMENSION == 1024
 
 
 def test_qualifier_parser_preserves_negation_condition_and_scope():
