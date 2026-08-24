@@ -39,7 +39,7 @@ CONDITION_PATTERNS = (
 )
 TEMPORAL_RULES = (
     (TemporalScope.TURN_ONLY, ("本次", "这次", "本轮", "这一轮", "之后恢复默认")),
-    (TemporalScope.SESSION, ("这节课", "本节课", "今天这次", "当前会话")),
+    (TemporalScope.SESSION, ("这节课", "本节课", "今天", "今天这次", "当前会话")),
     (TemporalScope.SHORT_LIVED, ("暂时", "这一会儿", "这几天", "一段时间", "最近")),
     (TemporalScope.PERSISTENT, ("从现在起", "以后都", "今后", "长期", "一直")),
 )
@@ -136,7 +136,11 @@ def _temporal_analysis(text: str, uncertainty: str) -> tuple[str, TemporalScope 
     expressions: list[str] = []
     temporal_hint: TemporalScope | None = None
     for scope, markers in TEMPORAL_RULES:
-        found = [marker for marker in markers if marker in text]
+        found = [
+            marker
+            for marker in markers
+            if marker in text and not (marker == "今天" and "今天这次" in text)
+        ]
         if found:
             expressions.extend(found)
             temporal_hint = scope

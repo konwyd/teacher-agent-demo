@@ -732,3 +732,116 @@ def test_difficulty_parser_handles_student_stated_noncomprehension(route_b_facto
         "polarity": "negative",
     }
     assert candidate.temporal_scope is TemporalScope.SHORT_LIVED
+
+
+def test_multiple_clauses_emit_multiple_candidates_without_qualifier_leak(
+    route_b_factory,
+):
+    extractor = route_b_factory(
+        {
+            "称呼我阿泽": SemanticFamily.PROFILE,
+            "今天给我一些例子": SemanticFamily.PREFERENCE,
+        }
+    )
+    actual = extractor.extract(
+        "称呼我阿泽，并且今天给我一些例子",
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-multi",
+    )
+    assert [item.memory_type for item in actual] == [
+        MemoryType.PROFILE_FACT,
+        MemoryType.PREFERENCE,
+    ]
+    assert "temporal_expression" not in actual[0].payload
+    assert actual[1].payload["temporal_expression"] == "今天"
+    assert actual[1].temporal_scope is TemporalScope.SESSION
+
+
+def test_verification_and_model_inference_keep_declared_source(route_b_factory):
+    extractor = route_b_factory({})
+    actual = extractor.extract(
+        "",
+        {
+            "classification": {"subject": "英语"},
+            "verification": {
+                "status": "verified_correct",
+                "summary": "checked",
+                "verifier_name": "math-checker",
+            },
+            "model_inferences": ({"memory_type": "difficulty", "topic": "past tense"},),
+        },
+        conversation_id="route-b-upstream",
+    )
+    assert {item.source_kind for item in actual} == {
+        MemorySourceKind.VERIFIED_RESULT,
+        MemorySourceKind.MODEL_INFERENCE,
+    }
+    inferred = next(
+        item for item in actual if item.source_kind is MemorySourceKind.MODEL_INFERENCE
+    )
+    assert inferred.temporal_scope is TemporalScope.UNKNOWN
+    verified = next(
+        item for item in actual if item.source_kind is MemorySourceKind.VERIFIED_RESULT
+    )
+    assert verified.provenance[0].source_kind is MemorySourceKind.VERIFIED_RESULT
+    assert verified.provenance[0].verifier_reference == "math-checker"
+
+
+def test_observations_preserve_source_and_exact_payload_deduplication(route_b_factory):
+    extractor = route_b_factory({})
+    observation = {"evidence_pattern": "连续三次算对方程"}
+    actual = extractor.extract(
+        "",
+        {
+            "classification": {"subject": "数学"},
+            "observations": (observation, observation),
+        },
+        conversation_id="route-b-observation",
+    )
+    assert len(actual) == 1
+    assert actual[0].source_kind is MemorySourceKind.OBSERVED_BEHAVIOR
+    assert actual[0].payload == {
+        "subject": "数学",
+        "evidence_pattern": "连续三次算对方程",
+    }
+    assert actual[0].provenance[0].source_kind is MemorySourceKind.OBSERVED_BEHAVIOR
+
+
+def test_malformed_optional_upstream_items_fail_safe_and_are_counted(
+    route_b_factory,
+):
+    extractor = route_b_factory({})
+    actual = extractor.extract(
+        "",
+        {
+            "verification": "not-a-mapping",
+            "observations": (
+                None,
+                {"missing": "evidence_pattern"},
+                {"evidence_pattern": ""},
+            ),
+            "model_inferences": (
+                "not-a-mapping",
+                {"memory_type": "difficulty", "topic": ""},
+            ),
+        },
+        conversation_id="route-b-malformed",
+    )
+    assert actual == []
+    assert extractor.diagnostics.malformed_upstream_items == 6
+
+
+def test_hard_negatives_emit_no_persistent_candidate(route_b_factory):
+    extractor = route_b_factory(
+        {
+            "课本里的学生叫阿泽": SemanticFamily.PROFILE,
+            "请解释‘慢慢说明’是什么意思": SemanticFamily.PREFERENCE,
+            "别保存我的姓名": SemanticFamily.PROFILE,
+        }
+    )
+    for text in (
+        "课本里的学生叫阿泽",
+        "请解释‘慢慢说明’是什么意思",
+        "别保存我的姓名",
+    ):
+        assert extractor.extract(text, {}, conversation_id="route-b-hard") == []

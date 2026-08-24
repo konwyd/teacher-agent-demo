@@ -7,7 +7,7 @@ from enum import Enum
 import hashlib
 import json
 import re
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from app.memory.contracts import (
     MemoryCandidate,
@@ -91,6 +91,7 @@ REQUEST_RECIPIENT_RE = re.compile(
     rf"{REQUEST_RECIPIENT_MODIFIER_FRAGMENT}"
     r"(?=(?:一|几|些|个|讲|展示|说明|看|用|画|举|听|做|解))"
 )
+MAX_MALFORMED_UPSTREAM_DIAGNOSTICS = 10_000
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,17 @@ class RouteBConfig:
     family_thresholds: Mapping[SemanticFamily, float] = field(
         default_factory=lambda: dict(DEFAULT_THRESHOLDS)
     )
+
+
+@dataclass
+class RouteBDiagnostics:
+    malformed_upstream_items: int = 0
+
+    def record_malformed_upstream_items(self, count: int) -> None:
+        self.malformed_upstream_items = min(
+            MAX_MALFORMED_UPSTREAM_DIAGNOSTICS,
+            self.malformed_upstream_items + max(0, count),
+        )
 
 
 class CandidateExtractorRouteB:
@@ -110,6 +122,7 @@ class CandidateExtractorRouteB:
     ):
         self.ranker = ranker
         self.config = config or RouteBConfig()
+        self.diagnostics = RouteBDiagnostics()
 
     def extract(
         self,
@@ -119,6 +132,8 @@ class CandidateExtractorRouteB:
         conversation_id: str,
         turn_id: int = 1,
     ) -> list[MemoryCandidate]:
+        sanitized_upstream, malformed_count = _sanitize_optional_upstream(upstream)
+        self.diagnostics.record_malformed_upstream_items(malformed_count)
         analyses = tuple(
             analyze_clause(clause) for clause in segment_clauses(utterance)
         )
@@ -131,7 +146,9 @@ class CandidateExtractorRouteB:
             for match in matches:
                 if not self._admitted(match):
                     continue
-                parsed = _parse_utterance_family(match.family, analysis, upstream)
+                parsed = _parse_utterance_family(
+                    match.family, analysis, sanitized_upstream
+                )
                 if parsed is None:
                     continue
                 memory_type, payload, default_scope = parsed
@@ -143,7 +160,7 @@ class CandidateExtractorRouteB:
                         resolve_temporal_scope(analysis, default_scope),
                     )
                 )
-        return [
+        utterance_candidates = [
             _make_candidate(
                 conversation_id=conversation_id,
                 turn_id=turn_id,
@@ -157,6 +174,24 @@ class CandidateExtractorRouteB:
                 candidate_specs
             )
         ]
+        upstream_candidates = [
+            *_verification_candidates(
+                sanitized_upstream,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+            ),
+            *_observation_candidates(
+                sanitized_upstream,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+            ),
+            *_model_inference_candidates(
+                sanitized_upstream,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+            ),
+        ]
+        return _merge_candidates((*utterance_candidates, *upstream_candidates))
 
     def _admitted(self, match: FamilyMatch) -> bool:
         threshold = self.config.family_thresholds.get(
@@ -166,6 +201,62 @@ class CandidateExtractorRouteB:
 
 
 ParsedFamily = tuple[MemoryType, dict[str, Any], TemporalScope]
+
+
+def _sanitize_optional_upstream(
+    upstream: Mapping[str, Any],
+) -> tuple[dict[str, Any], int]:
+    sanitized = dict(upstream)
+    malformed_count = 0
+
+    verification = upstream.get("verification")
+    if verification:
+        if isinstance(verification, Mapping):
+            status = str(verification.get("status") or "").strip()
+            if status in {"verified_correct", "verified_incorrect"}:
+                sanitized["verification"] = dict(verification)
+            else:
+                malformed_count += 1
+                sanitized["verification"] = {}
+        else:
+            malformed_count += 1
+            sanitized["verification"] = {}
+    else:
+        sanitized["verification"] = {}
+
+    observations = upstream.get("observations")
+    valid_observations: list[dict[str, Any]] = []
+    if observations:
+        if isinstance(observations, (tuple, list)):
+            for observation in observations:
+                if not isinstance(observation, Mapping) or not observation.get(
+                    "evidence_pattern"
+                ):
+                    malformed_count += 1
+                    continue
+                valid_observations.append(dict(observation))
+        else:
+            malformed_count += 1
+    sanitized["observations"] = tuple(valid_observations)
+
+    model_inferences = upstream.get("model_inferences")
+    valid_inferences: list[dict[str, Any]] = []
+    if model_inferences:
+        if isinstance(model_inferences, (tuple, list)):
+            for inference in model_inferences:
+                if not isinstance(inference, Mapping):
+                    malformed_count += 1
+                    continue
+                if inference.get("memory_type") == "difficulty" and not inference.get(
+                    "topic"
+                ):
+                    malformed_count += 1
+                    continue
+                valid_inferences.append(dict(inference))
+        else:
+            malformed_count += 1
+    sanitized["model_inferences"] = tuple(valid_inferences)
+    return sanitized, malformed_count
 
 
 class PredicateOwner(str, Enum):
@@ -337,6 +428,92 @@ def _subject(upstream: Mapping[str, Any]) -> str:
     if not isinstance(classification, Mapping):
         return ""
     return str(classification.get("subject") or "").strip()[:20]
+
+
+def _verification_candidates(
+    upstream: Mapping[str, Any], *, conversation_id: str, turn_id: int
+) -> list[MemoryCandidate]:
+    verification = dict(upstream.get("verification") or {})
+    status = str(verification.get("status") or "").strip()
+    if status not in {"verified_correct", "verified_incorrect"}:
+        return []
+    return [
+        _make_candidate(
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            memory_type=MemoryType.BEHAVIOR_EVIDENCE,
+            payload={
+                "subject": _subject(upstream),
+                "verification_status": status,
+                "summary": str(verification.get("summary") or "")[:180],
+            },
+            source_kind=MemorySourceKind.VERIFIED_RESULT,
+            confidence=0.95,
+            temporal_scope=TemporalScope.SHORT_LIVED,
+            verifier_reference=str(verification.get("verifier_name") or "")[:160],
+        )
+    ]
+
+
+def _observation_candidates(
+    upstream: Mapping[str, Any], *, conversation_id: str, turn_id: int
+) -> list[MemoryCandidate]:
+    return [
+        _make_candidate(
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            memory_type=MemoryType.BEHAVIOR_EVIDENCE,
+            payload={
+                "subject": _subject(upstream),
+                "evidence_pattern": str(observation["evidence_pattern"])[:180],
+            },
+            source_kind=MemorySourceKind.OBSERVED_BEHAVIOR,
+            confidence=0.75,
+            temporal_scope=TemporalScope.SHORT_LIVED,
+        )
+        for observation in tuple(upstream.get("observations") or ())
+    ]
+
+
+def _model_inference_candidates(
+    upstream: Mapping[str, Any], *, conversation_id: str, turn_id: int
+) -> list[MemoryCandidate]:
+    return [
+        _make_candidate(
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            memory_type=MemoryType.DIFFICULTY,
+            payload={
+                "subject": _subject(upstream),
+                "topic": str(inference.get("topic") or "")[:160],
+                "uncertainty": "model_inference",
+            },
+            source_kind=MemorySourceKind.MODEL_INFERENCE,
+            confidence=0.4,
+            temporal_scope=TemporalScope.UNKNOWN,
+        )
+        for inference in tuple(upstream.get("model_inferences") or ())
+        if inference.get("memory_type") == "difficulty"
+    ]
+
+
+def _merge_candidates(
+    candidates: Iterable[MemoryCandidate],
+) -> list[MemoryCandidate]:
+    unique: dict[tuple[str, str, str], MemoryCandidate] = {}
+    for candidate in candidates:
+        key = (
+            candidate.memory_type.value,
+            candidate.source_kind.value,
+            json.dumps(
+                candidate.payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+        unique.setdefault(key, candidate)
+    return list(unique.values())
 
 
 def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
