@@ -845,3 +845,159 @@ def test_hard_negatives_emit_no_persistent_candidate(route_b_factory):
         "别保存我的姓名",
     ):
         assert extractor.extract(text, {}, conversation_id="route-b-hard") == []
+
+
+def test_frozen_topic_status_observation_uses_verification_source(route_b_factory):
+    extractor = route_b_factory({})
+
+    actual = extractor.extract(
+        "我会独立解方程了",
+        {
+            "classification": {"subject": "数学"},
+            "verification": {"status": "verified_correct", "summary": "verified"},
+            "observations": ({"topic": "方程", "status": "independent"},),
+        },
+        conversation_id="route-b-frozen-topic-status",
+    )
+
+    assert len(actual) == 1
+    assert actual[0].memory_type is MemoryType.TOPIC_PROGRESS
+    assert actual[0].payload == {
+        "subject": "数学",
+        "topic": "方程",
+        "status": "independent",
+    }
+    assert actual[0].source_kind is MemorySourceKind.VERIFIED_RESULT
+    assert actual[0].provenance[0].source_kind is MemorySourceKind.VERIFIED_RESULT
+
+
+def test_frozen_episode_observation_keeps_observed_source(route_b_factory):
+    extractor = route_b_factory({})
+
+    [candidate] = extractor.extract(
+        "画图后我理解了",
+        {
+            "classification": {"subject": "数学"},
+            "observations": ({"episode": "diagram enabled understanding"},),
+        },
+        conversation_id="route-b-frozen-episode",
+    )
+
+    assert candidate.memory_type is MemoryType.LEARNING_EPISODE
+    assert candidate.payload == {
+        "subject": "数学",
+        "episode": "diagram enabled understanding",
+    }
+    assert candidate.source_kind is MemorySourceKind.OBSERVED_BEHAVIOR
+    assert candidate.provenance[0].source_kind is MemorySourceKind.OBSERVED_BEHAVIOR
+
+
+def test_frozen_pattern_count_observation_maps_to_evidence_pattern(route_b_factory):
+    extractor = route_b_factory({})
+
+    [candidate] = extractor.extract(
+        "连续三题先列式",
+        {
+            "classification": {"subject": "数学"},
+            "observations": ({"pattern": "equation first", "count": 3},),
+        },
+        conversation_id="route-b-frozen-pattern",
+    )
+
+    assert candidate.memory_type is MemoryType.BEHAVIOR_EVIDENCE
+    assert candidate.payload == {
+        "subject": "数学",
+        "evidence_pattern": "equation first",
+    }
+    assert candidate.source_kind is MemorySourceKind.OBSERVED_BEHAVIOR
+
+
+def test_frozen_claim_inference_maps_to_difficulty(route_b_factory):
+    extractor = route_b_factory({})
+
+    [candidate] = extractor.extract(
+        "",
+        {
+            "classification": {"subject": "英语"},
+            "model_inferences": ({"claim": "difficulty", "topic": "past tense"},),
+        },
+        conversation_id="route-b-frozen-inference",
+    )
+
+    assert candidate.memory_type is MemoryType.DIFFICULTY
+    assert candidate.payload == {
+        "subject": "英语",
+        "topic": "past tense",
+        "uncertainty": "model_inference",
+    }
+    assert candidate.source_kind is MemorySourceKind.MODEL_INFERENCE
+    assert candidate.provenance[0].source_kind is MemorySourceKind.MODEL_INFERENCE
+
+
+def test_candidate_ids_distinguish_identical_payloads_from_different_sources(
+    route_b_factory,
+):
+    utterance = "我连续三次都独立算对了方程"
+    evidence_pattern = "连续三次都独立算对了方程"
+    extractor = route_b_factory({utterance: SemanticFamily.BEHAVIOR_EVIDENCE})
+
+    actual = extractor.extract(
+        utterance,
+        {
+            "classification": {"subject": "数学"},
+            "observations": ({"evidence_pattern": evidence_pattern},),
+        },
+        conversation_id="route-b-source-ids",
+    )
+
+    assert len(actual) == 2
+    assert {item.source_kind for item in actual} == {
+        MemorySourceKind.USER_STATED,
+        MemorySourceKind.OBSERVED_BEHAVIOR,
+    }
+    assert len({item.candidate_id for item in actual}) == 2
+
+
+def test_whitespace_required_upstream_strings_are_rejected_and_counted(
+    route_b_factory,
+):
+    extractor = route_b_factory({})
+
+    actual = extractor.extract(
+        "",
+        {
+            "verification": {"status": "   "},
+            "observations": (
+                {"episode": "   "},
+                {"pattern": "   ", "count": 3},
+                {"evidence_pattern": "   "},
+                {"topic": "方程", "status": "   "},
+            ),
+            "model_inferences": (
+                {"claim": "difficulty", "topic": "   "},
+                {"memory_type": "difficulty", "topic": "   "},
+            ),
+        },
+        conversation_id="route-b-whitespace",
+    )
+
+    assert actual == []
+    assert extractor.diagnostics.malformed_upstream_items == 7
+
+
+def test_falsey_wrong_upstream_containers_are_counted_as_malformed(route_b_factory):
+    extractor = route_b_factory({})
+
+    assert (
+        extractor.extract(
+            "",
+            {
+                "verification": [],
+                "observations": {},
+                "model_inferences": "",
+            },
+            conversation_id="route-b-falsey-containers",
+        )
+        == []
+    )
+    assert extractor.diagnostics.malformed_upstream_items == 3

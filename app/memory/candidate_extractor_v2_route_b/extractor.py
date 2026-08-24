@@ -203,54 +203,102 @@ class CandidateExtractorRouteB:
 ParsedFamily = tuple[MemoryType, dict[str, Any], TemporalScope]
 
 
+def _required_text(value: Any, limit: int) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _normalize_observation(observation: Mapping[str, Any]) -> dict[str, Any] | None:
+    if "topic" in observation or "status" in observation:
+        topic = _required_text(observation.get("topic"), 160)
+        status = _required_text(observation.get("status"), 80)
+        if not topic or not status:
+            return None
+        return {"topic": topic, "status": status}
+    if "episode" in observation:
+        episode = _required_text(observation.get("episode"), 180)
+        return {"episode": episode} if episode else None
+    if "pattern" in observation:
+        pattern = _required_text(observation.get("pattern"), 180)
+        return {"pattern": pattern} if pattern else None
+    if "evidence_pattern" in observation:
+        pattern = _required_text(observation.get("evidence_pattern"), 180)
+        return {"evidence_pattern": pattern} if pattern else None
+    return None
+
+
 def _sanitize_optional_upstream(
     upstream: Mapping[str, Any],
 ) -> tuple[dict[str, Any], int]:
     sanitized = dict(upstream)
     malformed_count = 0
 
-    verification = upstream.get("verification")
-    if verification:
-        if isinstance(verification, Mapping):
-            status = str(verification.get("status") or "").strip()
-            if status in {"verified_correct", "verified_incorrect"}:
-                sanitized["verification"] = dict(verification)
-            else:
-                malformed_count += 1
-                sanitized["verification"] = {}
-        else:
+    if "verification" not in upstream:
+        sanitized["verification"] = {}
+    else:
+        verification = upstream["verification"]
+        if not isinstance(verification, Mapping):
             malformed_count += 1
             sanitized["verification"] = {}
-    else:
-        sanitized["verification"] = {}
+        elif not verification:
+            sanitized["verification"] = {}
+        else:
+            status = _required_text(verification.get("status"), 80)
+            if status not in {"verified_correct", "verified_incorrect"}:
+                malformed_count += 1
+                sanitized["verification"] = {}
+            else:
+                sanitized["verification"] = {
+                    "status": status,
+                    "summary": _required_text(verification.get("summary"), 180),
+                    "verifier_name": _required_text(
+                        verification.get("verifier_name"), 160
+                    ),
+                }
 
-    observations = upstream.get("observations")
     valid_observations: list[dict[str, Any]] = []
-    if observations:
+    if "observations" in upstream:
+        observations = upstream["observations"]
         if isinstance(observations, (tuple, list)):
             for observation in observations:
-                if not isinstance(observation, Mapping) or not observation.get(
-                    "evidence_pattern"
-                ):
+                if not isinstance(observation, Mapping):
                     malformed_count += 1
                     continue
-                valid_observations.append(dict(observation))
+                normalized = _normalize_observation(observation)
+                if normalized is None:
+                    malformed_count += 1
+                    continue
+                valid_observations.append(normalized)
         else:
             malformed_count += 1
     sanitized["observations"] = tuple(valid_observations)
 
-    model_inferences = upstream.get("model_inferences")
     valid_inferences: list[dict[str, Any]] = []
-    if model_inferences:
+    if "model_inferences" in upstream:
+        model_inferences = upstream["model_inferences"]
         if isinstance(model_inferences, (tuple, list)):
             for inference in model_inferences:
                 if not isinstance(inference, Mapping):
                     malformed_count += 1
                     continue
-                if inference.get("memory_type") == "difficulty" and not inference.get(
-                    "topic"
-                ):
+                claim = _required_text(inference.get("claim"), 80)
+                memory_type = _required_text(inference.get("memory_type"), 80)
+                if not claim and not memory_type:
                     malformed_count += 1
+                    continue
+                if "claim" in inference and not claim:
+                    malformed_count += 1
+                    continue
+                if "memory_type" in inference and not memory_type:
+                    malformed_count += 1
+                    continue
+                if claim == "difficulty" or memory_type == "difficulty":
+                    topic = _required_text(inference.get("topic"), 160)
+                    if not topic:
+                        malformed_count += 1
+                        continue
+                    valid_inferences.append(
+                        {"claim": claim, "memory_type": memory_type, "topic": topic}
+                    )
                     continue
                 valid_inferences.append(dict(inference))
         else:
@@ -437,6 +485,30 @@ def _verification_candidates(
     status = str(verification.get("status") or "").strip()
     if status not in {"verified_correct", "verified_incorrect"}:
         return []
+    verifier_reference = str(verification.get("verifier_name") or "")[:160]
+    topic_progress = [
+        observation
+        for observation in tuple(upstream.get("observations") or ())
+        if "topic" in observation and "status" in observation
+    ]
+    if topic_progress:
+        return [
+            _make_candidate(
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                memory_type=MemoryType.TOPIC_PROGRESS,
+                payload={
+                    "subject": _subject(upstream),
+                    "topic": observation["topic"],
+                    "status": observation["status"],
+                },
+                source_kind=MemorySourceKind.VERIFIED_RESULT,
+                confidence=0.95,
+                temporal_scope=TemporalScope.SHORT_LIVED,
+                verifier_reference=verifier_reference,
+            )
+            for observation in topic_progress
+        ]
     return [
         _make_candidate(
             conversation_id=conversation_id,
@@ -450,7 +522,7 @@ def _verification_candidates(
             source_kind=MemorySourceKind.VERIFIED_RESULT,
             confidence=0.95,
             temporal_scope=TemporalScope.SHORT_LIVED,
-            verifier_reference=str(verification.get("verifier_name") or "")[:160],
+            verifier_reference=verifier_reference,
         )
     ]
 
@@ -458,21 +530,44 @@ def _verification_candidates(
 def _observation_candidates(
     upstream: Mapping[str, Any], *, conversation_id: str, turn_id: int
 ) -> list[MemoryCandidate]:
-    return [
-        _make_candidate(
-            conversation_id=conversation_id,
-            turn_id=turn_id,
-            memory_type=MemoryType.BEHAVIOR_EVIDENCE,
-            payload={
+    verification = upstream.get("verification")
+    has_verification = isinstance(verification, Mapping) and bool(verification)
+    candidates: list[MemoryCandidate] = []
+    for observation in tuple(upstream.get("observations") or ()):
+        if "topic" in observation and "status" in observation:
+            if has_verification:
+                continue
+            memory_type = MemoryType.TOPIC_PROGRESS
+            payload = {
                 "subject": _subject(upstream),
-                "evidence_pattern": str(observation["evidence_pattern"])[:180],
-            },
-            source_kind=MemorySourceKind.OBSERVED_BEHAVIOR,
-            confidence=0.75,
-            temporal_scope=TemporalScope.SHORT_LIVED,
+                "topic": observation["topic"],
+                "status": observation["status"],
+            }
+        elif "episode" in observation:
+            memory_type = MemoryType.LEARNING_EPISODE
+            payload = {
+                "subject": _subject(upstream),
+                "episode": observation["episode"],
+            }
+        else:
+            memory_type = MemoryType.BEHAVIOR_EVIDENCE
+            pattern = observation.get("pattern") or observation.get("evidence_pattern")
+            payload = {
+                "subject": _subject(upstream),
+                "evidence_pattern": pattern,
+            }
+        candidates.append(
+            _make_candidate(
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                memory_type=memory_type,
+                payload=payload,
+                source_kind=MemorySourceKind.OBSERVED_BEHAVIOR,
+                confidence=0.75,
+                temporal_scope=TemporalScope.SHORT_LIVED,
+            )
         )
-        for observation in tuple(upstream.get("observations") or ())
-    ]
+    return candidates
 
 
 def _model_inference_candidates(
@@ -485,7 +580,7 @@ def _model_inference_candidates(
             memory_type=MemoryType.DIFFICULTY,
             payload={
                 "subject": _subject(upstream),
-                "topic": str(inference.get("topic") or "")[:160],
+                "topic": inference["topic"],
                 "uncertainty": "model_inference",
             },
             source_kind=MemorySourceKind.MODEL_INFERENCE,
@@ -493,7 +588,8 @@ def _model_inference_candidates(
             temporal_scope=TemporalScope.UNKNOWN,
         )
         for inference in tuple(upstream.get("model_inferences") or ())
-        if inference.get("memory_type") == "difficulty"
+        if inference.get("claim") == "difficulty"
+        or inference.get("memory_type") == "difficulty"
     ]
 
 
@@ -781,7 +877,7 @@ def _make_candidate(
         payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
     digest = hashlib.sha256(
-        f"{conversation_id}\n{turn_id}\n{memory_type.value}\n{canonical}".encode(
+        f"{conversation_id}\n{turn_id}\n{memory_type.value}\n{source_kind.value}\n{canonical}".encode(
             "utf-8"
         )
     ).hexdigest()[:24]
