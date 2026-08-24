@@ -46,6 +46,9 @@ QUALIFIER_PAYLOAD_KEYS = frozenset(
 PREFERENCE_STATEMENT_MARKERS = (
     "我喜欢",
     "我更喜欢",
+    "比较喜欢",
+    "更喜欢",
+    "有点喜欢",
     "我不喜欢",
     "我偏好",
     "我习惯",
@@ -53,6 +56,10 @@ PREFERENCE_STATEMENT_MARKERS = (
     "我不希望",
     "我不想",
     "我的偏好",
+)
+CURRENT_INSTRUCTIONAL_REQUEST_RE = re.compile(
+    r"(?:这道题|本题).*(?:例子|举例|示范|画图|图示|图解)|"
+    r"(?:我希望你|我想让你|请你).*(?:给我|举|画).*(?:例子|图)"
 )
 
 
@@ -156,6 +163,12 @@ def _parse_utterance_family(
 
 
 def _parse_preference(analysis: QualifierAnalysis) -> ParsedFamily | None:
+    if (
+        not analysis.temporal_expression
+        and not analysis.condition
+        and CURRENT_INSTRUCTIONAL_REQUEST_RE.search(analysis.text)
+    ):
+        return None
     if not (
         any(marker in analysis.text for marker in PREFERENCE_STATEMENT_MARKERS)
         or analysis.condition
@@ -191,8 +204,9 @@ def _subject(upstream: Mapping[str, Any]) -> str:
 def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
     if analysis.negated is True:
         return None
-    grade_match = re.search(
-        r"(?:我是|我读|我上|我)?([一二三四五六七八九1-9])年级", analysis.text
+    grade_match = re.match(
+        r"^(?:(?:我|本人)(?:是|读|上)?|)([一二三四五六七八九1-9])年级",
+        analysis.text,
     )
     name_match = re.search(
         r"(?:请)?(?:称呼我|叫我|我叫)(?:为)?([A-Za-z][A-Za-z0-9_-]{0,31}|[\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{0,11})",
@@ -260,7 +274,7 @@ def _parse_topic_progress(
         (r"(?:我)?(?:已经|已)?掌握(?P<topic>[^，,。]{1,80}?)(?:了)?$", "mastered"),
         (r"(?:我)?(?:正在学|在学习)(?P<topic>[^，,。]{1,80}?)(?:了)?$", "in_progress"),
     ):
-        match = re.search(pattern, analysis.text)
+        match = re.match(pattern, analysis.text)
         if not match:
             continue
         topic = match.group("topic").strip(" 了")
@@ -298,9 +312,9 @@ def _parse_learning_episode(
     if not subject:
         return None
     summary = analysis.text.strip(" ,，。")[:180]
-    if not any(
-        marker in summary
-        for marker in ("上次", "昨天", "刚才", "那次", "上节课", "上周")
+    episode_markers = ("上次", "昨天", "刚才", "那次", "上节课", "上周")
+    if not summary.startswith(
+        episode_markers + tuple(f"我{item}" for item in episode_markers)
     ):
         return None
     if not any(
@@ -321,8 +335,8 @@ def _parse_behavior_evidence(
     if not subject:
         return None
     pattern = re.sub(r"^我", "", analysis.text).strip(" ,，。")[:180]
-    if not re.search(
-        r"(?:连续[一二三四五六七八九十0-9]+次|多次|每次|总是|经常|反复)", pattern
+    if not re.match(
+        r"^(?:连续[一二三四五六七八九十0-9]+次|多次|每次|总是|经常|反复)", pattern
     ):
         return None
     if not any(
@@ -340,8 +354,8 @@ def _parse_behavior_evidence(
 def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily | None:
     if not subject:
         return None
-    reversal = re.search(
-        r"(?:经常|总是|老是|常常)?把(?P<topic>[A-Za-z0-9_\-\u4e00-\u9fff]{1,80}?)(?P<verb>搞反|弄反|弄错|算错|看错)",
+    reversal = re.match(
+        r"^(?:我)?(?:经常|总是|老是|常常)?把(?P<topic>[A-Za-z0-9_\-\u4e00-\u9fff]{1,80}?)(?P<verb>搞反|弄反|弄错|算错|看错)",
         analysis.text,
     )
     if reversal:
@@ -355,8 +369,8 @@ def _parse_difficulty(analysis: QualifierAnalysis, subject: str) -> ParsedFamily
             },
             TemporalScope.SHORT_LIVED,
         )
-    noncomprehension = re.search(
-        r"(?:我)?(?:还是|总是|一直)?(?P<verb>不懂|不会|不明白|没懂|弄不清)(?P<topic>[^，,。]{1,80})",
+    noncomprehension = re.match(
+        r"^(?:我)?(?:还是|总是|一直|有点|有些|不太)?(?P<verb>不懂|不会|不明白|没懂|弄不清)(?P<topic>[^，,。]{1,80})",
         analysis.text,
     )
     if noncomprehension:
