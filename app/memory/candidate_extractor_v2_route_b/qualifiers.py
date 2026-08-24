@@ -12,12 +12,32 @@ from app.memory.contracts import TemporalScope
 CONJUNCTION_SPLIT_RE = re.compile(
     r"(?:[，,；;。]\s*(?:并且|而且|然后)?|并且|而且|然后)+"
 )
-PROFILE_GRADE_RE = r"[一二三四五六七八九1-9]年级"
-PROFILE_NAME_RE = r"(?:请)?(?:称呼我|叫我|我叫)"
-PROFILE_COMMA_SENTINEL = "\u0000"
 THIRD_PERSON_PATTERNS = ("书中的人物", "课文中的人物", "故事中的人物")
 THIRD_PERSON_CONTEXT_RE = re.compile(
     r"(?<![\w\u4e00-\u9fff])(?:他们|她们|它们|他|她|它)"
+)
+KINSHIP_REFERENT_RE = re.compile(
+    r"^我(?:的)?(?:哥哥|姐姐|弟弟|妹妹|兄弟|姐妹|爸爸|妈妈|父亲|母亲|"
+    r"爷爷|奶奶|外公|外婆|朋友|同学|老师)"
+)
+THIRD_PERSON_FACT_RE = re.compile(
+    r"^(?P<subject>[\u4e00-\u9fff]{2,16}?)(?:也|还|总是|一直|经常|常常|老是)?"
+    r"(?:不会|不懂|不明白|没懂|弄不清|喜欢|偏好|读|上|已经掌握|掌握)"
+)
+IMPLICIT_FIRST_PERSON_PREFIXES = (
+    "还是",
+    "总是",
+    "一直",
+    "经常",
+    "常常",
+    "老是",
+    "已经",
+    "还没",
+    "尚未",
+    "正在",
+    "最近",
+    "目前",
+    "现在",
 )
 META_QUOTED_RE = re.compile(r"[‘'\"“].+?[’'\"”].*(?:这个词|含义|是什么意思|定义)")
 PRIVACY_PROHIBITION_RE = re.compile(r"(?:不要|别|请勿).{0,8}(?:保存|记住|记录|存储)")
@@ -68,25 +88,9 @@ def segment_clauses(text: str) -> tuple[str, ...]:
     normalized = _normalize_text(text)
     if _is_bound_qualifier_clause(normalized):
         return (normalized,)
-    protected = _protect_profile_comma(normalized)
     return tuple(
-        part.replace(PROFILE_COMMA_SENTINEL, ",").strip()
-        for part in CONJUNCTION_SPLIT_RE.split(protected)
-        if part.strip()
+        part.strip() for part in CONJUNCTION_SPLIT_RE.split(normalized) if part.strip()
     )
-
-
-def _protect_profile_comma(text: str) -> str:
-    pairs = ((PROFILE_GRADE_RE, PROFILE_NAME_RE), (PROFILE_NAME_RE, PROFILE_GRADE_RE))
-    protected = text
-    for left_marker, right_marker in pairs:
-        pattern = re.compile(
-            rf"(?P<left>[^,;。]*{left_marker}[^,;。]*),(?P<right>[^,;。]*{right_marker}[^,;。]*)"
-        )
-        protected = pattern.sub(
-            rf"\g<left>{PROFILE_COMMA_SENTINEL}\g<right>", protected
-        )
-    return protected
 
 
 def _is_bound_qualifier_clause(text: str) -> bool:
@@ -101,13 +105,27 @@ def _hard_negative_reason(text: str) -> str:
         return "privacy_prohibition"
     if META_QUOTED_RE.search(text):
         return "meta_quoted"
-    if any(
-        marker in text for marker in THIRD_PERSON_PATTERNS
-    ) or THIRD_PERSON_CONTEXT_RE.search(text):
+    if (
+        any(marker in text for marker in THIRD_PERSON_PATTERNS)
+        or THIRD_PERSON_CONTEXT_RE.search(text)
+        or _has_third_person_owner(text)
+    ):
         return "third_person"
     if any(marker in text for marker in INSTRUCTIONAL_EXAMPLE_PATTERNS):
         return "instructional_example"
     return ""
+
+
+def _has_third_person_owner(text: str) -> bool:
+    if KINSHIP_REFERENT_RE.match(text):
+        return True
+    match = THIRD_PERSON_FACT_RE.match(text)
+    if not match:
+        return False
+    subject = match.group("subject")
+    return "我" not in subject and not subject.startswith(
+        IMPLICIT_FIRST_PERSON_PREFIXES
+    )
 
 
 def _negation_parity(text: str) -> tuple[bool | None, str]:

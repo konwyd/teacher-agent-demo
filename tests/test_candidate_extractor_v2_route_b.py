@@ -72,13 +72,17 @@ def test_clause_segmentation_binds_corrections_and_temporal_boundaries():
     assert segment_clauses("本次给个例子，之后恢复默认") == (
         "本次给个例子,之后恢复默认",
     )
-    assert segment_clauses("我读六年级，请称呼我Leo") == ("我读六年级,请称呼我Leo",)
+    assert segment_clauses("我读六年级，请称呼我Leo") == (
+        "我读六年级",
+        "请称呼我Leo",
+    )
     assert segment_clauses("我读六年级。请称呼我Leo") == (
         "我读六年级",
         "请称呼我Leo",
     )
     assert segment_clauses("我读六年级，请称呼我Leo，然后讲慢些") == (
-        "我读六年级,请称呼我Leo",
+        "我读六年级",
+        "请称呼我Leo",
         "讲慢些",
     )
     assert segment_clauses("叫我阿泽，并且讲得慢些") == ("叫我阿泽", "讲得慢些")
@@ -233,8 +237,10 @@ class StubFamilyRanker:
             for text, family in families_by_text.items()
         }
         self.similarity = similarity
+        self.calls: list[tuple[str, ...]] = []
 
     def rank(self, texts):
+        self.calls.append(tuple(texts))
         return tuple(
             (
                 FamilyMatch(
@@ -286,7 +292,8 @@ def test_temporary_expression_cannot_inflate_to_persistent(route_b_factory):
 def test_profile_multi_field_and_difficulty_payloads_are_bounded(route_b_factory):
     extractor = route_b_factory(
         {
-            "我读六年级，请称呼我Leo": SemanticFamily.PROFILE,
+            "我读六年级": SemanticFamily.PROFILE,
+            "请称呼我Leo": SemanticFamily.PROFILE,
             "我经常把正负号搞反": SemanticFamily.DIFFICULTY,
         }
     )
@@ -306,6 +313,110 @@ def test_profile_multi_field_and_difficulty_payloads_are_bounded(route_b_factory
         "topic": "正负号",
         "statement": "搞反正负号",
     }
+    assert extractor.ranker.calls[0] == ("我读六年级", "请称呼我Leo")
+
+
+@pytest.mark.parametrize(
+    ("utterance", "families_by_text"),
+    (
+        (
+            "我不是六年级，请称呼我Leo",
+            {
+                "我不是六年级": SemanticFamily.PROFILE,
+                "请称呼我Leo": SemanticFamily.PROFILE,
+            },
+        ),
+        (
+            "请称呼我Leo，我妹妹读六年级",
+            {
+                "请称呼我Leo": SemanticFamily.PROFILE,
+                "我妹妹读六年级": SemanticFamily.PROFILE,
+            },
+        ),
+    ),
+)
+def test_profile_qualifiers_and_referents_do_not_cross_comma_clauses(
+    route_b_factory, utterance, families_by_text
+):
+    extractor = route_b_factory(families_by_text)
+
+    [candidate] = extractor.extract(utterance, {}, conversation_id="route-b-profile")
+
+    assert candidate.payload == {"preferred_name": "leo"}
+
+
+def test_duplicate_compatible_candidates_are_merged_once(route_b_factory):
+    extractor = route_b_factory({"我读六年级": SemanticFamily.PROFILE})
+
+    candidates = extractor.extract(
+        "我读六年级，并且我读六年级",
+        {},
+        conversation_id="route-b-profile-duplicate",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].payload == {"grade": "六年级"}
+    assert len({candidate.candidate_id for candidate in candidates}) == 1
+
+
+@pytest.mark.parametrize("utterance", ("小明不会二次函数", "我弟弟不会二次函数"))
+def test_third_person_difficulty_is_a_hard_negative(route_b_factory, utterance):
+    extractor = route_b_factory({utterance: SemanticFamily.DIFFICULTY})
+
+    assert (
+        extractor.extract(
+            utterance,
+            {"classification": {"subject": "数学"}},
+            conversation_id="route-b-third-person",
+        )
+        == []
+    )
+
+
+def test_implicit_first_person_difficulty_is_not_suppressed(route_b_factory):
+    utterance = "还是不会二次函数"
+    extractor = route_b_factory({utterance: SemanticFamily.DIFFICULTY})
+
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-first-person",
+    )
+
+    assert candidate.payload["topic"] == "二次函数"
+
+
+def test_implicit_first_person_progress_is_not_suppressed(route_b_factory):
+    utterance = "已经掌握一元一次方程"
+    extractor = route_b_factory({utterance: SemanticFamily.TOPIC_PROGRESS})
+
+    [candidate] = extractor.extract(
+        utterance,
+        {"classification": {"subject": "数学"}},
+        conversation_id="route-b-first-person-progress",
+    )
+
+    assert candidate.payload["topic"] == "一元一次方程"
+
+
+@pytest.mark.parametrize("utterance", ("请给我一个例子", "这道题能画图吗"))
+def test_bare_instructional_request_is_not_a_persistent_preference(
+    route_b_factory, utterance
+):
+    extractor = route_b_factory({utterance: SemanticFamily.PREFERENCE})
+
+    assert extractor.extract(utterance, {}, conversation_id="route-b-request") == []
+
+
+def test_stated_durable_preference_remains_extractable(route_b_factory):
+    extractor = route_b_factory({"我喜欢看示范": SemanticFamily.PREFERENCE})
+
+    [candidate] = extractor.extract(
+        "我喜欢看示范", {}, conversation_id="route-b-preference"
+    )
+
+    assert candidate.payload == {"teaching_preferences": ["示例讲解"]}
+    assert candidate.temporal_scope is TemporalScope.PERSISTENT
 
 
 def test_learning_goal_parser_requires_subject_and_preserves_deadline(route_b_factory):

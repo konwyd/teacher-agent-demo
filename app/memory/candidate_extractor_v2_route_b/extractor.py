@@ -31,6 +31,31 @@ from .qualifiers import (
 )
 
 
+QUALIFIER_PAYLOAD_KEYS = frozenset(
+    {
+        "negated",
+        "polarity",
+        "condition",
+        "scope",
+        "temporal_expression",
+        "uncertainty",
+        "explicit_correction",
+        "correction_of",
+    }
+)
+PREFERENCE_STATEMENT_MARKERS = (
+    "我喜欢",
+    "我更喜欢",
+    "我不喜欢",
+    "我偏好",
+    "我习惯",
+    "我希望",
+    "我不希望",
+    "我不想",
+    "我的偏好",
+)
+
+
 @dataclass(frozen=True)
 class RouteBConfig:
     family_thresholds: Mapping[SemanticFamily, float] = field(
@@ -64,7 +89,7 @@ class CandidateExtractorRouteB:
             analysis for analysis in analyses if not analysis.hard_negative_reason
         )
         rankings = self.ranker.rank(tuple(analysis.text for analysis in eligible))
-        candidates: list[MemoryCandidate] = []
+        candidate_specs: list[ParsedFamily] = []
         for analysis, matches in zip(eligible, rankings, strict=True):
             for match in matches:
                 if not self._admitted(match):
@@ -74,18 +99,27 @@ class CandidateExtractorRouteB:
                     continue
                 memory_type, payload, default_scope = parsed
                 payload.update(_qualifier_payload(analysis))
-                candidates.append(
-                    _make_candidate(
-                        conversation_id=conversation_id,
-                        turn_id=turn_id,
-                        memory_type=memory_type,
-                        payload=payload,
-                        source_kind=MemorySourceKind.USER_STATED,
-                        confidence=1.0,
-                        temporal_scope=resolve_temporal_scope(analysis, default_scope),
+                candidate_specs.append(
+                    (
+                        memory_type,
+                        payload,
+                        resolve_temporal_scope(analysis, default_scope),
                     )
                 )
-        return candidates
+        return [
+            _make_candidate(
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                memory_type=memory_type,
+                payload=payload,
+                source_kind=MemorySourceKind.USER_STATED,
+                confidence=1.0,
+                temporal_scope=temporal_scope,
+            )
+            for memory_type, payload, temporal_scope in _merge_candidate_specs(
+                candidate_specs
+            )
+        ]
 
     def _admitted(self, match: FamilyMatch) -> bool:
         threshold = self.config.family_thresholds.get(
@@ -122,6 +156,12 @@ def _parse_utterance_family(
 
 
 def _parse_preference(analysis: QualifierAnalysis) -> ParsedFamily | None:
+    if not (
+        any(marker in analysis.text for marker in PREFERENCE_STATEMENT_MARKERS)
+        or analysis.condition
+        or analysis.temporal_expression
+    ):
+        return None
     preferences = [
         label
         for cues, label in (
@@ -149,6 +189,8 @@ def _subject(upstream: Mapping[str, Any]) -> str:
 
 
 def _parse_profile(analysis: QualifierAnalysis) -> ParsedFamily | None:
+    if analysis.negated is True:
+        return None
     grade_match = re.search(
         r"(?:我是|我读|我上|我)?([一二三四五六七八九1-9])年级", analysis.text
     )
@@ -344,6 +386,45 @@ def _qualifier_payload(analysis: QualifierAnalysis) -> dict[str, Any]:
         "correction_of": analysis.correction_of,
     }
     return {key: value for key, value in values.items() if value not in ("", None)}
+
+
+def _merge_candidate_specs(candidates: list[ParsedFamily]) -> list[ParsedFamily]:
+    merged: list[ParsedFamily] = []
+    for memory_type, payload, temporal_scope in candidates:
+        qualifiers = {
+            key: value
+            for key, value in payload.items()
+            if key in QUALIFIER_PAYLOAD_KEYS
+        }
+        core = {
+            key: value
+            for key, value in payload.items()
+            if key not in QUALIFIER_PAYLOAD_KEYS
+        }
+        for index, (current_type, current_payload, current_scope) in enumerate(merged):
+            if current_type is not memory_type or current_scope is not temporal_scope:
+                continue
+            current_qualifiers = {
+                key: value
+                for key, value in current_payload.items()
+                if key in QUALIFIER_PAYLOAD_KEYS
+            }
+            if current_qualifiers != qualifiers:
+                continue
+            current_core = {
+                key: value
+                for key, value in current_payload.items()
+                if key not in QUALIFIER_PAYLOAD_KEYS
+            }
+            shared_keys = current_core.keys() & core.keys()
+            if any(current_core[key] != core[key] for key in shared_keys):
+                continue
+            merged_payload = {**current_core, **core, **qualifiers}
+            merged[index] = (memory_type, merged_payload, temporal_scope)
+            break
+        else:
+            merged.append((memory_type, dict(payload), temporal_scope))
+    return merged
 
 
 def _make_candidate(
